@@ -163,14 +163,35 @@ tests/        pytest suite for VerifyGate itself
 python3 -m pytest -q
 ```
 
+## Hosted demo
+
+`demo/` is a static, self-contained site (no JavaScript, no external
+resources) deployable to any static host: `demo/index.html` explains the
+project and the Judge Mode quickstart, and links to
+`demo/evidence_real_repair.html`, the rendered real-mode Nemotron repair
+report (FAIL → PASS, chains verified on the page). No candidate code is
+executed by the hosted demo.
+
+## Clean-tree rehearsal
+
+```bash
+scripts/rehearse.sh
+```
+
+Exports the tracked tree (`git archive HEAD` — exactly what a fresh
+clone contains) into a fresh directory and runs the whole Judge Mode
+spine there: the pytest suite, PASS and FAIL sample runs with their
+expected exit codes, the FAIL → PASS repair loop, the evidence web view
+of the committed real-mode report, and a hash-chain check of every
+record written during the rehearsal.
+
 ## License
 
-MIT (to be added at repository publication; this is a local build repo).
+MIT — see `LICENSE`.
 
 ## Version
 
-0.5.0 — sandbox hardening (scrubbed check environment, symlink
-containment shared by workspace copy / tree hash / repair prompt
-snapshot, temp-file bounded output, process-group timeout kills) and
-self-dogfooding: VerifyGate's own suite passes as a VerifyGate check
-(`evidence_self_check.json`, chain valid).
+0.6.0 — hosted Judge-Mode demo (`demo/`), clean-tree rehearsal script
+(`scripts/rehearse.sh`, all six steps green from a `git archive`
+export), MIT `LICENSE` file, and publication readiness (see
+`PUBLICATION_CHECKLIST.md`).
