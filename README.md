@@ -239,11 +239,46 @@ result, a diagnosis, or a sealed token-usage figure fails verification
 (exit 1); usage errors exit 2. No checks are re-run, and no keys or
 network are needed.
 
+## Replaying an evidence record
+
+`verify` proves a record is intact; **replay proves it is
+reproducible**. `verifygate replay` re-runs the checks and compares
+the verdict and every per-check verdict/exit code against the sealed
+record, and checks that the candidate's tree hash still matches the
+sealed header:
+
+```bash
+python3 -m verifygate replay --record samples/evidence_real_repair.json \
+    --spec samples/spec.json --candidate samples/failing --mode judge
+#   attempt 0: expected FAIL, replayed FAIL — chain OK; candidate tree: match; checks: match
+#   attempt 1: expected PASS, replayed PASS — chain OK; candidate tree: match; checks: match
+# REPLAY MATCHED: 2 record(s) reproduced (mode judge)
+```
+
+For a repair report, each patched attempt is *reconstructed* — the
+report carries the patch that produced it, so replay applies the
+recorded patches in order to fresh copies of the original candidate
+(the original is never modified) and re-verifies each reconstructed
+tree; a tree whose hash differs from the sealed header did not
+reproduce the attempt. Earlier reports pointed a patched attempt's
+`replay` field at the ephemeral temp copy the loop had already
+deleted; that field now names this command (it is top-level metadata,
+not part of the hash chain, and the two committed real-mode reports
+have been corrected in place — their chains still verify).
+
+The replay mode is the caller's choice: verdicts come from the
+deterministic checks, which are mode-independent, so a real-mode
+record replays in Judge Mode with zero keys and zero model calls
+(only the diagnosis words would differ, and words are never
+compared). A candidate edited after the fact, or a tampered record,
+does not reproduce (exit 1); usage errors exit 2.
+
 ## Layout
 
 ```
 verifygate/   spec, sandbox, validators, evidence, patch application,
-              repair loop, record verification, llm adapters, cli
+              repair loop, record verification, record replay,
+              llm adapters, cli
 samples/      fictional demo task + passing / failing candidates
 samples-js/   second fictional task (JavaScript/Node) proving the
               harness is language-agnostic, incl. a committed
@@ -267,7 +302,8 @@ clean-tree rehearsal on every push and pull request.
 `demo/` is a static, self-contained site (no JavaScript, no external
 resources) deployable to any static host: `demo/index.html` explains the
 project and the Judge Mode quickstart, shows the standalone
-`verifygate verify` check, and links to both rendered real-mode
+`verifygate verify` check and the `verifygate replay` reproduction
+check, and links to both rendered real-mode
 Nemotron repair reports — `demo/evidence_real_repair.html` (Python
 sample, FAIL → PASS, 5,367 tokens sealed) and
 `demo/evidence_js_real_repair.html` (JavaScript sample, FAIL → PASS,
@@ -285,9 +321,10 @@ clone contains) into a fresh directory and runs the whole Judge Mode
 spine there: the pytest suite, PASS and FAIL sample runs with their
 expected exit codes, the FAIL → PASS repair loop, the evidence web view
 of the committed real-mode report, a dogfood run of VerifyGate on its
-own tree, and a `verifygate verify` check of every record written
+own tree, a `verifygate verify` check of every record written
 during the rehearsal plus the committed real-mode report for the
-JavaScript sample.
+JavaScript sample, and a `verifygate replay` reproduction of the
+rehearsal's repair report and both committed real-mode reports.
 
 ## License
 
@@ -295,6 +332,16 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.3.0 — true replay: `verifygate replay` re-runs a record's checks
+and compares verdicts (repair attempts are reconstructed from the
+original candidate plus the patches recorded in the report, tree
+hashes compared against the sealed headers), so "replayable" is now
+an executable command instead of a printed string. The repair loop
+no longer writes dead `/tmp` paths into patched attempts' `replay`
+fields, and the two committed real-mode reports' fields were
+corrected in place (unchained metadata; chains still verify). The
+hosted demo documents the command; the rehearsal gains a replay
+step (9 steps).
 1.2.0 — hosted demo catches up with the real-mode evidence: the demo
 site now also renders the JavaScript sample's real Nemotron repair
 report (`demo/evidence_js_real_repair.html`, chains verified on the

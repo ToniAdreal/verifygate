@@ -127,7 +127,7 @@
         "version": "0.3.0",
         "created_at": "2026-10-10T11:31:39.796272+00:00",
         "verdict": "PASS",
-        "replay": "python3 -m verifygate run --spec samples/spec.json --candidate /tmp/verifygate-repair-g1k8hjkx --mode real",
+        "replay": "python3 -m verifygate replay --record samples/evidence_real_repair.json --spec samples/spec.json --candidate samples/failing --mode real  # attempt 1: patched copy, reconstructed from the report's recorded patch",
         "entries": [
           {
             "kind": "header",

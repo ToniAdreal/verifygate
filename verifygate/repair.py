@@ -15,6 +15,14 @@ The loop ends on the first PASS, when no usable patch is produced, or
 after ``max_rounds`` patch attempts — whichever comes first. The report
 embeds every attempt's full evidence record, so each intermediate
 verdict stays independently replayable and tamper-evident.
+
+Replay note: a patched attempt's candidate is an ephemeral temp copy
+that the loop (or the CLI) deletes, so its record's ``replay`` field
+must not point at that path — it names the ``verifygate replay``
+command instead, which reconstructs each patched tree from the
+original candidate plus the patches recorded in the report. The
+``replay`` field is top-level record metadata (not part of the hash
+chain), so correcting it here does not affect chain verification.
 """
 
 from __future__ import annotations
@@ -191,6 +199,17 @@ def run_repair(
             spec=spec, candidate_dir=current_dir, mode=mode, llm=llm,
             references=references, spec_label=spec_label,
             candidate_label=current_label,
+        )
+        # The runner's replay string points at the ephemeral patched
+        # copy (deleted before the caller can ever run it). Replace it
+        # with the truthful instruction: replay the whole report from
+        # the original candidate; `verifygate replay` reconstructs
+        # this attempt's tree from the recorded patch.
+        record["replay"] = (
+            f"python3 -m verifygate replay --record <repair-report.json> "
+            f"--spec {spec_label} --candidate {candidate_label} "
+            f"--mode {mode}  # attempt {rounds_used}: patched copy, "
+            f"reconstructed from the report's recorded patch"
         )
         attempts.append({
             "round": rounds_used,

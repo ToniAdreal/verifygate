@@ -45,6 +45,12 @@ def test_demo_index_links_js_page_and_verify_command():
     assert "12,890" in html
 
 
+def test_demo_index_documents_replay():
+    html = (DEMO / "index.html").read_text(encoding="utf-8")
+    assert "verifygate replay" in html
+    assert "REPLAY MATCHED" in html
+
+
 def test_license_present_and_mit():
     text = (ROOT / "LICENSE").read_text(encoding="utf-8")
     assert text.startswith("MIT License")

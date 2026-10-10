@@ -7,10 +7,14 @@ Usage:
       --candidate samples/failing --mode judge --max-rounds 3
   python3 -m verifygate verify --record evidence.json \
       --spec samples/spec.json --candidate samples/passing
+  python3 -m verifygate replay --record repair-report.json \
+      --spec samples/spec.json --candidate samples/failing
 
-Exit code: 0 when the (final) verdict is PASS, 1 when FAIL, 2 on
-usage/spec errors. The evidence record is written either way — a FAIL
-record is a deliverable, not an error.
+Exit code: run/repair — 0 when the (final) verdict is PASS, 1 when
+FAIL, 2 on usage/spec errors (the evidence record is written either
+way — a FAIL record is a deliverable, not an error); verify/replay —
+0 when the record is intact / every verdict reproduces, 1 when not,
+2 on usage errors.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ import sys
 from pathlib import Path
 
 from .mock_llm import MockLLMAdapter
+from .replay import replay_document, replay_ok
 from .repair import run_repair
 from .runner import run_verification, write_record
 from .sandbox import _IGNORE
@@ -84,7 +89,82 @@ def main(argv: list[str] | None = None) -> int:
     ver_p.add_argument("--spec", default=None,
                        help="task spec file: its hash must match the "
                             "record header")
+    rpl_p = sub.add_parser(
+        "replay",
+        help="replay an evidence record / repair report: re-run the "
+             "checks (repair attempts are reconstructed from the "
+             "recorded patches) and compare verdicts — the checks are "
+             "mode-independent, so a real-mode record replays in "
+             "Judge Mode with zero keys unless --mode real is given")
+    rpl_p.add_argument("--record", required=True,
+                       help="evidence record or repair report JSON")
+    rpl_p.add_argument("--spec", required=True,
+                       help="task spec file the record was sealed against")
+    rpl_p.add_argument("--candidate", required=True,
+                       help="candidate directory the record was sealed "
+                            "against (repair reports: the original, "
+                            "unpatched candidate)")
+    rpl_p.add_argument("--mode", choices=["judge", "real"], default=None,
+                       help="mode for the replay runs (default: the "
+                            "record's own mode)")
+    rpl_p.add_argument("--model", default=None,
+                       help="real mode: Token Factory model id "
+                            "(default: NEBIUS_MODEL or Nemotron 3 Nano)")
     args = parser.parse_args(argv)
+
+    if args.command == "replay":
+        try:
+            data = json.loads(Path(args.record).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"record error: {exc}", file=sys.stderr)
+            return 2
+        try:
+            spec = load_spec(args.spec)
+        except SpecError as exc:
+            print(f"spec error: {exc}", file=sys.stderr)
+            return 2
+        if not Path(args.candidate).is_dir():
+            print(f"record error: candidate directory not found: "
+                  f"{args.candidate}", file=sys.stderr)
+            return 2
+        try:
+            from .verify import collect_records, header_of
+            first = collect_records(data)[0][1]
+        except ValueError as exc:
+            print(f"record error: {exc}", file=sys.stderr)
+            return 2
+        mode = args.mode or header_of(first).get("mode") or "judge"
+        try:
+            llm, references = _adapters(mode, args.model)
+        except ValueError as exc:
+            print(f"adapter error: {exc}", file=sys.stderr)
+            return 2
+        try:
+            results = replay_document(
+                data, spec=spec, candidate_dir=args.candidate, mode=mode,
+                llm=llm, references=references, spec_label=args.spec)
+        except (ValueError, OSError) as exc:
+            print(f"record error: {exc}", file=sys.stderr)
+            return 2
+        for r in results:
+            chain = "chain OK" if r["chain_ok"] else "CHAIN INVALID"
+            if r["error"]:
+                print(f"  {r['label']}: expected {r['expected_verdict']} "
+                      f"— {chain}; REPLAY ERROR: {r['error']}")
+                continue
+            tree = "candidate tree: match" if r["candidate_match"] \
+                else "candidate tree: MISMATCH"
+            checks = "checks: match" if r["checks_match"] \
+                else "checks: MISMATCH"
+            print(f"  {r['label']}: expected {r['expected_verdict']}, "
+                  f"replayed {r['actual_verdict']} — {chain}; "
+                  f"{tree}; {checks}")
+        if replay_ok(results):
+            print(f"REPLAY MATCHED: {len(results)} record(s) reproduced "
+                  f"(mode {mode})")
+            return 0
+        print("REPLAY DID NOT REPRODUCE THE RECORD", file=sys.stderr)
+        return 1
 
     if args.command == "verify":
         try:

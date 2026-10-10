@@ -21,6 +21,10 @@
 #      with the standalone `verifygate verify` CLI (spec binding where
 #      the rehearsal's own spec applies), plus the committed real-mode
 #      repair report for the JavaScript sample
+#   9. replay: the rehearsal's own repair report and both committed
+#      real-mode repair reports are replayed in Judge Mode with the
+#      standalone `verifygate replay` CLI (patched attempts are
+#      reconstructed from the recorded patches; zero keys)
 #
 # Usage: scripts/rehearse.sh   (run from anywhere; it locates the repo root)
 # Exit code: 0 when every step behaves as expected, 1 otherwise.
@@ -35,14 +39,14 @@ mkdir -p "$WORK/tree"
 git -C "$REPO_ROOT" archive HEAD | tar -x -C "$WORK/tree"
 cd "$WORK/tree"
 
-echo "== 1/8 pytest suite"
+echo "== 1/9 pytest suite"
 python3 -m pytest -q
 
-echo "== 2/8 run: passing candidate (expect PASS, exit 0)"
+echo "== 2/9 run: passing candidate (expect PASS, exit 0)"
 python3 -m verifygate run --spec samples/spec.json \
     --candidate samples/passing --mode judge --out "$WORK/pass.json"
 
-echo "== 3/8 run: failing candidate (expect FAIL, exit 1)"
+echo "== 3/9 run: failing candidate (expect FAIL, exit 1)"
 set +e
 python3 -m verifygate run --spec samples/spec.json \
     --candidate samples/failing --mode judge --out "$WORK/fail.json"
@@ -54,12 +58,12 @@ if [ "$rc" -ne 1 ]; then
 fi
 echo "   (exit 1 as expected)"
 
-echo "== 4/8 repair: failing candidate (expect FAIL -> PASS, exit 0)"
+echo "== 4/9 repair: failing candidate (expect FAIL -> PASS, exit 0)"
 python3 -m verifygate repair --spec samples/spec.json \
     --candidate samples/failing --mode judge --max-rounds 3 \
     --out "$WORK/repair.json" --patched-out "$WORK/patched"
 
-echo "== 5/8 JavaScript sample: run passing + failing, repair failing"
+echo "== 5/9 JavaScript sample: run passing + failing, repair failing"
 python3 -m verifygate run --spec samples-js/spec.json \
     --candidate samples-js/passing --mode judge --out "$WORK/js-pass.json"
 set +e
@@ -76,7 +80,7 @@ python3 -m verifygate repair --spec samples-js/spec.json \
     --candidate samples-js/failing --mode judge --max-rounds 3 \
     --out "$WORK/js-repair.json"
 
-echo "== 6/8 view: real-mode repair report renders with valid chains"
+echo "== 6/9 view: real-mode repair report renders with valid chains"
 python3 -m verifygate view --record samples/evidence_real_repair.json \
     --out "$WORK/view.html"
 python3 - "$WORK/view.html" <<'PYEOF'
@@ -88,11 +92,11 @@ assert "5,367" in html or "5367" in html, "sealed token usage missing"
 print("   view OK: chains verified, sealed usage shown")
 PYEOF
 
-echo "== 7/8 dogfood: VerifyGate verifies this repository (expect PASS, exit 0)"
+echo "== 7/9 dogfood: VerifyGate verifies this repository (expect PASS, exit 0)"
 python3 -m verifygate run --spec dogfood_spec.json \
     --candidate . --mode judge --out "$WORK/dogfood.json"
 
-echo "== 8/8 verify every record written in this rehearsal (verifygate verify)"
+echo "== 8/9 verify every record written in this rehearsal (verifygate verify)"
 python3 -m verifygate verify --record "$WORK/pass.json" \
     --spec samples/spec.json --candidate samples/passing
 python3 -m verifygate verify --record "$WORK/fail.json" \
@@ -109,5 +113,13 @@ python3 -m verifygate verify --record "$WORK/dogfood.json" \
     --spec dogfood_spec.json
 python3 -m verifygate verify --record samples-js/evidence_real_repair.json \
     --spec samples-js/spec.json --candidate samples-js/failing
+
+echo "== 9/9 replay: rehearsal repair report + committed real-mode reports (Judge Mode)"
+python3 -m verifygate replay --record "$WORK/repair.json" \
+    --spec samples/spec.json --candidate samples/failing --mode judge
+python3 -m verifygate replay --record samples/evidence_real_repair.json \
+    --spec samples/spec.json --candidate samples/failing --mode judge
+python3 -m verifygate replay --record samples-js/evidence_real_repair.json \
+    --spec samples-js/spec.json --candidate samples-js/failing --mode judge
 
 echo "REHEARSAL PASSED — clean tree, Judge Mode spine end-to-end green."
