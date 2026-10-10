@@ -57,13 +57,34 @@ suite); VerifyGate itself is standard-library only.
 
 ## Real mode (Nebius Token Factory)
 
+Real mode drives an NVIDIA Nemotron model on Nebius Token Factory for
+patch generation and failure explanation. Authentication uses the
+stored Token Factory connector credential — no API key is read from
+the environment or the command line. The model is configuration:
+`--model` or `NEBIUS_MODEL`, defaulting to the pinned
+`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`.
+
 ```bash
-export NEBIUS_API_KEY=...        # Token Factory API key
-export NEBIUS_MODEL=...          # a Nemotron instruct model on Token Factory
-export TAVILY_API_KEY=...        # optional: live references in diagnoses
+# Verify with a real Nemotron diagnosis on failure
 python3 -m verifygate run --spec samples/spec.json \
-    --candidate samples/passing --mode real
+    --candidate samples/failing --mode real
+
+# The full loop: FAIL -> Nemotron diff -> apply -> re-verify
+python3 -m verifygate repair --spec samples/spec.json \
+    --candidate samples/failing --mode real \
+    --model nvidia/nemotron-3-super-120b-a12b --max-rounds 3 \
+    --out evidence-real-repair.json
+# -> attempt 0: FAIL (real diagnosis), attempt 1: PASS
 ```
+
+Every real model call (model, purpose, prompt/completion/total token
+usage) is sealed into the evidence record's hash chain as an
+`llm_usage` entry, so the token bill is as tamper-evident as the
+verdict. A diff that does not apply cleanly is rejected with the
+applier's exact error, which is fed back to the model for the next
+round instead of ending the loop. A real FAIL → repair → PASS report
+is committed at `samples/evidence_real_repair.json` (Nemotron 3 Super
+120B, 2 calls, 5,367 tokens, both attempt chains valid).
 
 ## Task spec format
 
@@ -105,3 +126,9 @@ python3 -m pytest -q
 ## License
 
 MIT (to be added at repository publication; this is a local build repo).
+
+## Version
+
+0.3.0 — real Token Factory adapter wired into the verify/repair loop
+(connector-surrogate auth, usage sealed in the evidence chain,
+rejection-feedback retries); Judge Mode unchanged and fully offline.

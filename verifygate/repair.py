@@ -40,6 +40,53 @@ def _check_dicts(record: dict) -> list[dict]:
     ]
 
 
+_TEXT_SUFFIXES = {
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".md", ".txt", ".toml",
+    ".yaml", ".yml", ".cfg", ".ini", ".sh", ".go", ".rs", ".java", ".c",
+    ".h", ".cpp", ".rb", ".php", ".html", ".css",
+}
+_MAX_FILE_CHARS = 4000
+_MAX_TOTAL_CHARS = 12000
+
+
+def _candidate_files(root: str | Path) -> dict[str, str]:
+    """Snapshot the candidate's small text files for the patch prompt.
+
+    A model asked for a unified diff must see the exact file contents
+    the diff will be applied to — brief + check output alone cannot
+    produce a diff whose context lines match. Binary, oversized, and
+    housekeeping files are skipped; the snapshot is capped overall.
+    """
+    root = Path(root)
+    files: dict[str, str] = {}
+    total = 0
+    for p in sorted(root.rglob("*")):
+        if not p.is_file() or ".git" in p.parts or "__pycache__" in p.parts:
+            continue
+        if p.suffix.lower() not in _TEXT_SUFFIXES:
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if len(text) > _MAX_FILE_CHARS or total + len(text) > _MAX_TOTAL_CHARS:
+            continue
+        files[p.relative_to(root).as_posix()] = text
+        total += len(text)
+    return files
+
+
+def _usage_totals(records_and_report: list) -> dict:
+    """Aggregate token usage across sealed entries + unsealed calls."""
+    calls = 0
+    total_tokens = 0
+    for item in records_and_report:
+        for c in item:
+            calls += 1
+            total_tokens += (c.get("usage") or {}).get("total_tokens") or 0
+    return {"llm_calls": calls, "total_tokens": total_tokens}
+
+
 def run_repair(
     *,
     spec: TaskSpec,
@@ -73,6 +120,8 @@ def run_repair(
 
     rounds_used = 0
     patch_error: str | None = None
+    failed_patch: dict | None = None
+    patch_feedback: str | None = None
     stopped_reason = "passed" if record["verdict"] == "PASS" else "max_rounds"
     while record["verdict"] == "FAIL" and rounds_used < max_rounds:
         failing_evidence = {
@@ -80,15 +129,34 @@ def run_repair(
             "brief": spec.brief,
             "verdict": record["verdict"],
             "checks": _check_dicts(record),
+            # The exact sources the proposed diff must apply to. The
+            # mock ignores this; the real adapter embeds it verbatim.
+            "candidate_files": _candidate_files(current_dir),
         }
+        if patch_feedback:
+            # A previous diff was rejected by the applier: hand the
+            # exact rejection back so the next proposal can fix its
+            # form, not just its content. Each retry costs one round.
+            failing_evidence["patch_error"] = patch_feedback
+        calls_before = len(llm.pending_calls()) if hasattr(llm, "pending_calls") else 0
         patch_text = llm.generate_patch(spec.brief, failing_evidence)
         rounds_used += 1
+        patch_calls = (
+            llm.pending_calls()[calls_before:]
+            if hasattr(llm, "pending_calls") else []
+        )
         patch_info = {
             "round": rounds_used,
             "llm_adapter": llm.name,
             "applied": False,
             "changed_files": [],
             "error": None,
+            # Snapshot only — the calls stay pending and are sealed
+            # into the next attempt's evidence record by the runner.
+            "llm_usage": patch_calls,
+            # The raw proposal, kept so a rejected patch stays
+            # debuggable from the report alone (truncated for size).
+            "patch_text": patch_text[:8000],
         }
         new_dir = Path(tempfile.mkdtemp(prefix="verifygate-repair-"))
         shutil.copytree(current_dir, new_dir, dirs_exist_ok=True, ignore=_IGNORE)
@@ -97,10 +165,15 @@ def run_repair(
         except PatchError as exc:
             patch_info["error"] = str(exc)
             patch_error = str(exc)
+            failed_patch = patch_info
+            patch_feedback = str(exc)
+            if rounds_used < max_rounds:
+                continue  # retry with the rejection as feedback
             stopped_reason = "patch_not_applicable"
             break
         patch_info["applied"] = True
         patch_info["changed_files"] = changed
+        patch_feedback = None
         current_dir = new_dir
         current_label = str(new_dir)
         record = run_verification(
@@ -119,6 +192,17 @@ def run_repair(
         if record["verdict"] == "PASS":
             stopped_reason = "passed"
 
+    # Calls still pending were never sealed into a record (e.g. a patch
+    # that did not apply ended the loop): surface them at report level
+    # instead of dropping the usage on the floor.
+    unsealed = llm.drain_calls() if hasattr(llm, "drain_calls") else []
+    sealed_calls = [
+        c
+        for a in attempts
+        for e in a["evidence"]["entries"]
+        if e["kind"] == "llm_usage"
+        for c in e["calls"]
+    ]
     return {
         "tool": "verifygate",
         "version": __version__,
@@ -131,5 +215,8 @@ def run_repair(
         "final_verdict": attempts[-1]["verdict"],
         "stopped_reason": stopped_reason,
         "last_patch_error": patch_error,
+        "failed_patch": failed_patch,
+        "llm_usage_total": _usage_totals([sealed_calls, unsealed]),
+        "unsealed_llm_usage": unsealed,
         "attempts": attempts,
     }

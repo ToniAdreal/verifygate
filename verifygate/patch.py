@@ -43,6 +43,12 @@ class FilePatch:
 
 
 _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+# Real models sometimes emit a bare "@@" header with no line numbers.
+# Such hunks are accepted by deriving the counts from the hunk body;
+# application still verifies every context/removed line against the
+# file on disk and locates the hunk by unique content search, so a
+# bare header weakens nothing.
+_BARE_HUNK_RE = re.compile(r"^@@\s*$|^@@\s.*@@\s*$")
 
 
 def _clean_path(raw: str) -> str:
@@ -69,23 +75,34 @@ def parse_patch(text: str) -> list[FilePatch]:
             i += 2
             while i < len(lines):
                 m = _HUNK_RE.match(lines[i])
-                if not m:
+                bare = False
+                if m:
+                    hunk = Hunk(
+                        old_start=int(m.group(1)),
+                        old_count=int(m.group(2) or 1),
+                        new_start=int(m.group(3)),
+                        new_count=int(m.group(4) or 1),
+                    )
+                elif _BARE_HUNK_RE.match(lines[i]):
+                    bare = True
+                    hunk = Hunk(old_start=1, old_count=0, new_start=1,
+                                new_count=0)
+                else:
                     break
-                hunk = Hunk(
-                    old_start=int(m.group(1)),
-                    old_count=int(m.group(2) or 1),
-                    new_start=int(m.group(3)),
-                    new_count=int(m.group(4) or 1),
-                )
                 i += 1
                 need_old, need_new = hunk.old_count, hunk.new_count
-                while i < len(lines) and (need_old > 0 or need_new > 0):
+                while i < len(lines) and (bare or need_old > 0 or need_new > 0):
                     line = lines[i]
                     if line.startswith("\\"):  # "\ No newline at end of file"
                         if hunk.lines and hunk.lines[-1][0] in (" ", "+"):
                             hunk.new_no_trailing_newline = True
                         i += 1
                         continue
+                    if bare and (
+                        not line
+                        or line.startswith(("--- ", "+++ "))
+                    ):
+                        break  # bare hunks end at blanks / next file
                     kind = line[0] if line else " "
                     content = line[1:] if line else ""
                     if kind not in (" ", "-", "+"):
@@ -96,6 +113,13 @@ def parse_patch(text: str) -> list[FilePatch]:
                     if kind in (" ", "+"):
                         need_new -= 1
                     i += 1
+                if bare:
+                    hunk.old_count = sum(
+                        1 for k, _ in hunk.lines if k in (" ", "-"))
+                    hunk.new_count = sum(
+                        1 for k, _ in hunk.lines if k in (" ", "+"))
+                    if not hunk.lines:
+                        break
                 fp.hunks.append(hunk)
             if fp.hunks:
                 patches.append(fp)

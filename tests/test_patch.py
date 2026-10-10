@@ -83,3 +83,17 @@ def test_stale_line_numbers_tolerated(tmp_path):
 
 def test_parse_counts_file_patches():
     assert len(parse_patch(MODIFY_DIFF + "\n" + CREATE_DIFF)) == 2
+
+
+def test_bare_hunk_header_from_real_model_output(tmp_path):
+    """Models sometimes emit '@@' with no line numbers; derive + apply."""
+    (tmp_path / "m.py").write_text("def f():\n    return 1\n")
+    diff = (
+        "--- a/m.py\n"
+        "+++ b/m.py\n"
+        "@@\n"
+        "-    return 1\n"
+        "+    return 2\n"
+    )
+    assert apply_patch(tmp_path, diff) == ["m.py"]
+    assert (tmp_path / "m.py").read_text() == "def f():\n    return 2\n"

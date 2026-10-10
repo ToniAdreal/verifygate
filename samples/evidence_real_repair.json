@@ -1,0 +1,189 @@
+{
+  "tool": "verifygate",
+  "version": "0.3.0",
+  "kind": "repair-report",
+  "spec_name": "stringtools-slugify-fix",
+  "mode": "real",
+  "llm_adapter": "nebius-token-factory",
+  "max_rounds": 3,
+  "rounds_used": 1,
+  "final_verdict": "PASS",
+  "stopped_reason": "passed",
+  "last_patch_error": null,
+  "failed_patch": null,
+  "llm_usage_total": {
+    "llm_calls": 2,
+    "total_tokens": 5367
+  },
+  "unsealed_llm_usage": [],
+  "attempts": [
+    {
+      "round": 0,
+      "candidate_dir": "samples/failing",
+      "verdict": "FAIL",
+      "record_hash": "0daa6dfb9211c87d3a602606ab598671445e60ad400010cbc9b3c320514abf4e",
+      "patch_from_previous": null,
+      "evidence": {
+        "tool": "verifygate",
+        "version": "0.3.0",
+        "created_at": "2026-10-10T11:31:27.057057+00:00",
+        "verdict": "FAIL",
+        "replay": "python3 -m verifygate run --spec samples/spec.json --candidate samples/failing --mode real",
+        "entries": [
+          {
+            "kind": "header",
+            "hash": "82fd21154b285b3b58562231892a0050bcb6a89eb51d5f3ac46f08d2a750e65f",
+            "spec_name": "stringtools-slugify-fix",
+            "spec_hash": "5477ea11ac6b862af5012c86edb334f6a498b1d674377e5c1e0a0a3c8814aba0",
+            "candidate_tree_hash": "5aa2047a510a0078a21ca17aec3dba1417fdb5e807a68143aee17e13683a5eec",
+            "mode": "real"
+          },
+          {
+            "kind": "check",
+            "hash": "570180e010ab0451a9f0e6543abc5b9b5f7632d0dac55dd769a0d681aac9fb7d",
+            "name": "unit_tests",
+            "command": "python3 -m pytest -q",
+            "exit_code": 1,
+            "duration_ms": 309,
+            "stdout_tail": "FFF.                                                                     [100%]\n=================================== FAILURES ===================================\n______________________________ test_slugify_basic ______________________________\n\n    def test_slugify_basic():\n>       assert slugify(\"Hello World\") == \"hello-world\"\nE       AssertionError: assert 'Hello-World' == 'hello-world'\nE         \nE         - hello-world\nE         ? ^     ^\nE         + Hello-World\nE         ? ^     ^\n\ntest_stringtools.py:5: AssertionError\n___________________________ test_slugify_punctuation ___________________________\n\n    def test_slugify_punctuation():\n>       assert slugify(\"Hello, World!\") == \"hello-world\"\nE       AssertionError: assert 'Hello,-World!' == 'hello-world'\nE         \nE         - hello-world\nE         ? ^     ^\nE         + Hello,-World!\nE         ? ^    + ^    +\n\ntest_stringtools.py:9: AssertionError\n______________________ test_slugify_collapses_separators _______________________\n\n    def test_slugify_collapses_separators():\n>       assert slugify(\"  Multiple   Spaces  \") == \"multiple-spaces\"\nE       AssertionError: assert 'Multiple---Spaces' == 'multiple-spaces'\nE         \nE         - multiple-spaces\nE         ? ^        ^\nE         + Multiple---Spaces\nE         ? ^        ^^^\n\ntest_stringtools.py:13: AssertionError\n=========================== short test summary info ============================\nFAILED test_stringtools.py::test_slugify_basic - AssertionError: assert 'Hell...\nFAILED test_stringtools.py::test_slugify_punctuation - AssertionError: assert...\nFAILED test_stringtools.py::test_slugify_collapses_separators - AssertionErro...\n3 failed, 1 passed in 0.03s\n",
+            "stderr_tail": "",
+            "timed_out": false,
+            "verdict": "FAIL"
+          },
+          {
+            "kind": "check",
+            "hash": "69c6e9ec4cd5ce0f47188606c382639aa5b006a1860febd2a9c17fa56e09d51e",
+            "name": "repro_script",
+            "command": "python3 repro.py",
+            "exit_code": 1,
+            "duration_ms": 29,
+            "stdout_tail": "",
+            "stderr_tail": "Traceback (most recent call last):\n  File \"/tmp/verifygate-l3qnnlce/repro.py\", line 5, in <module>\n    assert result == \"hello-world\", f\"slugify repro failed: got {result!r}\"\n           ^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: slugify repro failed: got 'Hello,-World!'\n",
+            "timed_out": false,
+            "verdict": "FAIL"
+          },
+          {
+            "kind": "diagnosis",
+            "hash": "ab454f140b96e263054cf15f7ee51baa87b7686353b77e3f7ca9dc459aa96af3",
+            "explanation": "\n\n**What failed**\n\n| Check | Failure details |\n|-------|-----------------|\n| `unit_tests` (`pytest`) | Three assertions in `test_stringtools.py` failed:<br>\u2022 `slugify(\"Hello World\")` returned `'Hello\u2011World'` (expected `'hello\u2011world'`).<br>\u2022 `slugify(\"Hello, World!\")` returned `'Hello,-World!'` (expected `'hello\u2011world'`).<br>\u2022 `slugify(\"  Multiple   Spaces  \")` returned `'Multiple---Spaces'` (expected `'multiple\u2011spaces'`). |\n| `repro_script` (`python3 repro.py`) | Same mismatch: `slugify(\"Hello, World!\")` gave `'Hello,-World!'` instead of `'hello\u2011world'`. |\n\nAll failures stem from the **same `slugify` function**.\n\n**Most likely cause**\n\nThe current implementation probably:\n\n1. Does **not convert the input to lower\u2011case**.  \n2. Replaces each non\u2011alphanumeric character (including punctuation and spaces) with a hyphen **individually**, so consecutive spaces/punctuation become multiple hyphens.  \n3. Does **not strip leading/trailing hyphens** after the replacement.\n\nIn short, the function lacks the typical slug\u2011ification steps: lower\u2011casing, collapsing any run of non\u2011alphanumerics into a single hyphen, and trimming edge hyphens.\n\n**Smallest next fix to try**\n\nReplace the body of `slugify` (or edit the existing logic) with a concise, correct version, e.g.:\n\n```python\nimport re\n\ndef slugify(text: str) -> str:\n    # 1. lower\u2011case\n    text = text.lower()\n    # 2. replace any sequence of non\u2011alphanumeric chars with a single hyphen\n    text = re.sub(r'[^0-9a-z]+', '-', text)\n    # 3. strip hyphens from the start and end\n    return text.strip('-')\n```\n\n*Why this is the smallest change*:  \n- It adds only three lines (lower\u2011case, regex substitution, strip).  \n- It keeps the function signature and any existing imports untouched.  \n- Running the tests again should make all three slugify tests and the repro script pass.  \n\nAfter applying the fix, rerun:\n\n```bash\npython3 -m pytest -q   # unit_tests\npython3 repro.py       # repro_script\n```\n\nBoth should exit with code\u202f0 and show all tests passing.",
+            "references": [],
+            "llm_adapter": "nebius-token-factory",
+            "reference_source": "tavily"
+          },
+          {
+            "kind": "llm_usage",
+            "hash": "d1c55b98f01265c4aedefcd868161c565d79aae825107eb5119157fea5233978",
+            "calls": [
+              {
+                "adapter": "nebius-token-factory",
+                "model": "nvidia/nemotron-3-super-120b-a12b",
+                "purpose": "explain_failure",
+                "finish_reason": "stop",
+                "usage": {
+                  "prompt_tokens": 787,
+                  "completion_tokens": 746,
+                  "total_tokens": 1533
+                }
+              }
+            ],
+            "total_tokens": 1533
+          }
+        ],
+        "record_hash": "0daa6dfb9211c87d3a602606ab598671445e60ad400010cbc9b3c320514abf4e",
+        "signature": "6390f8a461c3249f65256436ef3fd4db44e9766d486e1a3668c3f1e6a762158a",
+        "signing_key_is_default_dev_key": true
+      }
+    },
+    {
+      "round": 1,
+      "candidate_dir": "/tmp/verifygate-repair-g1k8hjkx",
+      "verdict": "PASS",
+      "record_hash": "1a8454856058fc5d599065d0de1d8d1b5fe547c7da90dc789e07d339c0cfe804",
+      "patch_from_previous": {
+        "round": 1,
+        "llm_adapter": "nebius-token-factory",
+        "applied": true,
+        "changed_files": [
+          "stringtools.py"
+        ],
+        "error": null,
+        "llm_usage": [
+          {
+            "adapter": "nebius-token-factory",
+            "model": "nvidia/nemotron-3-super-120b-a12b",
+            "purpose": "generate_patch",
+            "finish_reason": "stop",
+            "usage": {
+              "prompt_tokens": 1313,
+              "completion_tokens": 2521,
+              "total_tokens": 3834
+            }
+          }
+        ],
+        "patch_text": "\n\nFix slugify to lowercase, remove punctuation, and collapse separators.\n--- a/stringtools.py\n+++ b/stringtools.py\n@@ -6,2 +6,5 @@\n def slugify(text: str) -> str:\n-    return text.strip().replace(\" \", \"-\")\n+    text = text.lower()\n+    cleaned = ''.join(c if c.isalnum() else ' ' for c in text)\n+    words = cleaned.split()\n+    return '-'.join(words)"
+      },
+      "evidence": {
+        "tool": "verifygate",
+        "version": "0.3.0",
+        "created_at": "2026-10-10T11:31:39.796272+00:00",
+        "verdict": "PASS",
+        "replay": "python3 -m verifygate run --spec samples/spec.json --candidate /tmp/verifygate-repair-g1k8hjkx --mode real",
+        "entries": [
+          {
+            "kind": "header",
+            "hash": "b530f0611501c5e8c3b8b7a860dda8365bcb80505f181e05b990aacf9849b575",
+            "spec_name": "stringtools-slugify-fix",
+            "spec_hash": "5477ea11ac6b862af5012c86edb334f6a498b1d674377e5c1e0a0a3c8814aba0",
+            "candidate_tree_hash": "065b8671139fe84b89129ae6784082f18114608906316487b2ebbb3c3ae470a6",
+            "mode": "real"
+          },
+          {
+            "kind": "check",
+            "hash": "2fa431c5e62153de6aa107a450ffda3e1a5ad97bf6e766ab14d0273a7c008d13",
+            "name": "unit_tests",
+            "command": "python3 -m pytest -q",
+            "exit_code": 0,
+            "duration_ms": 468,
+            "stdout_tail": "....                                                                     [100%]\n4 passed in 0.02s\n",
+            "stderr_tail": "",
+            "timed_out": false,
+            "verdict": "PASS"
+          },
+          {
+            "kind": "check",
+            "hash": "f1b1cc2ab71f5368c35921ec322919602bdf437a02c475b570ecbfcda2c4685e",
+            "name": "repro_script",
+            "command": "python3 repro.py",
+            "exit_code": 0,
+            "duration_ms": 40,
+            "stdout_tail": "repro OK: hello-world\n",
+            "stderr_tail": "",
+            "timed_out": false,
+            "verdict": "PASS"
+          },
+          {
+            "kind": "llm_usage",
+            "hash": "9a6e32559e9f1dbc99caec53089472cfed023f6782ee45f22f7d6ded3ec2c71d",
+            "calls": [
+              {
+                "adapter": "nebius-token-factory",
+                "model": "nvidia/nemotron-3-super-120b-a12b",
+                "purpose": "generate_patch",
+                "finish_reason": "stop",
+                "usage": {
+                  "prompt_tokens": 1313,
+                  "completion_tokens": 2521,
+                  "total_tokens": 3834
+                }
+              }
+            ],
+            "total_tokens": 3834
+          }
+        ],
+        "record_hash": "1a8454856058fc5d599065d0de1d8d1b5fe547c7da90dc789e07d339c0cfe804",
+        "signature": "14997c9402e9ea7ffca2b237cc9e81601990b2dcd613e0f2eb0f407250072c12",
+        "signing_key_is_default_dev_key": true
+      }
+    }
+  ]
+}

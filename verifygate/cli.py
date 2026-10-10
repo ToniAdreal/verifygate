@@ -27,12 +27,12 @@ from .spec import SpecError, load_spec
 from .tavily import MockReferenceLookup, TavilyReferenceLookup
 
 
-def _adapters(mode: str):
+def _adapters(mode: str, model: str | None = None):
     if mode == "judge":
         return MockLLMAdapter(), MockReferenceLookup()
     from .tokenfactory import TokenFactoryAdapter
 
-    return TokenFactoryAdapter(), TavilyReferenceLookup()
+    return TokenFactoryAdapter(model=model), TavilyReferenceLookup()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--spec", required=True)
     run_p.add_argument("--candidate", required=True)
     run_p.add_argument("--mode", choices=["judge", "real"], default="judge")
+    run_p.add_argument("--model", default=None,
+                       help="real mode: Token Factory model id "
+                            "(default: NEBIUS_MODEL or Nemotron 3 Nano)")
     run_p.add_argument("--out", default=None,
                        help="evidence record path (default: evidence-<spec>.json)")
     rep_p = sub.add_parser(
@@ -49,6 +52,9 @@ def main(argv: list[str] | None = None) -> int:
     rep_p.add_argument("--spec", required=True)
     rep_p.add_argument("--candidate", required=True)
     rep_p.add_argument("--mode", choices=["judge", "real"], default="judge")
+    rep_p.add_argument("--model", default=None,
+                       help="real mode: Token Factory model id "
+                            "(default: NEBIUS_MODEL or Nemotron 3 Nano)")
     rep_p.add_argument("--max-rounds", type=int, default=3,
                        help="maximum patch attempts (default: 3)")
     rep_p.add_argument("--out", default=None,
@@ -64,19 +70,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"spec error: {exc}", file=sys.stderr)
             return 2
         try:
-            llm, references = _adapters(args.mode)
+            llm, references = _adapters(args.mode, args.model)
         except ValueError as exc:
             print(f"adapter error: {exc}", file=sys.stderr)
             return 2
-        record = run_verification(
-            spec=spec,
-            candidate_dir=args.candidate,
-            mode=args.mode,
-            llm=llm,
-            references=references,
-            spec_label=args.spec,
-            candidate_label=args.candidate,
-        )
+        try:
+            record = run_verification(
+                spec=spec,
+                candidate_dir=args.candidate,
+                mode=args.mode,
+                llm=llm,
+                references=references,
+                spec_label=args.spec,
+                candidate_label=args.candidate,
+            )
+        except RuntimeError as exc:
+            print(f"adapter error: {exc}", file=sys.stderr)
+            return 2
         out = Path(args.out or f"evidence-{spec.name}.json")
         write_record(record, out)
         checks = [e for e in record["entries"] if e["kind"] == "check"]
@@ -96,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"spec error: {exc}", file=sys.stderr)
             return 2
         try:
-            llm, references = _adapters(args.mode)
+            llm, references = _adapters(args.mode, args.model)
         except ValueError as exc:
             print(f"adapter error: {exc}", file=sys.stderr)
             return 2
@@ -111,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
                 candidate_label=args.candidate,
                 max_rounds=args.max_rounds,
             )
-        except FileNotFoundError as exc:
+        except (FileNotFoundError, RuntimeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         out = Path(args.out or f"repair-{spec.name}.json")
@@ -130,6 +140,11 @@ def main(argv: list[str] | None = None) -> int:
             shutil.copytree(report["attempts"][-1]["candidate_dir"], dest,
                             dirs_exist_ok=True, ignore=_IGNORE)
             print(f"  patched candidate copied to {dest}")
+        usage = report.get("llm_usage_total") or {}
+        if usage.get("llm_calls"):
+            print(f"  LLM usage: {usage['llm_calls']} call(s), "
+                  f"{usage['total_tokens']} total token(s) "
+                  f"(sealed in the evidence chain)")
         print(f"FINAL VERDICT: {report['final_verdict']} after "
               f"{report['rounds_used']} repair round(s) "
               f"({report['stopped_reason']})  ->  {out}")

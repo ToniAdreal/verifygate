@@ -66,8 +66,17 @@ def build_record(
     verdict: str,
     diagnosis: dict | None,
     replay_command: str,
+    llm_usage: list[dict] | None = None,
 ) -> dict:
-    """Assemble an evidence record with a hash chain over its entries."""
+    """Assemble an evidence record with a hash chain over its entries.
+
+    ``llm_usage`` carries the real model calls (model, purpose, token
+    usage) made since the previous record was sealed. It is chained
+    like every other entry, so editing a usage figure after the fact
+    breaks verification exactly the way editing a verdict does. The
+    deterministic mock records no calls, so Judge Mode never emits
+    this entry.
+    """
     entries: list[dict] = []
     prev = _sha(GENESIS)
     header = {
@@ -84,6 +93,16 @@ def build_record(
     if diagnosis is not None:
         prev = _sha(prev + _canonical(diagnosis))
         entries.append({"kind": "diagnosis", "hash": prev, **diagnosis})
+    if llm_usage:
+        usage_entry = {
+            "calls": llm_usage,
+            "total_tokens": sum(
+                (c.get("usage") or {}).get("total_tokens") or 0
+                for c in llm_usage
+            ),
+        }
+        prev = _sha(prev + _canonical(usage_entry))
+        entries.append({"kind": "llm_usage", "hash": prev, **usage_entry})
     record_hash = _sha(prev + _canonical({"verdict": verdict}))
     signature = hmac.new(
         signing_key().encode("utf-8"), record_hash.encode("utf-8"), hashlib.sha256

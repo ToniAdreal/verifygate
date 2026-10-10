@@ -44,6 +44,10 @@ def run_verification(
         f"python3 -m verifygate run --spec {spec_label} "
         f"--candidate {candidate_label} --mode {mode}"
     )
+    # Seal every real model call made since the previous record (in the
+    # repair loop this includes the generate_patch call that produced
+    # the candidate now being verified) into this record's hash chain.
+    llm_usage = llm.drain_calls() if hasattr(llm, "drain_calls") else []
     return build_record(
         spec_name=spec.name,
         spec_hash=spec.hash,
@@ -53,6 +57,7 @@ def run_verification(
         verdict=verdict,
         diagnosis=diagnosis,
         replay_command=replay,
+        llm_usage=llm_usage,
     )
 
 
