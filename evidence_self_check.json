@@ -1,0 +1,32 @@
+{
+  "tool": "verifygate",
+  "version": "0.8.0",
+  "created_at": "2026-10-10T18:08:42.285779+00:00",
+  "verdict": "PASS",
+  "replay": "python3 -m verifygate run --spec dogfood_spec.json --candidate . --mode judge",
+  "entries": [
+    {
+      "kind": "header",
+      "hash": "0ba394e94e3973c3dfa90e3c1cbdce8ba647e1b090eb16d9c6ee2881468a29af",
+      "spec_name": "verifygate-self-check",
+      "spec_hash": "9a88c58688f6202f3362cd0b626fb652cb683148b8b756f066e63306d60fe043",
+      "candidate_tree_hash": "52c08e6c84d2ef941d069e4b71f10de36f2fedb2a1ec25987366b1634ae997db",
+      "mode": "judge"
+    },
+    {
+      "kind": "check",
+      "hash": "7b3d6dbd50b5eee59d86caae1f1338f7910a0d4b84a11f51092cf423f5d61341",
+      "name": "unit_tests",
+      "command": "python3 -m pytest -q",
+      "exit_code": 0,
+      "duration_ms": 15900,
+      "stdout_tail": "........................................................................ [100%]\n72 passed in 15.56s\n",
+      "stderr_tail": "",
+      "timed_out": false,
+      "verdict": "PASS"
+    }
+  ],
+  "record_hash": "68d91ea6d0be1cd717a73a26bbe74f95da3a25af1eaa38476eefeb1d8c3c11c2",
+  "signature": "50b7bddeac375bfd5ee41cd5512a09d6d6e4b84c2a72a07db0449efb3addd231",
+  "signing_key_is_default_dev_key": true
+}

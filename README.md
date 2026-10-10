@@ -142,9 +142,16 @@ Candidate code is untrusted, so the sandbox treats it that way:
 - **Process-group timeouts** — checks start in a new session and a
   timeout kills the whole group, so no detached child outlives a FAIL.
 
-VerifyGate dogfoods itself: `dogfood_spec.json` in the project root
-runs the project's own pytest suite as a VerifyGate check, and the
-resulting PASS record is kept next to it as `evidence_self_check.json`.
+VerifyGate dogfoods itself: `dogfood_spec.json` at the repository
+root runs the project's own pytest suite as a VerifyGate check on a
+copy of this tree, and the resulting PASS record is committed next to
+it as `evidence_self_check.json`. Reproduce it from a fresh clone:
+
+```bash
+python3 -m verifygate run --spec dogfood_spec.json \
+    --candidate . --mode judge --out evidence_self_check.json
+# -> VERDICT: PASS (the suite passes inside the sandbox)
+```
 
 ## Task spec format
 
@@ -175,6 +182,8 @@ verifygate/   spec, sandbox, validators, evidence, patch application,
               repair loop, llm adapters, cli
 samples/      fictional demo task + passing / failing candidates
 tests/        pytest suite for VerifyGate itself
+dogfood_spec.json / evidence_self_check.json
+              VerifyGate's self-verification spec + its PASS record
 ```
 
 ## Tests
@@ -202,8 +211,9 @@ Exports the tracked tree (`git archive HEAD` — exactly what a fresh
 clone contains) into a fresh directory and runs the whole Judge Mode
 spine there: the pytest suite, PASS and FAIL sample runs with their
 expected exit codes, the FAIL → PASS repair loop, the evidence web view
-of the committed real-mode report, and a hash-chain check of every
-record written during the rehearsal.
+of the committed real-mode report, a dogfood run of VerifyGate on its
+own tree, and a hash-chain check of every record written during the
+rehearsal.
 
 ## License
 
@@ -211,6 +221,11 @@ MIT — see `LICENSE`.
 
 ## Version
 
+0.8.0 — in-repo dogfooding: `dogfood_spec.json` and the committed
+self-check PASS record (`evidence_self_check.json`) now live at the
+repository root, so a fresh clone can reproduce VerifyGate verifying
+its own codebase with one command; the clean-tree rehearsal gains a
+dogfood step (7 steps).
 0.7.0 — Tavily diagnosis hardening: the reference lookup can never
 break a verification run (missing key, network/HTTP failure, or
 malformed response all degrade to no references, with the reason
