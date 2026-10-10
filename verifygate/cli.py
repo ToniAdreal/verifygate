@@ -25,6 +25,7 @@ from .runner import run_verification, write_record
 from .sandbox import _IGNORE
 from .spec import SpecError, load_spec
 from .tavily import MockReferenceLookup, TavilyReferenceLookup
+from .webview import render_document
 
 
 def _adapters(mode: str, model: str | None = None):
@@ -61,7 +62,27 @@ def main(argv: list[str] | None = None) -> int:
                        help="repair report path (default: repair-<spec>.json)")
     rep_p.add_argument("--patched-out", default=None,
                        help="copy the final patched candidate into this directory")
+    view_p = sub.add_parser(
+        "view", help="render an evidence record / repair report as HTML")
+    view_p.add_argument("--record", required=True,
+                        help="evidence record or repair report JSON")
+    view_p.add_argument("--out", default=None,
+                        help="HTML path (default: <record stem>.html)")
     args = parser.parse_args(argv)
+
+    if args.command == "view":
+        try:
+            data = json.loads(Path(args.record).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"record error: {exc}", file=sys.stderr)
+            return 2
+        if not isinstance(data, dict) or data.get("tool") != "verifygate":
+            print("record error: not a VerifyGate record", file=sys.stderr)
+            return 2
+        out = Path(args.out or Path(args.record).with_suffix(".html"))
+        out.write_text(render_document(data), encoding="utf-8")
+        print(f"Rendered -> {out}")
+        return 0
 
     if args.command == "run":
         try:

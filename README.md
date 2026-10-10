@@ -86,6 +86,23 @@ round instead of ending the loop. A real FAIL → repair → PASS report
 is committed at `samples/evidence_real_repair.json` (Nemotron 3 Super
 120B, 2 calls, 5,367 tokens, both attempt chains valid).
 
+## Evidence web view
+
+Any evidence record or repair report renders as one self-contained
+HTML page — inline CSS, no JavaScript, no external resources:
+
+```bash
+python3 -m verifygate view --record samples/evidence_real_repair.json \
+    --out samples/evidence_view.html
+```
+
+The page is generated from the sealed JSON: every record string is
+HTML-escaped, reference URLs become links only for http/https, and
+the hash chain is recomputed at render time — an intact record shows
+"Hash chain verified", a tampered one renders a visible CHAIN INVALID
+banner instead of a clean verdict. A pre-rendered view of the real
+Nemotron repair report is committed at `samples/evidence_view.html`.
+
 ## Task spec format
 
 ```json
@@ -129,6 +146,7 @@ MIT (to be added at repository publication; this is a local build repo).
 
 ## Version
 
-0.3.0 — real Token Factory adapter wired into the verify/repair loop
-(connector-surrogate auth, usage sealed in the evidence chain,
-rejection-feedback retries); Judge Mode unchanged and fully offline.
+0.4.0 — evidence-record static web view (`verifygate view`): records
+and repair reports render as a single self-contained HTML page with
+the hash chain re-verified at render time; Judge Mode unchanged and
+fully offline.
