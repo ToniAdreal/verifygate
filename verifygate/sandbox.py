@@ -116,6 +116,13 @@ def prepare_workspace(candidate_dir: str | Path) -> Path:
 
     Empty real directories are preserved; symlinks follow the
     containment rule in :func:`iter_candidate_files`.
+
+    Ownership: the caller owns the returned directory and must remove
+    it when done. ``run_verification`` removes its internal workspace
+    before returning; the repair loop removes rejected and superseded
+    copies and keeps only the final patched copy for its caller.
+    Leaking these copies once filled a temp filesystem in practice
+    (see tests/test_workspace_cleanup.py).
     """
     candidate_dir = Path(candidate_dir)
     if not candidate_dir.is_dir():

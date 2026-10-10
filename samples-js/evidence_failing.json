@@ -1,0 +1,60 @@
+{
+  "tool": "verifygate",
+  "version": "1.0.0",
+  "created_at": "2026-10-10T19:09:29.706767+00:00",
+  "verdict": "FAIL",
+  "replay": "python3 -m verifygate run --spec samples-js/spec.json --candidate samples-js/failing --mode judge",
+  "entries": [
+    {
+      "kind": "header",
+      "hash": "23d3546c55fa7f8c6da9bd8df5de568cf51a9cf4eb04e61a66024ba76f46354c",
+      "spec_name": "cart-total-tax-fix",
+      "spec_hash": "f9c36f2a2918c790004ce548874522d08990927bd12c4d1f0baa85d36539c1b7",
+      "candidate_tree_hash": "b057a49e108268e29a5ce2f1e3984fdd9acff344cac55ca7ce1233d3ef79dfa7",
+      "mode": "judge"
+    },
+    {
+      "kind": "check",
+      "hash": "9882c316c1e3f7b34b113815a600cff350f0eb02575f38ed2205f8051462f156",
+      "name": "unit_tests",
+      "command": "node --test",
+      "exit_code": 1,
+      "duration_ms": 369,
+      "stdout_tail": "\u2714 subtotal sums price * qty (1.340782ms)\n\u2716 total applies the tax rate (1.986792ms)\n\u2716 total rounds to cents (0.294803ms)\n\u2714 total with zero tax equals the subtotal (3.248054ms)\n\u2139 tests 4\n\u2139 suites 0\n\u2139 pass 2\n\u2139 fail 2\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 213.894833\n\n\u2716 failing tests:\n\ntest at cart.test.js:18:1\n\u2716 total applies the tax rate (1.986792ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  25.5 !== 30.6\n  \n      at TestContext.<anonymous> (/tmp/verifygate-eh9qa8n2/cart.test.js:19:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1397:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)\n      at Test.postRun (node:internal/test_runner/test:1537:19)\n      at Test.run (node:internal/test_runner/test:1462:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 25.5,\n    expected: 30.6,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n\ntest at cart.test.js:22:1\n\u2716 total rounds to cents (0.294803ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  29.97 !== 32.07\n  \n      at TestContext.<anonymous> (/tmp/verifygate-eh9qa8n2/cart.test.js:23:10)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1397:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)\n      at Test.postRun (node:internal/test_runner/test:1537:19)\n      at Test.run (node:internal/test_runner/test:1462:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 29.97,\n    expected: 32.07,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n",
+      "stderr_tail": "",
+      "timed_out": false,
+      "verdict": "FAIL"
+    },
+    {
+      "kind": "check",
+      "hash": "aaa727d813c01c4deb26da88708d94e3d80907cdc01df2708b7cccd7bd8a8d68",
+      "name": "repro_script",
+      "command": "node repro.js",
+      "exit_code": 1,
+      "duration_ms": 65,
+      "stdout_tail": "",
+      "stderr_tail": "node:assert:152\n  throw new AssertionError(obj);\n  ^\n\nAssertionError [ERR_ASSERTION]: cart repro failed: got 20\n\n20 !== 24\n\n    at Object.<anonymous> (/tmp/verifygate-eh9qa8n2/repro.js:7:8)\n    at Module._compile (node:internal/modules/cjs/loader:1929:14)\n    at Object..js (node:internal/modules/cjs/loader:2060:10)\n    at Module.load (node:internal/modules/cjs/loader:1651:32)\n    at Module._load (node:internal/modules/cjs/loader:1443:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  generatedMessage: false,\n  code: 'ERR_ASSERTION',\n  actual: 20,\n  expected: 24,\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v24.20.0\n",
+      "timed_out": false,
+      "verdict": "FAIL"
+    },
+    {
+      "kind": "diagnosis",
+      "hash": "de6841c4ff632c305989fe7157312a09b5b201f606cae81bb7b1900a7901bb47",
+      "explanation": "## Diagnosis (mock, template-rendered from real check output)\n\n### unit_tests \u2014 `node --test`\nExit code: 1.\nKey output line: `  }`\nLikely cause: the candidate's behaviour diverges from the spec on this check. Fix the candidate, not the check.\n\n### repro_script \u2014 `node repro.js`\nExit code: 1.\nKey output line: `Node.js v24.20.0`\nLikely cause: the candidate's behaviour diverges from the spec on this check. Fix the candidate, not the check.",
+      "references": [
+        {
+          "title": "Mock reference (Judge Mode): Python documentation",
+          "url": "https://docs.python.org/3/",
+          "snippet": "Canned reference for query:   } \u2014 error reference and current documentation",
+          "source": "mock"
+        }
+      ],
+      "llm_adapter": "mock-deterministic",
+      "reference_source": "mock-deterministic",
+      "reference_error": null
+    }
+  ],
+  "record_hash": "757c51e7dbc343b0e17ca0547475d5f3d1faa403f33ad7bf61ee15aa402d32e2",
+  "signature": "cdfdc0e0b8772f1269299354aaafe5f82479d7d63760f41d65c05ca8c32ba6c3",
+  "signing_key_is_default_dev_key": true
+}

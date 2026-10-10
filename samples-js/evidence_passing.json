@@ -1,0 +1,44 @@
+{
+  "tool": "verifygate",
+  "version": "1.0.0",
+  "created_at": "2026-10-10T19:09:29.109569+00:00",
+  "verdict": "PASS",
+  "replay": "python3 -m verifygate run --spec samples-js/spec.json --candidate samples-js/passing --mode judge",
+  "entries": [
+    {
+      "kind": "header",
+      "hash": "43196f5ae783878f18e476b8ac7d690ab5967d6b20a179f9e3989339eb82784f",
+      "spec_name": "cart-total-tax-fix",
+      "spec_hash": "f9c36f2a2918c790004ce548874522d08990927bd12c4d1f0baa85d36539c1b7",
+      "candidate_tree_hash": "9a14fb0f5a7997e0c0af5f961136e3a616c15600cc35befe0c391ae3ce7dda48",
+      "mode": "judge"
+    },
+    {
+      "kind": "check",
+      "hash": "bbc7db2e83ce3bd0eaf8fae176b51e52dc9a9bf331ebec2a41f81a4163426015",
+      "name": "unit_tests",
+      "command": "node --test",
+      "exit_code": 0,
+      "duration_ms": 218,
+      "stdout_tail": "\u2714 subtotal sums price * qty (1.190847ms)\n\u2714 total applies the tax rate (0.221422ms)\n\u2714 total rounds to cents (0.145869ms)\n\u2714 total with zero tax equals the subtotal (0.152639ms)\n\u2139 tests 4\n\u2139 suites 0\n\u2139 pass 4\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 115.602876\n",
+      "stderr_tail": "",
+      "timed_out": false,
+      "verdict": "PASS"
+    },
+    {
+      "kind": "check",
+      "hash": "5da5fbeb0da659377c99e21ba250c52fa3669ccc2d2f32d891b55d338137d17d",
+      "name": "repro_script",
+      "command": "node repro.js",
+      "exit_code": 0,
+      "duration_ms": 65,
+      "stdout_tail": "repro OK: 24\n",
+      "stderr_tail": "",
+      "timed_out": false,
+      "verdict": "PASS"
+    }
+  ],
+  "record_hash": "3e199bb6733d889041b2eae3d67e5f7e7a83b4dea95907df5c955c109fd94747",
+  "signature": "69926633b6e99eecb30769cbfd9f31213695d3dfb4166a638601c5891540193e",
+  "signing_key_is_default_dev_key": true
+}

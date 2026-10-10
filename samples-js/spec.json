@@ -1,0 +1,1 @@
+{"brief":"Fix cart.js so total() applies the tax rate to the subtotal and rounds the result to cents (2 decimal places).","checks":[{"command":"node --test","name":"unit_tests","timeout_s":60},{"command":"node repro.js","name":"repro_script","timeout_s":30}],"name":"cart-total-tax-fix"}

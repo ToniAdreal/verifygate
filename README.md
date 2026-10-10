@@ -55,6 +55,29 @@ the model proposes diffs, deterministic checks still dispose.
 The sample candidates' own checks use `pytest` (the sample library's test
 suite); VerifyGate itself is standard-library only.
 
+## Second sample: JavaScript (language-agnostic proof)
+
+VerifyGate is written in Python, but check commands are arbitrary shell
+commands, so the harness is language-agnostic by construction.
+`samples-js/` proves it with a second, independent task — fix a cart
+`total()` that ignores its tax rate — whose checks are Node's built-in
+test runner and a Node repro script. No Python runs inside the
+candidate at all:
+
+```bash
+python3 -m verifygate run --spec samples-js/spec.json \
+    --candidate samples-js/passing --mode judge   # -> VERDICT: PASS
+python3 -m verifygate run --spec samples-js/spec.json \
+    --candidate samples-js/failing --mode judge   # -> VERDICT: FAIL
+python3 -m verifygate repair --spec samples-js/spec.json \
+    --candidate samples-js/failing --mode judge --max-rounds 3
+# -> attempt 0: FAIL, attempt 1: PASS (mock proposes the cart diff in
+#    Judge Mode, exactly as for the Python sample)
+```
+
+Judge Mode evidence records for both outcomes are committed at
+`samples-js/evidence_passing.json` and `samples-js/evidence_failing.json`.
+
 ## Real mode (Nebius Token Factory)
 
 Real mode drives an NVIDIA Nemotron model on Nebius Token Factory for
@@ -141,6 +164,11 @@ Candidate code is untrusted, so the sandbox treats it that way:
   exhaust the harness's memory.
 - **Process-group timeouts** — checks start in a new session and a
   timeout kills the whole group, so no detached child outlives a FAIL.
+- **Workspace cleanup** — every temp copy is removed when its owner
+  is done (verification workspaces immediately; repair-loop copies
+  when rejected or superseded; the CLI removes the final patched copy
+  after copying it out). A leaked-copy bug once filled a temp
+  filesystem during dogfooding; lifecycle tests pin the contract.
 
 VerifyGate dogfoods itself: `dogfood_spec.json` at the repository
 root runs the project's own pytest suite as a VerifyGate check on a
@@ -207,6 +235,8 @@ network are needed.
 verifygate/   spec, sandbox, validators, evidence, patch application,
               repair loop, record verification, llm adapters, cli
 samples/      fictional demo task + passing / failing candidates
+samples-js/   second fictional task (JavaScript/Node) proving the
+              harness is language-agnostic
 tests/        pytest suite for VerifyGate itself
 dogfood_spec.json / evidence_self_check.json
               VerifyGate's self-verification spec + its PASS record
@@ -217,6 +247,9 @@ dogfood_spec.json / evidence_self_check.json
 ```bash
 python3 -m pytest -q
 ```
+
+CI (`.github/workflows/verify.yml`) runs the suite and then the full
+clean-tree rehearsal on every push and pull request.
 
 ## Hosted demo
 
@@ -247,6 +280,14 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.0.0 — workspace lifecycle fix (temp copies are deleted, never
+leaked — a dogfood run once filled the temp filesystem with orphaned
+sandbox copies) plus a language-agnostic proof: a second bundled sample in
+JavaScript/Node (`samples-js/`, Node's built-in test runner as the
+checks) runs the full spine — PASS, FAIL + diagnosis, and a Judge Mode
+repair FAIL → PASS — with committed evidence records; the clean-tree
+rehearsal gains a JavaScript step (8 steps), and a GitHub Actions
+workflow runs the suite + rehearsal on every push/PR.
 0.9.0 — standalone record verification: `verifygate verify` lets any
 third party recompute a record's (or a repair report's) hash chain and
 signature and bind it to the spec file and candidate directory on disk,
@@ -256,7 +297,7 @@ clean-tree rehearsal now chain-checks its records through this CLI.
 self-check PASS record (`evidence_self_check.json`) now live at the
 repository root, so a fresh clone can reproduce VerifyGate verifying
 its own codebase with one command; the clean-tree rehearsal gains a
-dogfood step (7 steps).
+dogfood step (8 steps).
 0.7.0 — Tavily diagnosis hardening: the reference lookup can never
 break a verification run (missing key, network/HTTP failure, or
 malformed response all degrade to no references, with the reason

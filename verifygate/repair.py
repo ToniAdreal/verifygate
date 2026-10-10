@@ -19,6 +19,7 @@ verdict stays independently replayable and tamper-evident.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from . import __version__
@@ -116,6 +117,7 @@ def run_repair(
     })
 
     rounds_used = 0
+    owned_dir: Path | None = None  # latest repair-created patched copy
     patch_error: str | None = None
     failed_patch: dict | None = None
     patch_feedback: str | None = None
@@ -161,6 +163,8 @@ def run_repair(
         try:
             changed = apply_patch(new_dir, patch_text)
         except PatchError as exc:
+            # The rejected copy is never used again; do not leak it.
+            shutil.rmtree(new_dir, ignore_errors=True)
             patch_info["error"] = str(exc)
             patch_error = str(exc)
             failed_patch = patch_info
@@ -172,6 +176,15 @@ def run_repair(
         patch_info["applied"] = True
         patch_info["changed_files"] = changed
         patch_feedback = None
+        # The previous repair-owned copy is superseded: its evidence
+        # record is already sealed into `attempts`, so delete it
+        # instead of leaking one full candidate copy per round. The
+        # caller's own candidate directory is never touched, and the
+        # final patched copy is kept (the CLI's --patched-out copies
+        # from attempts[-1].candidate_dir after the loop returns).
+        if owned_dir is not None:
+            shutil.rmtree(owned_dir, ignore_errors=True)
+        owned_dir = new_dir
         current_dir = new_dir
         current_label = str(new_dir)
         record = run_verification(

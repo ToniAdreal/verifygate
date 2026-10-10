@@ -215,6 +215,14 @@ def main(argv: list[str] | None = None) -> int:
             shutil.copytree(report["attempts"][-1]["candidate_dir"], dest,
                             dirs_exist_ok=True, ignore=_IGNORE)
             print(f"  patched candidate copied to {dest}")
+        # The repair loop keeps its final patched copy for the caller;
+        # the CLI has now copied it out (or not been asked to), and the
+        # sealed report is self-contained — remove the temp copy so a
+        # CLI run leaves nothing behind in the temp filesystem.
+        if report["rounds_used"] > 0:
+            final_dir = Path(report["attempts"][-1]["candidate_dir"])
+            if final_dir.name.startswith("verifygate-"):
+                shutil.rmtree(final_dir, ignore_errors=True)
         usage = report.get("llm_usage_total") or {}
         if usage.get("llm_calls"):
             print(f"  LLM usage: {usage['llm_calls']} call(s), "

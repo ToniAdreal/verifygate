@@ -37,12 +37,31 @@ _SAMPLE_SLUGIFY_DIFF = '''\
 '''
 
 
+# The known-good cart fix for the bundled JavaScript sample
+# (samples-js/), as a unified diff against samples-js/failing/cart.js.
+# Same Judge Mode contract as the Python sample: the mock proposes
+# words/diffs only -- Node's own test runner decides the verdict.
+_SAMPLE_CART_DIFF = '''\
+--- a/cart.js
++++ b/cart.js
+@@ -11,5 +11,6 @@
+ 
+ function total(items, taxRate) {
+-  return subtotal(items);
++  /* Apply the tax rate to the subtotal, rounded to cents. */
++  return Math.round(subtotal(items) * (1 + taxRate) * 100) / 100;
+ }
+ 
+'''
+
 class MockLLMAdapter(LLMAdapter):
     name = "mock-deterministic"
 
     def generate_patch(self, brief: str, failing_evidence: dict | None = None) -> str:
         if "slugify" in brief.lower():
             return _SAMPLE_SLUGIFY_DIFF
+        if "cart" in brief.lower():
+            return _SAMPLE_CART_DIFF
         lines = [
             "MOCK PATCH PROPOSAL (deterministic, Judge Mode)",
             f"Brief: {brief.strip() or '(no brief)'}",

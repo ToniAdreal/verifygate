@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from .evidence import build_record, tree_hash
@@ -24,7 +25,14 @@ def run_verification(
     candidate_label: str,
 ) -> dict:
     workspace = prepare_workspace(candidate_dir)
-    results = run_checks(spec, workspace)
+    try:
+        results = run_checks(spec, workspace)
+    finally:
+        # The workspace is a throwaway copy: checks are done with it
+        # the moment they have run, and leaving it behind leaks a full
+        # candidate copy per run (a long CI/dogfood session can fill
+        # the temp filesystem — observed in practice, Errno 28).
+        shutil.rmtree(workspace, ignore_errors=True)
     verdict = overall_verdict(results)
     check_dicts = [r.to_dict() for r in results]
 
