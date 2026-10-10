@@ -15,6 +15,23 @@ change must prove before it may be delivered:
 Checks are ordinary shell commands run inside a sandboxed copy of the
 candidate. Exit code 0 = pass, anything else = fail. That is the whole
 contract — deliberately boring, deliberately deterministic.
+
+Validation is strict about types (hardened in v1.7.0 — before this,
+the checks below were accepted and each broke something downstream):
+
+* ``name`` / ``brief`` and every check ``name`` / ``command`` must be
+  strings; a check name or command that is empty or all whitespace is
+  rejected — a whitespace-only command is not a check at all: the
+  shell exits 0 on it, so it would seal a *vacuous PASS*.
+* A non-string ``command`` (e.g. a JSON number) used to pass the old
+  truthiness test and then crash the runner with an unhandled
+  ``TypeError`` traceback (exit 1), violating the CLI contract that
+  usage errors exit 2 with a one-line message. Malformed specs now
+  fail here, as :class:`SpecError`, before any check runs.
+* ``timeout_s`` must be a real ``int`` — JSON ``true`` is an ``int``
+  subclass in Python and used to be silently accepted as a 1-second
+  timeout — between 1 and :data:`MAX_TIMEOUT_S` seconds, so a hung
+  or absurd spec cannot hang the harness indefinitely.
 """
 
 from __future__ import annotations
@@ -23,6 +40,9 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+MAX_TIMEOUT_S = 3600  # one hour: a sane ceiling for a single check
 
 
 class SpecError(ValueError):
@@ -58,26 +78,44 @@ def load_spec(path: str | Path) -> TaskSpec:
     return parse_spec(raw)
 
 
+def _non_empty_str(value) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
 def parse_spec(raw: dict) -> TaskSpec:
     if not isinstance(raw, dict):
         raise SpecError("spec must be a JSON object")
     name = raw.get("name")
     brief = raw.get("brief", "")
     checks_raw = raw.get("checks")
-    if not name or not isinstance(name, str):
-        raise SpecError("spec.name is required (string)")
+    if not _non_empty_str(name):
+        raise SpecError("spec.name is required (non-empty string)")
+    if not isinstance(brief, str):
+        raise SpecError("spec.brief must be a string")
     if not isinstance(checks_raw, list) or not checks_raw:
         raise SpecError("spec.checks must be a non-empty list")
     checks: list[Check] = []
     seen: set[str] = set()
     for i, c in enumerate(checks_raw):
-        if not isinstance(c, dict) or not c.get("name") or not c.get("command"):
-            raise SpecError(f"spec.checks[{i}] needs both 'name' and 'command'")
+        if not isinstance(c, dict):
+            raise SpecError(f"spec.checks[{i}] must be an object")
+        if not _non_empty_str(c.get("name")):
+            raise SpecError(
+                f"spec.checks[{i}].name is required (non-empty string)")
+        if not _non_empty_str(c.get("command")):
+            raise SpecError(
+                f"spec.checks[{i}].command must be a non-empty string "
+                "(a whitespace-only command would pass vacuously)")
         if c["name"] in seen:
             raise SpecError(f"duplicate check name: {c['name']}")
         seen.add(c["name"])
         timeout = c.get("timeout_s", 60)
-        if not isinstance(timeout, int) or timeout <= 0:
-            raise SpecError(f"spec.checks[{i}].timeout_s must be a positive int")
+        # bool is an int subclass: JSON true would otherwise become a
+        # 1-second timeout instead of a spec error.
+        if isinstance(timeout, bool) or not isinstance(timeout, int) \
+                or not 1 <= timeout <= MAX_TIMEOUT_S:
+            raise SpecError(
+                f"spec.checks[{i}].timeout_s must be an int between 1 "
+                f"and {MAX_TIMEOUT_S}")
         checks.append(Check(name=c["name"], command=c["command"], timeout_s=timeout))
     return TaskSpec(name=name, brief=brief, checks=tuple(checks), raw=raw)

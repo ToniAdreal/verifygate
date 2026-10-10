@@ -218,6 +218,15 @@ python3 -m verifygate run --spec dogfood_spec.json \
 }
 ```
 
+Spec validation is strict about types: `name`, `brief`, and every
+check `name` / `command` must be strings, and a check name or command
+that is empty or all whitespace is rejected — a whitespace-only
+command is not a check at all, since the shell exits 0 on it and it
+would seal a vacuous PASS. `timeout_s` must be a real integer between
+1 and 3600 (JSON `true` is not accepted as 1). A malformed spec is a
+usage error — one-line message, exit 2 — never a traceback or a
+silently reinterpreted run.
+
 ## Evidence records
 
 Each run emits a JSON record binding the spec hash, the candidate tree
@@ -378,6 +387,18 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.7.0 — spec-validation hardening: the task-spec parser now rejects
+malformed specs as usage errors (exit 2) before any check runs,
+closing four holes reproduced against 1.6.0 — a whitespace-only check
+command was accepted and sealed a *vacuous PASS* (the shell exits 0
+on empty input); a non-string command crashed `run` with an
+unhandled traceback; `timeout_s: true` was silently accepted as a
+1-second timeout (`bool` is an `int` subclass), and absurd timeouts
+were unbounded (now capped at 3600 s); a non-string check name or
+brief was sealed verbatim into the record. Record structure
+verification mirrors the parser, so a record carrying a non-string
+or whitespace check name/command no longer verifies, while every
+untampered committed record still does.
 1.6.0 — chain-v2 real-mode proof: the flagship repair loop is now
 proven under the hardened chain with a live model, not only in
 Judge Mode — `samples/evidence_real_repair_v2.json` (Nemotron 3

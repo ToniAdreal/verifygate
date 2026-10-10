@@ -174,7 +174,15 @@ def _structure_ok(entries) -> bool:
             if phase != 0:
                 return False
             checks += 1
-            if not entry.get("name") or not entry.get("command"):
+            # Since v1.7.0 the spec parser only seals string fields,
+            # and structure verification mirrors that: a check whose
+            # name/command is not a non-empty string (e.g. a JSON
+            # number, which the pre-1.7 parser happily sealed) is not
+            # a shape build_record can emit from a valid spec.
+            if not isinstance(entry.get("name"), str) \
+                    or not entry["name"].strip() \
+                    or not isinstance(entry.get("command"), str) \
+                    or not entry["command"].strip():
                 return False
             if entry.get("verdict") not in ("PASS", "FAIL"):
                 return False
