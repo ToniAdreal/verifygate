@@ -36,13 +36,39 @@ come only from deterministic validators: exit codes and assertions.
 <em>The model never grades its own homework.</em></p>
 
 <div class="card">
-  <h2>See a real run</h2>
+  <h2>See a real run — Python sample</h2>
   <p><a href="evidence_real_repair.html">Evidence view — real Nemotron repair
-  report</a>: a failing candidate was diagnosed by NVIDIA Nemotron 3 Super
+  report (Python)</a>: a failing candidate was diagnosed by NVIDIA Nemotron 3 Super
   120B on Nebius Token Factory, the model proposed a diff, VerifyGate applied
   it to a copy and re-verified from scratch — <span class="pass">attempt 0
   FAIL &rarr; attempt 1 PASS</span>, 5,367 tokens, every call sealed into the
   hash-chained evidence record rendered on that page.</p>
+</div>
+
+<div class="card">
+  <h2>See a real run — JavaScript sample (language-agnostic)</h2>
+  <p><a href="evidence_js_real_repair.html">Evidence view — real Nemotron repair
+  report (JavaScript)</a>: the same real-mode loop repaired a Node.js
+  candidate whose checks are Node's built-in test runner — no Python inside
+  the candidate at all. Nemotron 3 Super 120B diagnosed both failures (a tax
+  rate ignored and no cent rounding), proposed its own diff for
+  <code>cart.js</code>, and VerifyGate re-verified it — <span class="pass">attempt 0
+  FAIL &rarr; attempt 1 PASS</span>, 6,390 tokens sealed in the hash chains.
+  Across the committed real-mode records, 12,890 tokens are sealed in total.</p>
+</div>
+
+<div class="card">
+  <h2>Verify a record yourself — no re-run, no keys</h2>
+  <p>A record's point is that a third party can check it without trusting
+  the producer. The standalone <code>verifygate verify</code> command recomputes
+  the hash chain and signature of a record (or of every attempt in a repair
+  report) and can bind it to the spec file and candidate directory on disk:</p>
+  <pre>python3 -m verifygate verify --record samples/evidence_real_repair.json \
+    --spec samples/spec.json --candidate samples/failing
+# -&gt; RECORD INTACT: 2 record(s) verified</pre>
+  <p>Tampering with a verdict, a check result, a diagnosis, or a sealed
+  token-usage figure fails verification. No checks are re-run and no
+  network is needed.</p>
 </div>
 
 <div class="card">

@@ -266,10 +266,13 @@ clean-tree rehearsal on every push and pull request.
 
 `demo/` is a static, self-contained site (no JavaScript, no external
 resources) deployable to any static host: `demo/index.html` explains the
-project and the Judge Mode quickstart, and links to
-`demo/evidence_real_repair.html`, the rendered real-mode Nemotron repair
-report (FAIL → PASS, chains verified on the page). No candidate code is
-executed by the hosted demo.
+project and the Judge Mode quickstart, shows the standalone
+`verifygate verify` check, and links to both rendered real-mode
+Nemotron repair reports — `demo/evidence_real_repair.html` (Python
+sample, FAIL → PASS, 5,367 tokens sealed) and
+`demo/evidence_js_real_repair.html` (JavaScript sample, FAIL → PASS,
+6,390 tokens sealed) — with their hash chains verified on the page.
+No candidate code is executed by the hosted demo.
 
 ## Clean-tree rehearsal
 
@@ -292,6 +295,13 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.2.0 — hosted demo catches up with the real-mode evidence: the demo
+site now also renders the JavaScript sample's real Nemotron repair
+report (`demo/evidence_js_real_repair.html`, chains verified on the
+page, 6,390 tokens sealed) and documents the standalone
+`verifygate verify` check on the landing page, so a judge arriving
+from the hosted demo sees both languages' real-mode proof and the
+third-party verification command without cloning first.
 1.1.0 — real mode proven language-agnostic: a committed real-mode
 repair report for the JavaScript sample (`samples-js/evidence_real_repair.json`)
 shows Nemotron 3 Super 120B repairing the Node candidate FAIL → PASS

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VerifyGate repair report — cart-total-tax-fix</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;margin:0;
+ background:#f6f7f9;color:#16181d;line-height:1.5}
+main{max-width:960px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:1.6rem;margin:.2em 0}
+h2{font-size:1.15rem;margin:1.6em 0 .5em;border-bottom:2px solid #e2e4e9;
+ padding-bottom:.25em}
+h3{font-size:1rem;margin:1em 0 .4em}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em;
+ word-break:break-all}
+.badge{display:inline-block;padding:.1em .6em;border-radius:999px;
+ font-weight:700;font-size:.85em;letter-spacing:.02em}
+.pass{background:#d9f2e3;color:#0c5a2e}
+.fail{background:#fbdcdc;color:#7d1212}
+.neutral{background:#e6e8ec;color:#333}
+.card{background:#fff;border:1px solid #e2e4e9;border-radius:10px;
+ padding:14px 16px;margin:10px 0}
+.verdict-banner{border-radius:10px;padding:16px;margin:14px 0;color:#fff}
+.verdict-banner.pass{background:#12753a}
+.verdict-banner.fail{background:#a12626}
+.verdict-banner .big{font-size:1.5rem;font-weight:800}
+.chain-ok{background:#eef7f0;border:1px solid #bfe3cc;border-radius:8px;
+ padding:10px 14px;margin:10px 0}
+.chain-bad{background:#fdecec;border:2px solid #a12626;border-radius:8px;
+ padding:10px 14px;margin:10px 0;font-weight:700;color:#7d1212}
+pre{background:#101216;color:#e8eaed;border-radius:8px;padding:10px 12px;
+ overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-size:.82rem}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{border:1px solid #e2e4e9;padding:6px 8px;text-align:left;
+ vertical-align:top}
+th{background:#f0f1f4}
+.ref{margin:.3em 0}
+.src{font-size:.75em;background:#e6e8ec;border-radius:4px;padding:.05em .4em}
+details{margin:.4em 0}
+summary{cursor:pointer;font-weight:600;font-size:.9rem}
+footer{color:#666;font-size:.85rem;margin-top:40px}
+a{color:#0b57a4}
+</style>
+</head>
+<body>
+<main>
+<h1>VerifyGate — evidence record</h1>
+<p><em>AI proposes. Deterministic checks dispose. The evidence record proves it.</em></p>
+<div class="card"><h3>Repair report</h3><p>spec: cart-total-tax-fix · mode: real · LLM adapter: nebius-token-factory</p><p>final verdict: <span class="badge pass">PASS</span> · repair rounds used: 1 / 3 · stopped: passed</p>
+<p>LLM usage total: 2 call(s), 6390 total token(s)</p>
+</div>
+<h2>Attempt 0 — FAIL</h2>
+<div class="verdict-banner fail"><span class="big">VERDICT: FAIL</span><br>spec: cart-total-tax-fix · mode: real · created: 2026-10-10T19:36:03.020216+00:00</div>
+<div class="chain-ok">Hash chain verified at render time — this record is intact and tamper-evident.</div>
+<div class="card"><h3>Replay</h3><p class="mono">python3 -m verifygate run --spec samples-js/spec.json --candidate samples-js/failing --mode real</p><p class="mono">spec hash: f9c36f2a2918c790004ce548874522d08990927bd12c4d1f0baa85d36539c1b7<br>candidate tree hash: b057a49e108268e29a5ce2f1e3984fdd9acff344cac55ca7ce1233d3ef79dfa7<br>record hash: 28963e7eafdbbe6f207767e8d4ace6aa8187707d2708be16edcf298e526b3bee<br>signature: 58efa4242f69fab99a0ade592074d62c…</p>
+<p>Signed with the labelled public development key (demonstrates the mechanism; not production key management).</p>
+</div>
+<div class="card">
+<h3>unit_tests <span class="badge fail">FAIL</span></h3>
+<p class="mono">node --test</p>
+<p>exit code: <strong>1</strong> · duration: 482 ms · timed out: False</p>
+<details><summary>stdout tail</summary><pre>✔ subtotal sums price * qty (1.1794ms)
+✖ total applies the tax rate (6.020064ms)
+✖ total rounds to cents (0.531748ms)
+✔ total with zero tax equals the subtotal (0.35979ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 209.752246
+
+✖ failing tests:
+
+test at cart.test.js:18:1
+✖ total applies the tax rate (6.020064ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  25.5 !== 30.6
+  
+      at TestContext.&lt;anonymous&gt; (/tmp/verifygate-reoopdez/cart.test.js:19:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: &#x27;ERR_ASSERTION&#x27;,
+    actual: 25.5,
+    expected: 30.6,
+    operator: &#x27;strictEqual&#x27;,
+    diff: &#x27;simple&#x27;
+  }
+
+test at cart.test.js:22:1
+✖ total rounds to cents (0.531748ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  29.97 !== 32.07
+  
+      at TestContext.&lt;anonymous&gt; (/tmp/verifygate-reoopdez/cart.test.js:23:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:969:18)
+      at Test.postRun (node:internal/test_runner/test:1537:19)
+      at Test.run (node:internal/test_runner/test:1462:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+    generatedMessage: true,
+    code: &#x27;ERR_ASSERTION&#x27;,
+    actual: 29.97,
+    expected: 32.07,
+    operator: &#x27;strictEqual&#x27;,
+    diff: &#x27;simple&#x27;
+  }
+</pre></details>
+<p class="mono">entry hash: 18ba171dcb1574aa…</p></div>
+<div class="card">
+<h3>repro_script <span class="badge fail">FAIL</span></h3>
+<p class="mono">node repro.js</p>
+<p>exit code: <strong>1</strong> · duration: 118 ms · timed out: False</p>
+<details><summary>stderr tail</summary><pre>node:assert:152
+  throw new AssertionError(obj);
+  ^
+
+AssertionError [ERR_ASSERTION]: cart repro failed: got 20
+
+20 !== 24
+
+    at Object.&lt;anonymous&gt; (/tmp/verifygate-reoopdez/repro.js:7:8)
+    at Module._compile (node:internal/modules/cjs/loader:1929:14)
+    at Object..js (node:internal/modules/cjs/loader:2060:10)
+    at Module.load (node:internal/modules/cjs/loader:1651:32)
+    at Module._load (node:internal/modules/cjs/loader:1443:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  generatedMessage: false,
+  code: &#x27;ERR_ASSERTION&#x27;,
+  actual: 20,
+  expected: 24,
+  operator: &#x27;strictEqual&#x27;,
+  diff: &#x27;simple&#x27;
+}
+
+Node.js v24.20.0
+</pre></details>
+<p class="mono">entry hash: 646c09da5a6153d3…</p></div>
+<div class="card">
+<h3>Diagnosis <span class="src">commentary — never a verdict input</span></h3>
+<pre>
+
+**Diagnosis**
+
+| Check | What failed | Observed output | Expected |
+|-------|-------------|-----------------|----------|
+| `unit_tests` – *total applies the tax rate* | `total` returned **25.5** instead of **30.6** | 25.5 | 30.6 |
+| `unit_tests` – *total rounds to cents* | `total` returned **29.97** instead of **32.07** | 29.97 | 32.07 |
+| `repro_script` | `cart repro` returned **20** instead of **24** | 20 | 24 |
+
+**Most likely cause**  
+All three failures show the function that computes the cart total is returning the **subtotal only** – the tax component is missing.  
+- In the first test, `25.5 × 1.20 = 30.6` (20 % tax).  
+- In the second test, `29.97 × 1.07 ≈ 32.07` (≈7 % tax, matching the test’s tax rate).  
+- In the repro script, `20 × 1.20 = 24` (again 20 % tax).
+
+Thus the bug is likely a missing multiplication by `(1 + taxRate)` (or forgetting to convert a percentage tax rate to a decimal) inside the `total` calculation logic.
+
+**Smallest next fix to try**  
+Locate the function that calculates the cart total (probably in `cart.js` or a similar module) and ensure it applies the tax correctly, e.g.:
+
+```javascript
+// before (buggy)
+function total(subtotal, taxRate) {
+  return subtotal;          // ← tax omitted
+}
+
+// after (fixed)
+function total(subtotal, taxRate) {
+  // assuming taxRate is expressed as a percent (e.g., 20 for 20%)
+  return subtotal * (1 + taxRate / 100);
+}
+```
+
+Make the change, re‑run `node --test` and `node repro.js`. Both should now pass. If the tax rate is already stored as a decimal (0.20), simply use `subtotal * (1 + taxRate)`. After the fix, verify that the previously failing tests show a ✔️ and the repro script exits with code 0.</pre>
+<p>LLM adapter: nebius-token-factory · reference source: tavily</p>
+<p>References unavailable: TAVILY_API_KEY is not set; references skipped (diagnosis proceeds without them) The verdict above does not depend on references.</p>
+</div>
+<div class="card"><h3>LLM usage <span class="src">sealed in the hash chain</span></h3><table><tr><th>purpose</th><th>model</th><th>prompt</th><th>completion</th><th>total</th></tr><tr><td>explain_failure</td><td class="mono">nvidia/nemotron-3-super-120b-a12b</td><td>1296</td><td>1532</td><td>2828</td></tr></table><p>Total tokens: <strong>2828</strong></p></div>
+<h2>Attempt 1 — PASS</h2>
+<div class="card"><p>Patch from previous attempt applied to: <strong>cart.js</strong></p></div>
+<div class="verdict-banner pass"><span class="big">VERDICT: PASS</span><br>spec: cart-total-tax-fix · mode: real · created: 2026-10-10T19:36:11.210719+00:00</div>
+<div class="chain-ok">Hash chain verified at render time — this record is intact and tamper-evident.</div>
+<div class="card"><h3>Replay</h3><p class="mono">python3 -m verifygate run --spec samples-js/spec.json --candidate /tmp/verifygate-i1dxo6u2 --mode real</p><p class="mono">spec hash: f9c36f2a2918c790004ce548874522d08990927bd12c4d1f0baa85d36539c1b7<br>candidate tree hash: e13787416362ddb2a5f1a4ba6e662100b2da60e27ac014fe7c3b6b32254516fc<br>record hash: 51e0d72c66795709c7699d78aec6bb5558d6e80004cdd0408b559f2e5e6411f4<br>signature: 514563e74df596c8ace76ebebecb30c5…</p>
+<p>Signed with the labelled public development key (demonstrates the mechanism; not production key management).</p>
+</div>
+<div class="card">
+<h3>unit_tests <span class="badge pass">PASS</span></h3>
+<p class="mono">node --test</p>
+<p>exit code: <strong>0</strong> · duration: 315 ms · timed out: False</p>
+<details><summary>stdout tail</summary><pre>✔ subtotal sums price * qty (1.157177ms)
+✔ total applies the tax rate (0.226189ms)
+✔ total rounds to cents (0.150316ms)
+✔ total with zero tax equals the subtotal (0.196214ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 114.462484
+</pre></details>
+<p class="mono">entry hash: 1024c22d39701b49…</p></div>
+<div class="card">
+<h3>repro_script <span class="badge pass">PASS</span></h3>
+<p class="mono">node repro.js</p>
+<p>exit code: <strong>0</strong> · duration: 64 ms · timed out: False</p>
+<details><summary>stdout tail</summary><pre>repro OK: 24
+</pre></details>
+<p class="mono">entry hash: 5037e37c86c2e9f7…</p></div>
+<div class="card"><h3>LLM usage <span class="src">sealed in the hash chain</span></h3><table><tr><th>purpose</th><th>model</th><th>prompt</th><th>completion</th><th>total</th></tr><tr><td>generate_patch</td><td class="mono">nvidia/nemotron-3-super-120b-a12b</td><td>2005</td><td>1557</td><td>3562</td></tr></table><p>Total tokens: <strong>3562</strong></p></div>
+<footer>Generated by VerifyGate from the sealed JSON record. Verdicts come only from deterministic checks (exit codes); LLM text is commentary. Replay the checks with the command shown on the record to reproduce the verdict.</footer>
+</main>
+</body>
+</html>
