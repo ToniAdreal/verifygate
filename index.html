@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VerifyGate — hosted demo (Judge Mode)</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         max-width: 52rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.55; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  pre { overflow-x: auto; padding: .75rem 1rem; border: 1px solid #8884;
+        border-radius: .5rem; }
+  .tagline { font-size: 1.15rem; font-weight: 600; }
+  .card { border: 1px solid #8884; border-radius: .5rem; padding: 1rem 1.25rem;
+          margin: 1rem 0; }
+  .pass { font-weight: 700; }
+  footer { margin-top: 2.5rem; font-size: .9rem; opacity: .75; }
+</style>
+</head>
+<body>
+<h1>VerifyGate</h1>
+<p class="tagline">AI proposes. Deterministic checks dispose. The evidence record proves it.</p>
+
+<p>VerifyGate is a pre-delivery verification harness for coding agents. A coding
+agent (or a human) submits a code change plus a task spec; VerifyGate runs the
+spec's deterministic checks — unit tests, reproduction scripts, lint/type
+gates — in a sandboxed copy of the candidate, and only artifacts that pass
+receive a signed, replayable <strong>evidence record</strong>: a hash-chained
+JSON document capturing exactly what was checked, the commands run, their
+outputs, and the resulting PASS/FAIL.</p>
+
+<p>The LLM (NVIDIA Nemotron via Nebius Token Factory) may <em>propose</em>
+patches and <em>explain</em> failures. It never decides PASS/FAIL. Verdicts
+come only from deterministic validators: exit codes and assertions.
+<em>The model never grades its own homework.</em></p>
+
+<div class="card">
+  <h2>See a real run</h2>
+  <p><a href="evidence_real_repair.html">Evidence view — real Nemotron repair
+  report</a>: a failing candidate was diagnosed by NVIDIA Nemotron 3 Super
+  120B on Nebius Token Factory, the model proposed a diff, VerifyGate applied
+  it to a copy and re-verified from scratch — <span class="pass">attempt 0
+  FAIL &rarr; attempt 1 PASS</span>, 5,367 tokens, every call sealed into the
+  hash-chained evidence record rendered on that page.</p>
+</div>
+
+<div class="card">
+  <h2>Run it yourself (Judge Mode — zero keys, zero network)</h2>
+  <p>Judge Mode swaps the LLM for a deterministic mock adapter: every
+  validator still runs for real — only the <em>words</em> (patch proposals,
+  explanations) are template-rendered. From a clone of the repository:</p>
+  <pre>python3 -m pytest -q
+
+# Passing candidate
+python3 -m verifygate run --spec samples/spec.json \
+    --candidate samples/passing --mode judge
+# -&gt; VERDICT: PASS
+
+# Failing candidate, then the repair loop
+python3 -m verifygate run --spec samples/spec.json \
+    --candidate samples/failing --mode judge
+# -&gt; VERDICT: FAIL, with a diagnosis in the evidence record
+
+python3 -m verifygate repair --spec samples/spec.json \
+    --candidate samples/failing --mode judge --max-rounds 3
+# -&gt; attempt 0: FAIL, attempt 1: PASS</pre>
+  <p>A scripted end-to-end rehearsal from a pristine copy of the tracked
+  tree ships in the repository as <code>scripts/rehearse.sh</code>.</p>
+</div>
+
+<div class="card">
+  <h2>Real mode</h2>
+  <p>With a Nebius Token Factory credential configured, <code>--mode
+  real</code> drives NVIDIA Nemotron for patch generation and failure
+  explanation through the exact same loop. Every real model call (model,
+  purpose, token usage) is sealed into the evidence record's hash chain, so
+  the token bill is as tamper-evident as the verdict. This hosted page is
+  static and runs Judge Mode material only; no candidate code is executed
+  here.</p>
+</div>
+
+<footer>
+  <p>VerifyGate — built for the Nebius x NVIDIA Global AI Hackathon,
+  Coding and Agentic Engineering track. MIT License.</p>
+</footer>
+</body>
+</html>
