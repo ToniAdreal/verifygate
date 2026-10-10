@@ -77,6 +77,13 @@ python3 -m verifygate repair --spec samples-js/spec.json \
 
 Judge Mode evidence records for both outcomes are committed at
 `samples-js/evidence_passing.json` and `samples-js/evidence_failing.json`.
+Real mode is language-agnostic too: a committed real-mode repair report
+at `samples-js/evidence_real_repair.json` shows Nemotron 3 Super 120B
+repairing the Node candidate — attempt 0 FAIL with the model's own
+diagnosis, its diff applied to `cart.js`, attempt 1 PASS (2 calls,
+6,390 tokens sealed in the hash chains). The model's fix is its own
+implementation, distinct from both the passing sample and the mock's
+known-good diff.
 
 ## Real mode (Nebius Token Factory)
 
@@ -111,7 +118,10 @@ is committed at `samples/evidence_real_repair.json` (Nemotron 3 Super
 FAIL record from the Nano model is committed at
 `samples/evidence_real_fail.json` (1 call, 1,133 tokens sealed) — it
 also shows the Tavily degradation note (`reference_error`) sealed into
-the diagnosis entry when no Tavily key is configured.
+the diagnosis entry when no Tavily key is configured. The same real
+repair loop has also repaired the JavaScript sample
+(`samples-js/evidence_real_repair.json`, Super 120B, 6,390 tokens
+sealed): real mode, like Judge Mode, is language-agnostic.
 
 ## Diagnosis references (Tavily)
 
@@ -236,7 +246,8 @@ verifygate/   spec, sandbox, validators, evidence, patch application,
               repair loop, record verification, llm adapters, cli
 samples/      fictional demo task + passing / failing candidates
 samples-js/   second fictional task (JavaScript/Node) proving the
-              harness is language-agnostic
+              harness is language-agnostic, incl. a committed
+              real-mode (Nemotron) repair report
 tests/        pytest suite for VerifyGate itself
 dogfood_spec.json / evidence_self_check.json
               VerifyGate's self-verification spec + its PASS record
@@ -272,7 +283,8 @@ spine there: the pytest suite, PASS and FAIL sample runs with their
 expected exit codes, the FAIL → PASS repair loop, the evidence web view
 of the committed real-mode report, a dogfood run of VerifyGate on its
 own tree, and a `verifygate verify` check of every record written
-during the rehearsal.
+during the rehearsal plus the committed real-mode report for the
+JavaScript sample.
 
 ## License
 
@@ -280,6 +292,11 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.1.0 — real mode proven language-agnostic: a committed real-mode
+repair report for the JavaScript sample (`samples-js/evidence_real_repair.json`)
+shows Nemotron 3 Super 120B repairing the Node candidate FAIL → PASS
+(2 calls, 6,390 tokens sealed in the hash chains, the model's own fix),
+pinned by a test and verified in the clean-tree rehearsal.
 1.0.0 — workspace lifecycle fix (temp copies are deleted, never
 leaked — a dogfood run once filled the temp filesystem with orphaned
 sandbox copies) plus a language-agnostic proof: a second bundled sample in

@@ -19,7 +19,8 @@
 #      committed dogfood_spec.json -> PASS, exit 0
 #   8. every evidence record written during the rehearsal is verified
 #      with the standalone `verifygate verify` CLI (spec binding where
-#      the rehearsal's own spec applies)
+#      the rehearsal's own spec applies), plus the committed real-mode
+#      repair report for the JavaScript sample
 #
 # Usage: scripts/rehearse.sh   (run from anywhere; it locates the repo root)
 # Exit code: 0 when every step behaves as expected, 1 otherwise.
@@ -106,5 +107,7 @@ python3 -m verifygate verify --record "$WORK/js-repair.json" \
     --spec samples-js/spec.json --candidate samples-js/failing
 python3 -m verifygate verify --record "$WORK/dogfood.json" \
     --spec dogfood_spec.json
+python3 -m verifygate verify --record samples-js/evidence_real_repair.json \
+    --spec samples-js/spec.json --candidate samples-js/failing
 
 echo "REHEARSAL PASSED — clean tree, Judge Mode spine end-to-end green."

@@ -8,6 +8,7 @@ behave exactly as it does for the Python sample. Skipped only when
 Node is not on PATH.
 """
 
+import json
 import shutil
 from pathlib import Path
 
@@ -80,3 +81,36 @@ def test_js_repair_loop_repairs_failing_candidate():
     assert patch["changed_files"] == ["cart.js"]
     # The original candidate on disk is never modified.
     assert (JS / "failing" / "cart.js").read_bytes() == before
+
+
+REAL_JS_REPAIR = JS / "evidence_real_repair.json"
+
+
+def test_js_real_repair_record_is_committed_and_sealed():
+    """The JS sample also has a *real-mode* repair report committed:
+    Nemotron (not the mock) repaired the Node candidate FAIL -> PASS,
+    with its token usage sealed into each attempt's hash chain."""
+    report = json.loads(REAL_JS_REPAIR.read_text(encoding="utf-8"))
+    assert report["final_verdict"] == "PASS"
+    assert report["rounds_used"] == 1
+    assert [a["verdict"] for a in report["attempts"]] == ["FAIL", "PASS"]
+    sealed_total = 0
+    for attempt in report["attempts"]:
+        record = attempt["evidence"]
+        assert verify_chain(record) is True
+        header = record["entries"][0]
+        assert header["kind"] == "header" and header["mode"] == "real"
+        assert header["spec_hash"] == SPEC.hash
+        usage = [e for e in record["entries"] if e["kind"] == "llm_usage"]
+        assert len(usage) == 1
+        for call in usage[0]["calls"]:
+            assert call["adapter"] == "nebius-token-factory"
+            assert "nemotron" in call["model"].lower()
+        sealed_total += usage[0]["total_tokens"]
+    assert report["llm_usage_total"]["total_tokens"] == sealed_total > 0
+    patch = report["attempts"][1]["patch_from_previous"]
+    assert patch["applied"] is True
+    assert patch["changed_files"] == ["cart.js"]
+    diagnosis = [e for a in report["attempts"]
+                 for e in a["evidence"]["entries"] if e["kind"] == "diagnosis"]
+    assert diagnosis and diagnosis[0]["explanation"]
