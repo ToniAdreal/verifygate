@@ -19,15 +19,13 @@ verdict stays independently replayable and tamper-evident.
 
 from __future__ import annotations
 
-import shutil
-import tempfile
 from pathlib import Path
 
 from . import __version__
 from .llm import LLMAdapter
 from .patch import PatchError, apply_patch
 from .runner import run_verification
-from .sandbox import _IGNORE
+from .sandbox import iter_candidate_files, prepare_workspace
 from .spec import TaskSpec
 from .tavily import ReferenceLookup
 
@@ -57,21 +55,20 @@ def _candidate_files(root: str | Path) -> dict[str, str]:
     produce a diff whose context lines match. Binary, oversized, and
     housekeeping files are skipped; the snapshot is capped overall.
     """
-    root = Path(root)
     files: dict[str, str] = {}
     total = 0
-    for p in sorted(root.rglob("*")):
-        if not p.is_file() or ".git" in p.parts or "__pycache__" in p.parts:
-            continue
-        if p.suffix.lower() not in _TEXT_SUFFIXES:
+    # Sandbox containment traversal: a candidate symlink pointing at a
+    # host file must never leak that file's contents into an LLM prompt.
+    for rel, source in iter_candidate_files(root):
+        if Path(rel).suffix.lower() not in _TEXT_SUFFIXES:
             continue
         try:
-            text = p.read_text(encoding="utf-8")
+            text = source.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
         if len(text) > _MAX_FILE_CHARS or total + len(text) > _MAX_TOTAL_CHARS:
             continue
-        files[p.relative_to(root).as_posix()] = text
+        files[rel] = text
         total += len(text)
     return files
 
@@ -158,8 +155,9 @@ def run_repair(
             # debuggable from the report alone (truncated for size).
             "patch_text": patch_text[:8000],
         }
-        new_dir = Path(tempfile.mkdtemp(prefix="verifygate-repair-"))
-        shutil.copytree(current_dir, new_dir, dirs_exist_ok=True, ignore=_IGNORE)
+        # Fresh copy through the hardened workspace path (scrubbed
+        # traversal: no symlink escapes, no housekeeping files).
+        new_dir = prepare_workspace(current_dir)
         try:
             changed = apply_patch(new_dir, patch_text)
         except PatchError as exc:

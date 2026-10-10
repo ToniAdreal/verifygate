@@ -103,6 +103,29 @@ the hash chain is recomputed at render time — an intact record shows
 banner instead of a clean verdict. A pre-rendered view of the real
 Nemotron repair report is committed at `samples/evidence_view.html`.
 
+## Sandbox hardening
+
+Candidate code is untrusted, so the sandbox treats it that way:
+
+- **Scrubbed environment** — checks run with an allowlisted environment
+  only (`PATH`, locale, `HOME`, …). API keys, the evidence signing key,
+  and every other host variable never reach check processes.
+- **Symlink containment** — one traversal rule drives the workspace
+  copy, the candidate tree hash, and the repair loop's prompt snapshot:
+  file symlinks are followed only when their target stays inside the
+  candidate; links pointing outside are dropped and directory symlinks
+  are never followed. A candidate cannot smuggle a host file into the
+  workspace, the hash, or an LLM prompt.
+- **Bounded output** — check stdout/stderr stream to temp files and
+  only a capped tail is read back; a check printing gigabytes cannot
+  exhaust the harness's memory.
+- **Process-group timeouts** — checks start in a new session and a
+  timeout kills the whole group, so no detached child outlives a FAIL.
+
+VerifyGate dogfoods itself: `dogfood_spec.json` in the project root
+runs the project's own pytest suite as a VerifyGate check, and the
+resulting PASS record is kept next to it as `evidence_self_check.json`.
+
 ## Task spec format
 
 ```json
@@ -146,7 +169,8 @@ MIT (to be added at repository publication; this is a local build repo).
 
 ## Version
 
-0.4.0 — evidence-record static web view (`verifygate view`): records
-and repair reports render as a single self-contained HTML page with
-the hash chain re-verified at render time; Judge Mode unchanged and
-fully offline.
+0.5.0 — sandbox hardening (scrubbed check environment, symlink
+containment shared by workspace copy / tree hash / repair prompt
+snapshot, temp-file bounded output, process-group timeout kills) and
+self-dogfooding: VerifyGate's own suite passes as a VerifyGate check
+(`evidence_self_check.json`, chain valid).

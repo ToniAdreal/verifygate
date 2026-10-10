@@ -38,13 +38,19 @@ def _sha(text: str) -> str:
 
 
 def tree_hash(root: str | Path) -> str:
-    """Content hash of a directory tree: sorted (relpath, file-hash) lines."""
-    root = Path(root)
-    lines: list[str] = []
-    for p in sorted(root.rglob("*")):
-        if p.is_file() and ".git" not in p.parts and "__pycache__" not in p.parts:
-            rel = p.relative_to(root).as_posix()
-            lines.append(f"{rel}:{_sha_bytes(p.read_bytes())}")
+    """Content hash of a directory tree: sorted (relpath, file-hash) lines.
+
+    Uses the sandbox's containment traversal: symlinks pointing outside
+    the candidate (and directory symlinks) are excluded, so the hash
+    describes exactly the tree that was copied into the workspace and
+    verified — never a host file reached through a link.
+    """
+    from .sandbox import iter_candidate_files
+
+    lines = [
+        f"{rel}:{_sha_bytes(source.read_bytes())}"
+        for rel, source in iter_candidate_files(root)
+    ]
     return _sha("\n".join(lines))
 
 
