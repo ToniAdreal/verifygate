@@ -1,0 +1,1 @@
+{"brief":"Fix slugify() so it lowercases the input, removes punctuation, and joins words with single hyphens.","checks":[{"command":"python3 -m pytest -q","name":"unit_tests","timeout_s":60},{"command":"python3 repro.py","name":"repro_script","timeout_s":30}],"name":"stringtools-slugify-fix"}

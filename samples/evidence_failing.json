@@ -1,0 +1,59 @@
+{
+  "tool": "verifygate",
+  "version": "0.1.0",
+  "created_at": "2026-10-10T08:47:34.332071+00:00",
+  "verdict": "FAIL",
+  "replay": "python3 -m verifygate run --spec samples/spec.json --candidate samples/failing --mode judge",
+  "entries": [
+    {
+      "kind": "header",
+      "hash": "65c5e4e183f541631bec246116fa966dc65dad9c7e5a45b8ded90ed06c2fc21a",
+      "spec_name": "stringtools-slugify-fix",
+      "spec_hash": "5477ea11ac6b862af5012c86edb334f6a498b1d674377e5c1e0a0a3c8814aba0",
+      "candidate_tree_hash": "5aa2047a510a0078a21ca17aec3dba1417fdb5e807a68143aee17e13683a5eec",
+      "mode": "judge"
+    },
+    {
+      "kind": "check",
+      "hash": "098abd1fe3235812507ee8647112405610dc61eb070d6f4c5c3fee0599406d5e",
+      "name": "unit_tests",
+      "command": "python3 -m pytest -q",
+      "exit_code": 1,
+      "duration_ms": 1831,
+      "stdout_tail": "FFF.                                                                     [100%]\n=================================== FAILURES ===================================\n______________________________ test_slugify_basic ______________________________\n\n    def test_slugify_basic():\n>       assert slugify(\"Hello World\") == \"hello-world\"\nE       AssertionError: assert 'Hello-World' == 'hello-world'\nE         \nE         - hello-world\nE         ? ^     ^\nE         + Hello-World\nE         ? ^     ^\n\ntest_stringtools.py:5: AssertionError\n___________________________ test_slugify_punctuation ___________________________\n\n    def test_slugify_punctuation():\n>       assert slugify(\"Hello, World!\") == \"hello-world\"\nE       AssertionError: assert 'Hello,-World!' == 'hello-world'\nE         \nE         - hello-world\nE         ? ^     ^\nE         + Hello,-World!\nE         ? ^    + ^    +\n\ntest_stringtools.py:9: AssertionError\n______________________ test_slugify_collapses_separators _______________________\n\n    def test_slugify_collapses_separators():\n>       assert slugify(\"  Multiple   Spaces  \") == \"multiple-spaces\"\nE       AssertionError: assert 'Multiple---Spaces' == 'multiple-spaces'\nE         \nE         - multiple-spaces\nE         ? ^        ^\nE         + Multiple---Spaces\nE         ? ^        ^^^\n\ntest_stringtools.py:13: AssertionError\n=========================== short test summary info ============================\nFAILED test_stringtools.py::test_slugify_basic - AssertionError: assert 'Hell...\nFAILED test_stringtools.py::test_slugify_punctuation - AssertionError: assert...\nFAILED test_stringtools.py::test_slugify_collapses_separators - AssertionErro...\n3 failed, 1 passed in 0.10s\n",
+      "stderr_tail": "",
+      "timed_out": false,
+      "verdict": "FAIL"
+    },
+    {
+      "kind": "check",
+      "hash": "41b364302e821c6609ab511e581ee68a9bd80367e430c2e5571bc35b0789a68e",
+      "name": "repro_script",
+      "command": "python3 repro.py",
+      "exit_code": 1,
+      "duration_ms": 66,
+      "stdout_tail": "",
+      "stderr_tail": "Traceback (most recent call last):\n  File \"/tmp/verifygate-4s10pirv/repro.py\", line 5, in <module>\n    assert result == \"hello-world\", f\"slugify repro failed: got {result!r}\"\n           ^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: slugify repro failed: got 'Hello,-World!'\n",
+      "timed_out": false,
+      "verdict": "FAIL"
+    },
+    {
+      "kind": "diagnosis",
+      "hash": "a3469f18dad5ad44f2a517dcccadb028dc192e7342ced563c8ccedd11d048812",
+      "explanation": "## Diagnosis (mock, template-rendered from real check output)\n\n### unit_tests \u2014 `python3 -m pytest -q`\nExit code: 1.\nKey output line: `3 failed, 1 passed in 0.10s`\nLikely cause: the candidate's behaviour diverges from the spec on this check. Fix the candidate, not the check.\n\n### repro_script \u2014 `python3 repro.py`\nExit code: 1.\nKey output line: `AssertionError: slugify repro failed: got 'Hello,-World!'`\nLikely cause: the candidate's behaviour diverges from the spec on this check. Fix the candidate, not the check.",
+      "references": [
+        {
+          "title": "Mock reference (Judge Mode): Python documentation",
+          "url": "https://docs.python.org/3/",
+          "snippet": "Canned reference for query: 3 failed, 1 passed in 0.10s \u2014 error reference and current documentation",
+          "source": "mock"
+        }
+      ],
+      "llm_adapter": "mock-deterministic",
+      "reference_source": "mock-deterministic"
+    }
+  ],
+  "record_hash": "2d4b0b4e9581872e95982e8d018fc512e6cecde25c98c1106715b6a9e519bf8f",
+  "signature": "5e9dbbb63b505c6a19f4d87494e5621670dfa001e6e5ba0efda11b980dd9e8c3",
+  "signing_key_is_default_dev_key": true
+}

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "verifygate"
+version = "0.1.0"
+description = "A pre-delivery verification harness for coding agents: AI proposes, deterministic checks dispose, the evidence record proves it."
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[project.scripts]
+verifygate = "verifygate.cli:main"
+
+[tool.setuptools]
+packages = ["verifygate"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
