@@ -32,12 +32,29 @@ def run_verification(
     if verdict == "FAIL":
         explanation = llm.explain_failure(check_dicts)
         query = diagnosis_query(check_dicts)
-        refs = references.lookup(query) if query else []
+        refs: list[dict] = []
+        reference_error: str | None = None
+        if query:
+            # References are commentary, never verdict inputs: a lookup
+            # failure (missing key, outage, malformed response) must
+            # degrade to no references, never break the run. Adapters
+            # are contractually non-raising, but guard here too so any
+            # ReferenceLookup implementation is safe to plug in. The
+            # degradation is noted inside the sealed record.
+            try:
+                refs = references.lookup(query) or []
+            except Exception as exc:  # lookup must never break a run
+                reference_error = (
+                    f"reference lookup failed ({type(exc).__name__}): "
+                    f"{str(exc)[:200]}")
+            if reference_error is None:
+                reference_error = getattr(references, "last_error", None)
         diagnosis = {
             "explanation": explanation,
             "references": refs,
             "llm_adapter": llm.name,
             "reference_source": references.name,
+            "reference_error": reference_error,
         }
 
     replay = (

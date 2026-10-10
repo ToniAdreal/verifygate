@@ -1,0 +1,71 @@
+{
+  "tool": "verifygate",
+  "version": "0.7.0",
+  "created_at": "2026-10-10T17:39:30.217009+00:00",
+  "verdict": "FAIL",
+  "replay": "python3 -m verifygate run --spec samples/spec.json --candidate samples/failing --mode real",
+  "entries": [
+    {
+      "kind": "header",
+      "hash": "82fd21154b285b3b58562231892a0050bcb6a89eb51d5f3ac46f08d2a750e65f",
+      "spec_name": "stringtools-slugify-fix",
+      "spec_hash": "5477ea11ac6b862af5012c86edb334f6a498b1d674377e5c1e0a0a3c8814aba0",
+      "candidate_tree_hash": "5aa2047a510a0078a21ca17aec3dba1417fdb5e807a68143aee17e13683a5eec",
+      "mode": "real"
+    },
+    {
+      "kind": "check",
+      "hash": "71cf547b850338413480e8c5ba4123ccec05522527d7e0917806abf84bc98e0c",
+      "name": "unit_tests",
+      "command": "python3 -m pytest -q",
+      "exit_code": 1,
+      "duration_ms": 805,
+      "stdout_tail": "FFF.                                                                     [100%]\n=================================== FAILURES ===================================\n______________________________ test_slugify_basic ______________________________\n\n    def test_slugify_basic():\n>       assert slugify(\"Hello World\") == \"hello-world\"\nE       AssertionError: assert 'Hello-World' == 'hello-world'\nE         \nE         - hello-world\nE         ? ^     ^\nE         + Hello-World\nE         ? ^     ^\n\ntest_stringtools.py:5: AssertionError\n___________________________ test_slugify_punctuation ___________________________\n\n    def test_slugify_punctuation():\n>       assert slugify(\"Hello, World!\") == \"hello-world\"\nE       AssertionError: assert 'Hello,-World!' == 'hello-world'\nE         \nE         - hello-world\nE         ? ^     ^\nE         + Hello,-World!\nE         ? ^    + ^    +\n\ntest_stringtools.py:9: AssertionError\n______________________ test_slugify_collapses_separators _______________________\n\n    def test_slugify_collapses_separators():\n>       assert slugify(\"  Multiple   Spaces  \") == \"multiple-spaces\"\nE       AssertionError: assert 'Multiple---Spaces' == 'multiple-spaces'\nE         \nE         - multiple-spaces\nE         ? ^        ^\nE         + Multiple---Spaces\nE         ? ^        ^^^\n\ntest_stringtools.py:13: AssertionError\n=========================== short test summary info ============================\nFAILED test_stringtools.py::test_slugify_basic - AssertionError: assert 'Hell...\nFAILED test_stringtools.py::test_slugify_punctuation - AssertionError: assert...\nFAILED test_stringtools.py::test_slugify_collapses_separators - AssertionErro...\n3 failed, 1 passed in 0.07s\n",
+      "stderr_tail": "",
+      "timed_out": false,
+      "verdict": "FAIL"
+    },
+    {
+      "kind": "check",
+      "hash": "213ed8d2bbc25bb7755230b44a07549f4aac9a11d2d0261f42d153b67db815e0",
+      "name": "repro_script",
+      "command": "python3 repro.py",
+      "exit_code": 1,
+      "duration_ms": 47,
+      "stdout_tail": "",
+      "stderr_tail": "Traceback (most recent call last):\n  File \"/tmp/verifygate-tlhb7f1o/repro.py\", line 5, in <module>\n    assert result == \"hello-world\", f\"slugify repro failed: got {result!r}\"\n           ^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: slugify repro failed: got 'Hello,-World!'\n",
+      "timed_out": false,
+      "verdict": "FAIL"
+    },
+    {
+      "kind": "diagnosis",
+      "hash": "c83bf8db10e24557ed84f2b52400f8f18da5aff7d305a741571c89b0a8ed76a3",
+      "explanation": "\n## Diagnosis\n\n- **What failed:**  \n  - `unit_tests` \u2013 three slugify tests failed because the function returns `'Hello,-World!'` instead of `'hello-world'`.  \n  - `repro_script` \u2013 the reproduction script asserts the same expected output and fails with the same value.\n\n- **Most likely cause:**  \n  The `slugify` implementation is not normalising the output to **lower\u2011case** and is **preserving punctuation** (e.g., commas, exclamation marks) that should be removed or collapsed. This causes the assertions expecting a lower\u2011cased, punctuation\u2011free slug to fail.\n\n- **Smallest next fix to try:**  \n  Adjust the `slugify` function so that it:\n  1. Converts the result to lower\u2011case (`result.lower()`), and  \n  2. Strips/removes punctuation characters (e.g., using `str.isalnum()` or a regex to keep only letters, numbers, and hyphens).  \n\n  This change will make the failing tests pass without altering any other behavior.",
+      "references": [],
+      "llm_adapter": "nebius-token-factory",
+      "reference_source": "tavily",
+      "reference_error": "TAVILY_API_KEY is not set; references skipped (diagnosis proceeds without them)"
+    },
+    {
+      "kind": "llm_usage",
+      "hash": "2c6cdf97a5fe30ed30ec95dfe2ed56359a98c3fce6fd22b4381f44093501a3a5",
+      "calls": [
+        {
+          "adapter": "nebius-token-factory",
+          "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
+          "purpose": "explain_failure",
+          "finish_reason": "stop",
+          "usage": {
+            "prompt_tokens": 789,
+            "completion_tokens": 344,
+            "total_tokens": 1133
+          }
+        }
+      ],
+      "total_tokens": 1133
+    }
+  ],
+  "record_hash": "ebdcbc0b4786c4c8a473b3e4cb6d772866afd48b4faa360681fa56b5ecc21f55",
+  "signature": "26722571727b24d980e74a8509333c20a4937fb7056ac74c0421495caee5bb93",
+  "signing_key_is_default_dev_key": true
+}

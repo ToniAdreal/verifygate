@@ -84,7 +84,27 @@ verdict. A diff that does not apply cleanly is rejected with the
 applier's exact error, which is fed back to the model for the next
 round instead of ending the loop. A real FAIL → repair → PASS report
 is committed at `samples/evidence_real_repair.json` (Nemotron 3 Super
-120B, 2 calls, 5,367 tokens, both attempt chains valid).
+120B, 2 calls, 5,367 tokens, both attempt chains valid). A real-mode
+FAIL record from the Nano model is committed at
+`samples/evidence_real_fail.json` (1 call, 1,133 tokens sealed) — it
+also shows the Tavily degradation note (`reference_error`) sealed into
+the diagnosis entry when no Tavily key is configured.
+
+## Diagnosis references (Tavily)
+
+On a FAIL, the diagnosis step performs one Tavily search built from
+the failing check's key output line, and attaches the top references
+(title, URL, snippet, distinctly sourced `tavily`) to the diagnosis
+entry in the evidence record. References are commentary — they never
+influence the verdict.
+
+The lookup is structurally incapable of breaking a run: a missing
+`TAVILY_API_KEY`, a network or HTTP failure, or a malformed response
+all degrade to *no references*, and the reason is sealed into the
+record as the diagnosis entry's `reference_error`, so a reader can
+see the degradation instead of guessing at it. Judge Mode uses a
+deterministic mock reference instead. The evidence web view renders
+the degradation note next to the diagnosis when one is present.
 
 ## Evidence web view
 
@@ -191,6 +211,11 @@ MIT — see `LICENSE`.
 
 ## Version
 
+0.7.0 — Tavily diagnosis hardening: the reference lookup can never
+break a verification run (missing key, network/HTTP failure, or
+malformed response all degrade to no references, with the reason
+sealed into the record as `reference_error` and rendered by the
+evidence web view); transport injected for zero-network tests.
 0.6.0 — hosted Judge-Mode demo (`demo/`), clean-tree rehearsal script
 (`scripts/rehearse.sh`, all six steps green from a `git archive`
 export), MIT `LICENSE` file, and publication readiness (see

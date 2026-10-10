@@ -126,6 +126,11 @@ def _render_diagnosis(entry: dict) -> str:
         f"<p>LLM adapter: {_e(entry.get('llm_adapter', ''))}"
         f" · reference source: {_e(entry.get('reference_source', ''))}</p>",
     ]
+    if entry.get("reference_error"):
+        parts.append(
+            "<p>References unavailable: "
+            f"{_e(entry.get('reference_error'))} "
+            "The verdict above does not depend on references.</p>")
     refs = entry.get("references") or []
     if refs:
         parts.append("<h3>References</h3>")
