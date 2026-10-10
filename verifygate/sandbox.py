@@ -23,6 +23,13 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
 * **Timeout kills the process group** — checks start in a new session
   and a timeout SIGKILLs the whole group, so a check cannot leave a
   detached child running after it has been failed.
+* **Permission fidelity** — the workspace copy preserves each file's
+  permission bits (``shutil.copymode`` after the content copy). Before
+  v1.9.0 the copy was content-only, so an executable script arrived
+  non-executable and a check invoking it directly (``./check.sh``)
+  failed with exit 126 inside VerifyGate while passing on disk —
+  the sandbox judged a different tree than the one submitted. The
+  reverse also holds: a non-executable file is never made executable.
 
 This is a local/CI-grade sandbox (temp dir + timeout + scrubbed env),
 not a multi-tenant security boundary — see CONCEPT.md risks.
@@ -144,6 +151,11 @@ def prepare_workspace(candidate_dir: str | Path) -> Path:
         target = ws / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
+        # copyfile copies content only: without this the workspace
+        # copy of an executable script is not executable, and a check
+        # invoking it directly fails in the sandbox while passing on
+        # disk. Preserve the source's permission bits exactly.
+        shutil.copymode(source, target)
     return ws
 
 

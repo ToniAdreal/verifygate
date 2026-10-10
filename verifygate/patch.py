@@ -8,6 +8,14 @@ context and removed lines must match the file on disk exactly (a small
 positional search tolerates stale line numbers, never stale content), and
 paths may never escape the candidate workspace. A patch that does not
 apply cleanly raises PatchError — it is never partially forced in.
+
+Git mode lines are honoured (since v1.9.0): a ``new file mode 100755``
+header makes a created file executable, an ``old mode`` / ``new mode``
+pair changes an existing file's permission bits, and a mode-only diff
+(no hunks at all) applies as a pure chmod. Before this, mode lines
+were silently dropped, so a repair that created a script could never
+make it runnable — the patched candidate failed its ``./script``
+check for a reason that had nothing to do with the model's fix.
 """
 
 from __future__ import annotations
@@ -40,6 +48,7 @@ class FilePatch:
     old_path: str  # "/dev/null" for a file creation
     new_path: str  # "/dev/null" for a file deletion
     hunks: list[Hunk] = field(default_factory=list)
+    new_mode: int | None = None  # permission bits from a git mode line
 
 
 _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
@@ -60,18 +69,66 @@ def _clean_path(raw: str) -> str:
     return path
 
 
+def _mode_value(line: str) -> int | None:
+    try:
+        return int(line.split()[-1], 8)
+    except ValueError:
+        return None
+
+
 def parse_patch(text: str) -> list[FilePatch]:
     """Extract file patches from (possibly prose-wrapped) unified diff text."""
     lines = text.splitlines()
     patches: list[FilePatch] = []
+    # Git extended headers seen since the last file patch: the paths
+    # from a `diff --git` line and a pending mode change. A mode line
+    # whose file never reaches a ---/+++ pair is a mode-only diff and
+    # is flushed as a hunk-less FilePatch at the next boundary.
+    git_paths: tuple[str, str] | None = None
+    pending_mode: int | None = None
+    pending_create = False
+
+    def flush_mode_only() -> None:
+        nonlocal git_paths, pending_mode, pending_create
+        if git_paths is not None and pending_mode is not None:
+            patches.append(FilePatch(
+                old_path="/dev/null" if pending_create else git_paths[0],
+                new_path=git_paths[1],
+                hunks=[],
+                new_mode=pending_mode,
+            ))
+        git_paths = None
+        pending_mode = None
+        pending_create = False
+
     i = 0
     while i < len(lines):
+        if lines[i].startswith("diff --git "):
+            flush_mode_only()
+            parts = lines[i].split()
+            if len(parts) >= 4:
+                git_paths = (_clean_path(parts[2]), _clean_path(parts[3]))
+            i += 1
+            continue
+        if lines[i].startswith("new file mode "):
+            pending_mode = _mode_value(lines[i])
+            pending_create = True
+            i += 1
+            continue
+        if lines[i].startswith("new mode "):
+            pending_mode = _mode_value(lines[i])
+            i += 1
+            continue
         if lines[i].startswith("--- ") and i + 1 < len(lines) \
                 and lines[i + 1].startswith("+++ "):
             fp = FilePatch(
                 old_path=_clean_path(lines[i][4:]),
                 new_path=_clean_path(lines[i + 1][4:]),
+                new_mode=pending_mode,
             )
+            git_paths = None
+            pending_mode = None
+            pending_create = False
             i += 2
             while i < len(lines):
                 m = _HUNK_RE.match(lines[i])
@@ -121,10 +178,11 @@ def parse_patch(text: str) -> list[FilePatch]:
                     if not hunk.lines:
                         break
                 fp.hunks.append(hunk)
-            if fp.hunks:
+            if fp.hunks or fp.new_mode is not None:
                 patches.append(fp)
         else:
             i += 1
+    flush_mode_only()
     if not patches:
         raise NoPatchFound("no unified diff found in patch text")
     return patches
@@ -192,6 +250,8 @@ def apply_patch(root: str | Path, patch_text: str) -> list[str]:
             new_lines = _apply_hunks([], fp)
             trailing = not any(h.new_no_trailing_newline for h in fp.hunks)
             _write_lines(target, new_lines, trailing)
+            if fp.new_mode is not None:
+                target.chmod(fp.new_mode & 0o777)
             changed.append(fp.new_path)
         elif fp.new_path == "/dev/null":  # file deletion
             target = _safe_target(root, fp.old_path)
@@ -202,12 +262,17 @@ def apply_patch(root: str | Path, patch_text: str) -> list[str]:
                 raise PatchError(f"deletion patch for {fp.old_path} leaves content")
             target.unlink()
             changed.append(fp.old_path)
-        else:  # modification
+        else:  # modification (possibly mode-only: no hunks)
             target = _safe_target(root, fp.new_path)
             if not target.is_file():
                 raise PatchError(f"cannot modify {fp.new_path}: not a file")
-            new_lines = _apply_hunks(_read_lines(target), fp)
-            trailing = not any(h.new_no_trailing_newline for h in fp.hunks)
-            _write_lines(target, new_lines, trailing)
+            if fp.hunks:
+                new_lines = _apply_hunks(_read_lines(target), fp)
+                trailing = not any(h.new_no_trailing_newline for h in fp.hunks)
+                _write_lines(target, new_lines, trailing)
+            # Rewriting an existing file in place preserves its mode;
+            # an explicit git mode line overrides it.
+            if fp.new_mode is not None:
+                target.chmod(fp.new_mode & 0o777)
             changed.append(fp.new_path)
     return changed

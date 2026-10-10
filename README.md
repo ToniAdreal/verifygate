@@ -193,6 +193,13 @@ Candidate code is untrusted, so the sandbox treats it that way:
   when rejected or superseded; the CLI removes the final patched copy
   after copying it out). A leaked-copy bug once filled a temp
   filesystem during dogfooding; lifecycle tests pin the contract.
+- **Permission fidelity** — the workspace copy preserves each file's
+  permission bits, and the patch applier honours git mode lines
+  (`new file mode`, `old mode`/`new mode`, including mode-only
+  diffs). A candidate whose script is executable on disk is verified
+  as executable — never silently downgraded to a "Permission denied"
+  FAIL — and a repair can create or chmod a script the same way a
+  human's commit would.
 
 VerifyGate dogfoods itself: `dogfood_spec.json` at the repository
 root runs the project's own pytest suite as a VerifyGate check on a
@@ -398,6 +405,16 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.9.0 — permission-bit fidelity: the sandbox workspace copy now
+preserves each file's permission bits (before this, the copy was
+content-only, so an executable script arrived non-executable and a
+check invoking it directly — `./check.sh` — sealed a FAIL with exit
+126 "Permission denied" while the same candidate passed on disk;
+the reverse, inventing executability, is equally impossible now).
+The patch applier honours git mode lines — `new file mode 100755`
+creates an executable file, an `old mode`/`new mode` pair (including
+a mode-only diff with no hunks) chmods an existing one — so a repair
+loop fix that ships a script is verified the way it was proposed.
 1.8.0 — unsealed-summary + replay-spec hardening: a repair report's
 quoted figures are now recomputed from its sealed attempts during
 `verifygate verify` (the `llm_usage_total` from the sealed usage
