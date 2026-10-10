@@ -173,7 +173,11 @@ class TokenFactoryAdapter(LLMAdapter):
             for path, content in files.items():
                 user += f"\n\nCurrent contents of {path}:\n```\n{content}\n```"
         user += (
-            "\n\nOutput format: a single unified diff that applies "
+            "\n\nReason silently: your reply must contain no deliberation, "
+            "analysis, or draft diffs — earlier replies that reasoned in "
+            "the open burned the whole token budget mid-thought "
+            "(finish_reason=length) and never produced a usable diff. "
+            "Output format: a single unified diff that applies "
             "cleanly to the current file contents shown above — copy "
             "context and removed lines exactly, character for character, "
             "and give every hunk header real line numbers, like:\n"

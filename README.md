@@ -123,6 +123,20 @@ repair loop has also repaired the JavaScript sample
 (`samples-js/evidence_real_repair.json`, Super 120B, 6,390 tokens
 sealed): real mode, like Judge Mode, is language-agnostic.
 
+Since v1.5.0 the chain itself is hardened (chain v2 seals each
+entry's kind; see *Verifying an evidence record*), and the flagship
+loop is now proven under it in real mode too:
+`samples/evidence_real_repair_v2.json` is a chain-v2 repair report
+from Nemotron 3 Super 120B — attempt 0 FAIL with the model's own
+diagnosis, a first diff rejected for a context mismatch and fed
+back, a second diff applied, attempt 2 PASS (3 calls, 11,726 tokens
+sealed; both chains verify, and the report replays end-to-end in
+Judge Mode). Its first attempted run that day is also why the patch
+prompt now orders the model to reason silently: Super spent the
+whole 8,192-token budget deliberating in the reply content
+(finish_reason=length) and never produced a usable diff. Total
+sealed real-mode usage across all committed records: 24,616 tokens.
+
 ## Diagnosis references (Tavily)
 
 On a FAIL, the diagnosis step performs one Tavily search built from
@@ -351,9 +365,10 @@ spine there: the pytest suite, PASS and FAIL sample runs with their
 expected exit codes, the FAIL → PASS repair loop, the evidence web view
 of the committed real-mode report, a dogfood run of VerifyGate on its
 own tree, a `verifygate verify` check of every record written
-during the rehearsal plus the committed real-mode report for the
-JavaScript sample, a `verifygate replay` reproduction of the
-rehearsal's repair report and both committed real-mode reports, and
+during the rehearsal plus the committed real-mode reports for the
+JavaScript sample and the chain-v2 Python report, a
+`verifygate replay` reproduction of the rehearsal's repair report
+and all three committed real-mode repair reports, and
 an installed-package smoke test (`pip install` the export, then run
 the `verifygate` console script from a different directory).
 
@@ -363,6 +378,18 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.6.0 — chain-v2 real-mode proof: the flagship repair loop is now
+proven under the hardened chain with a live model, not only in
+Judge Mode — `samples/evidence_real_repair_v2.json` (Nemotron 3
+Super 120B: FAIL → a rejected diff fed back → PASS, 3 calls, 11,726
+tokens sealed, both records `chain_version: 2`) is pinned by tests
+and verified + replayed in the clean-tree rehearsal. The run also
+fixed an adapter failure mode: a reasoning model can spend its
+entire token budget deliberating inside the reply content
+(finish_reason=length) and never emit a diff, so the patch prompt
+now explicitly orders silent reasoning and names that failure.
+Cumulative sealed real-mode usage across committed records: 24,616
+tokens.
 1.5.0 — chain-integrity hardening: chain v2 seals each entry's kind
 together with its content, and verification enforces the record
 structure (kinds, order, per-kind required fields) for both chain

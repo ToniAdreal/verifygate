@@ -20,11 +20,12 @@
 #   8. every evidence record written during the rehearsal is verified
 #      with the standalone `verifygate verify` CLI (spec binding where
 #      the rehearsal's own spec applies), plus the committed real-mode
-#      repair report for the JavaScript sample
-#   9. replay: the rehearsal's own repair report and both committed
-#      real-mode repair reports are replayed in Judge Mode with the
-#      standalone `verifygate replay` CLI (patched attempts are
-#      reconstructed from the recorded patches; zero keys)
+#      repair reports for the JavaScript sample and the chain-v2
+#      Python report
+#   9. replay: the rehearsal's own repair report and all three
+#      committed real-mode repair reports are replayed in Judge Mode
+#      with the standalone `verifygate replay` CLI (patched attempts
+#      are reconstructed from the recorded patches; zero keys)
 #  10. installed package: `pip install` the exported tree into a scratch
 #      target and run the installed `verifygate` console script (not
 #      `python3 -m verifygate`) from a different working directory —
@@ -117,6 +118,8 @@ python3 -m verifygate verify --record "$WORK/dogfood.json" \
     --spec dogfood_spec.json
 python3 -m verifygate verify --record samples-js/evidence_real_repair.json \
     --spec samples-js/spec.json --candidate samples-js/failing
+python3 -m verifygate verify --record samples/evidence_real_repair_v2.json \
+    --spec samples/spec.json --candidate samples/failing
 
 echo "== 9/10 replay: rehearsal repair report + committed real-mode reports (Judge Mode)"
 python3 -m verifygate replay --record "$WORK/repair.json" \
@@ -125,6 +128,8 @@ python3 -m verifygate replay --record samples/evidence_real_repair.json \
     --spec samples/spec.json --candidate samples/failing --mode judge
 python3 -m verifygate replay --record samples-js/evidence_real_repair.json \
     --spec samples-js/spec.json --candidate samples-js/failing --mode judge
+python3 -m verifygate replay --record samples/evidence_real_repair_v2.json \
+    --spec samples/spec.json --candidate samples/failing --mode judge
 
 echo "== 10/10 installed package: pip install + console script from another directory"
 # --no-build-isolation first (uses the interpreter's own setuptools,
