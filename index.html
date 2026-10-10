@@ -72,6 +72,23 @@ come only from deterministic validators: exit codes and assertions.
 </div>
 
 <div class="card">
+  <h2>Replay a record yourself — re-run and compare</h2>
+  <p><code>verify</code> proves a record is intact; <code>verifygate
+  replay</code> proves it is reproducible. Replay re-runs the checks and
+  compares the verdict and every per-check result against the sealed
+  record. For a repair report, each patched attempt is reconstructed
+  from the original candidate plus the patch recorded in the report —
+  the ephemeral temp copies the loop once pointed at are never needed:</p>
+  <pre>python3 -m verifygate replay --record samples/evidence_real_repair.json \
+    --spec samples/spec.json --candidate samples/failing --mode judge
+# -&gt; REPLAY MATCHED: 2 record(s) reproduced</pre>
+  <p>Verdicts come from the deterministic checks, which are
+  mode-independent, so even a real-mode record replays in Judge Mode
+  with zero keys and zero model calls. A candidate edited after the
+  fact, or a tampered record, does not reproduce.</p>
+</div>
+
+<div class="card">
   <h2>Run it yourself (Judge Mode — zero keys, zero network)</h2>
   <p>Judge Mode swaps the LLM for a deterministic mock adapter: every
   validator still runs for real — only the <em>words</em> (patch proposals,
