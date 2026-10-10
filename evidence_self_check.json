@@ -1,33 +1,33 @@
 {
   "tool": "verifygate",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "chain_version": 2,
-  "created_at": "2026-10-10T22:41:07.194799+00:00",
+  "created_at": "2026-10-10T23:11:02.669931+00:00",
   "verdict": "PASS",
   "replay": "python3 -m verifygate run --spec dogfood_spec.json --candidate . --mode judge",
   "entries": [
     {
       "kind": "header",
-      "hash": "3aa6af3f91739f2408f08bd5b191d18c33a67fda06d1d4f450de8daf59ad03ab",
+      "hash": "ac60d7824c4e8ec45b8b454a53cdf9363481dc8155b20009120f7685f435549a",
       "spec_name": "verifygate-self-check",
       "spec_hash": "9a88c58688f6202f3362cd0b626fb652cb683148b8b756f066e63306d60fe043",
-      "candidate_tree_hash": "ebccff6830d2c7c9aee2b7ab8b5f98ca40b1d2273c1895e9b9df4edcd8220603",
+      "candidate_tree_hash": "6d43bc57a14bf23f904cd7578f727da97390221be3366b227608a5742c165bc4",
       "mode": "judge"
     },
     {
       "kind": "check",
-      "hash": "5e5776c99903a0583ece80e9ed147a90f5bc2264a2d56386c418d97f5a03643e",
+      "hash": "ae83cf55acbecfc079f7e7f8bfd95e05fa911ce9e99c62af483facae438f2430",
       "name": "unit_tests",
       "command": "python3 -m pytest -q",
       "exit_code": 0,
-      "duration_ms": 67626,
-      "stdout_tail": "........................................................................ [ 40%]\n........................................................................ [ 81%]\n................................                                         [100%]\n176 passed in 67.07s (0:01:07)\n",
+      "duration_ms": 51528,
+      "stdout_tail": "........................................................................ [ 38%]\n........................................................................ [ 76%]\n.............................................                            [100%]\n189 passed in 50.23s\n",
       "stderr_tail": "",
       "timed_out": false,
       "verdict": "PASS"
     }
   ],
-  "record_hash": "7a3b61e5a25713e1854c5cdab348dc54a1e003b152837c8ab9ba7b2129684b8c",
-  "signature": "9cec761762d70984261f8f593d0dc77fde053f706370a03b98104a1fbcba1e03",
+  "record_hash": "9097b5580a3c2c0baaa7071442a75972c0189d0278beb18c3b5e61d3eaf63016",
+  "signature": "9a11ab8c7145e1cafa74a35a9018d7482d5acdb0a74ddc34fa86172bd32d42a3",
   "signing_key_is_default_dev_key": true
 }

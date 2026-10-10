@@ -25,6 +25,18 @@ wrapper's ``verdict`` / ``record_hash`` duplicates. Those are
 cross-checked against the sealed records they summarise
 (``report_match``): editing a summary to disagree with the sealed
 attempts fails verification, exactly like editing a record itself.
+
+Since v1.8.0 the cross-check also covers the two summary figures a
+reader is most likely to quote: ``llm_usage_total`` (recomputed from
+the sealed ``llm_usage`` entries of every attempt plus the report's
+``unsealed_llm_usage`` list) and ``rounds_used`` (recomputed from the
+attempts' round numbers and the rejected patch preserved in
+``failed_patch``). Before this, either figure could be rewritten —
+a 5,367-token bill restated as 1 token, 99 rounds claimed for a
+1-round repair — and ``verify`` still reported the report INTACT,
+while the web view printed the rewritten figures. A report that
+*omits* one of these fields (pre-v1.8 legacy reports) is not failed
+for the omission: nothing false is displayed for a missing figure.
 """
 
 from __future__ import annotations
@@ -59,6 +71,79 @@ def header_of(record: dict) -> dict:
     if entries and entries[0].get("kind") == "header":
         return entries[0]
     return {}
+
+
+def _calls_total(calls) -> tuple[int, int] | None:
+    """(call count, total tokens) for a call list, or None if malformed."""
+    if not isinstance(calls, list):
+        return None
+    total = 0
+    for call in calls:
+        if not isinstance(call, dict):
+            return None
+        total += (call.get("usage") or {}).get("total_tokens") or 0
+    return len(calls), total
+
+
+def derived_usage_total(data) -> dict | None:
+    """Recompute a repair report's ``llm_usage_total`` from its parts.
+
+    The authoritative figures live inside the attempts' sealed
+    ``llm_usage`` entries; calls that were never sealed (a patch that
+    did not apply ended the loop) are carried in the report's
+    ``unsealed_llm_usage`` list, which is itself unchained — but any
+    edit to it changes the derived total, so it is caught by the
+    comparison against the stated ``llm_usage_total``. Returns None
+    when the report's parts are too malformed to total.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("attempts"), list):
+        return None
+    calls = 0
+    tokens = 0
+    for attempt in data["attempts"]:
+        if not isinstance(attempt, dict):
+            return None
+        record = attempt.get("evidence")
+        if not isinstance(record, dict):
+            return None
+        for entry in record.get("entries", []):
+            if isinstance(entry, dict) and entry.get("kind") == "llm_usage":
+                part = _calls_total(entry.get("calls"))
+                if part is None:
+                    return None
+                calls += part[0]
+                tokens += part[1]
+    unsealed = data.get("unsealed_llm_usage") or []
+    part = _calls_total(unsealed)
+    if part is None:
+        return None
+    return {"llm_calls": calls + part[0], "total_tokens": tokens + part[1]}
+
+
+def derived_rounds_used(data) -> int | None:
+    """Recompute a repair report's ``rounds_used`` from its parts.
+
+    Every patch attempt consumes exactly one round. An applied patch
+    produced an attempt whose ``round`` is that round number; a
+    rejected patch that ended the loop is preserved as
+    ``failed_patch`` with its round. Intermediate rejections are
+    superseded by later attempts or by that final rejection, so the
+    largest round number among the attempts and ``failed_patch`` is
+    exactly the number of rounds used. Returns None when no usable
+    round number exists.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("attempts"), list):
+        return None
+    rounds = [
+        a.get("round") for a in data["attempts"]
+        if isinstance(a, dict) and isinstance(a.get("round"), int)
+        and not isinstance(a.get("round"), bool)
+    ]
+    failed = data.get("failed_patch")
+    if isinstance(failed, dict) and isinstance(failed.get("round"), int) \
+            and not isinstance(failed.get("round"), bool):
+        rounds.append(failed["round"])
+    return max(rounds) if rounds else None
 
 
 def check_record(
@@ -130,6 +215,13 @@ def verify_document(
                 and header_of(record).get("mode") == data.get("mode")
                 for _, record in pairs
             )
+            # The quoted figures are recomputed from the sealed
+            # attempts (see module docstring). A report that omits a
+            # figure entirely (legacy) is not failed for the omission.
+            and ("llm_usage_total" not in data
+                 or data.get("llm_usage_total") == derived_usage_total(data))
+            and ("rounds_used" not in data
+                 or data.get("rounds_used") == derived_rounds_used(data))
         )
         for _, result in results:
             result["report_match"] = report_match

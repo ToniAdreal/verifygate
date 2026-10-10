@@ -286,10 +286,16 @@ not bound rather than mismatched. A repair report's own summary fields
 `verdict` / `record_hash`) sit outside the chains, so they are
 cross-checked against the sealed records they summarise — flipping a
 stated final verdict to disagree with the sealed attempts fails
-verification just like editing a record. Tampering with a verdict, a
-check result, a diagnosis, or a sealed token-usage figure fails
-verification (exit 1); usage errors exit 2. No checks are re-run, and
-no keys or network are needed.
+verification just like editing a record. The cross-check also covers
+the two quoted figures: `llm_usage_total` is recomputed from the
+sealed per-attempt usage entries plus the report's unsealed-calls
+list, and `rounds_used` from the attempts' round numbers and the
+preserved rejected patch — rewriting the token bill or the round
+count fails verification too, and the web view prints the derived
+figures (with a mismatch banner) rather than the rewritten ones.
+Tampering with a verdict, a check result, a diagnosis, or a sealed
+token-usage figure fails verification (exit 1); usage errors exit 2.
+No checks are re-run, and no keys or network are needed.
 
 ## Replaying an evidence record
 
@@ -302,10 +308,15 @@ sealed header:
 ```bash
 python3 -m verifygate replay --record samples/evidence_real_repair.json \
     --spec samples/spec.json --candidate samples/failing --mode judge
-#   attempt 0: expected FAIL, replayed FAIL — chain OK; candidate tree: match; checks: match
-#   attempt 1: expected PASS, replayed PASS — chain OK; candidate tree: match; checks: match
+#   attempt 0: expected FAIL, replayed FAIL — chain OK; candidate tree: match; checks: match; spec: match
+#   attempt 1: expected PASS, replayed PASS — chain OK; candidate tree: match; checks: match; spec: match
 # REPLAY MATCHED: 2 record(s) reproduced (mode judge)
 ```
+
+The supplied spec is bound to the record just like the candidate:
+its hash must equal the sealed header's `spec_hash`, so replaying
+with a different task that merely runs the same check commands
+reports `spec: MISMATCH` and does not reproduce.
 
 For a repair report, each patched attempt is *reconstructed* — the
 report carries the patch that produced it, so replay applies the
@@ -387,6 +398,17 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.8.0 — unsealed-summary + replay-spec hardening: a repair report's
+quoted figures are now recomputed from its sealed attempts during
+`verifygate verify` (the `llm_usage_total` from the sealed usage
+entries plus the unsealed-calls list, `rounds_used` from the attempt
+round numbers and the preserved rejected patch) — before this,
+rewriting a 5,367-token bill as 1 token or 1 round as 99 still
+verified RECORD INTACT, and the web view printed the rewritten
+figures; the view now derives the figures and flags a disagreeing
+summary. And `verifygate replay` now binds the supplied spec to the
+record's sealed `spec_hash` — a different task running the same
+check commands no longer reports REPLAY MATCHED.
 1.7.0 — spec-validation hardening: the task-spec parser now rejects
 malformed specs as usage errors (exit 2) before any check runs,
 closing four holes reproduced against 1.6.0 — a whitespace-only check

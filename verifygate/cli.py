@@ -151,9 +151,11 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         for r in results:
             chain = "chain OK" if r["chain_ok"] else "CHAIN INVALID"
+            spec_part = "spec: match" if r["spec_match"] \
+                else "spec: MISMATCH"
             if r["error"]:
                 print(f"  {r['label']}: expected {r['expected_verdict']} "
-                      f"— {chain}; REPLAY ERROR: {r['error']}")
+                      f"— {chain}; {spec_part}; REPLAY ERROR: {r['error']}")
                 continue
             tree = "candidate tree: match" if r["candidate_match"] \
                 else "candidate tree: MISMATCH"
@@ -161,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
                 else "checks: MISMATCH"
             print(f"  {r['label']}: expected {r['expected_verdict']}, "
                   f"replayed {r['actual_verdict']} — {chain}; "
-                  f"{tree}; {checks}")
+                  f"{tree}; {checks}; {spec_part}")
         if replay_ok(results):
             print(f"REPLAY MATCHED: {len(results)} record(s) reproduced "
                   f"(mode {mode})")

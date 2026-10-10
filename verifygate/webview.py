@@ -27,6 +27,7 @@ import html
 import json
 
 from .evidence import verify_chain
+from .verify import derived_rounds_used, derived_usage_total
 
 _CSS = """
 :root{color-scheme:light}
@@ -234,17 +235,31 @@ def render_record(record: dict) -> str:
 
 def render_repair_report(report: dict) -> str:
     """Render a repair report: summary card + one section per attempt."""
-    total = report.get("llm_usage_total") or {}
     attempts = report.get("attempts", [])
     # The report-level summary fields are not inside any hash chain.
     # The authoritative final verdict is the last attempt's *sealed*
     # record verdict; a stated summary that disagrees with it renders
-    # as a visible mismatch, never as the verdict itself.
+    # as a visible mismatch, never as the verdict itself. The same
+    # treatment covers the quoted figures (v1.8.0): the usage total
+    # and rounds used are recomputed from the sealed attempts, and a
+    # stated figure that disagrees is flagged, with the derived
+    # figure shown instead of the rewritten one.
     sealed_final = None
     if attempts and isinstance(attempts[-1].get("evidence"), dict):
         sealed_final = attempts[-1]["evidence"].get("verdict")
     stated_final = report.get("final_verdict", "")
     final_verdict = sealed_final if sealed_final is not None else stated_final
+    derived_total = derived_usage_total(report)
+    stated_total = report.get("llm_usage_total")
+    total = derived_total if derived_total is not None else (stated_total or {})
+    total_mismatch = derived_total is not None \
+        and stated_total is not None and stated_total != derived_total
+    derived_rounds = derived_rounds_used(report)
+    stated_rounds = report.get("rounds_used")
+    rounds_shown = derived_rounds if derived_rounds is not None \
+        else stated_rounds
+    rounds_mismatch = derived_rounds is not None \
+        and stated_rounds is not None and stated_rounds != derived_rounds
     parts = [
         '<div class="card"><h3>Repair report</h3>'
         f"<p>spec: {_e(report.get('spec_name', ''))}"
@@ -252,16 +267,31 @@ def render_repair_report(report: dict) -> str:
         f" · LLM adapter: {_e(report.get('llm_adapter', ''))}</p>"
         f"<p>final verdict: "
         f"{_verdict_badge(final_verdict)}"
-        f" · repair rounds used: {_e(report.get('rounds_used'))}"
+        f" · repair rounds used: {_e(rounds_shown)}"
         f" / {_e(report.get('max_rounds'))}"
         f" · stopped: {_e(report.get('stopped_reason', ''))}</p>",
     ]
+    mismatches = []
     if sealed_final is not None and stated_final != sealed_final:
+        mismatches.append(
+            f"its stated final verdict ({_e(stated_final)}) does not "
+            f"match its sealed final attempt record ({_e(sealed_final)})")
+    if total_mismatch:
+        mismatches.append(
+            f"its stated LLM usage total ({_e(stated_total.get('llm_calls'))} "
+            f"call(s), {_e(stated_total.get('total_tokens'))} token(s)) does "
+            f"not match the sealed attempts ({_e(derived_total['llm_calls'])} "
+            f"call(s), {_e(derived_total['total_tokens'])} token(s))")
+    if rounds_mismatch:
+        mismatches.append(
+            f"its stated rounds used ({_e(stated_rounds)}) does not "
+            f"match its sealed attempts ({_e(derived_rounds)})")
+    if mismatches:
         parts.append(
             '<div class="chain-bad">⚠ REPORT SUMMARY MISMATCH — this '
-            f"report's stated final verdict ({_e(stated_final)}) does "
-            f"not match its sealed final attempt record "
-            f"({_e(sealed_final)}). Trust the sealed records.</div>")
+            "report's summary disagrees with its sealed attempt "
+            "records: " + "; ".join(mismatches)
+            + ". Trust the sealed records.</div>")
     if total.get("llm_calls"):
         parts.append(
             f"<p>LLM usage total: {_e(total.get('llm_calls'))} call(s), "

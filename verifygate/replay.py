@@ -9,7 +9,12 @@ For a single record, replay re-verifies the candidate on disk and
 compares the verdict and every per-check verdict/exit code against the
 sealed entries, and checks that the candidate's tree hash still matches
 the sealed header (a candidate edited after the fact is a mismatch,
-not a reproduction).
+not a reproduction). The supplied spec is likewise bound to the
+record: its hash must equal the sealed header's ``spec_hash``
+(``spec_match``). Before v1.8.0 replay never made that comparison, so
+a spec with the same checks but a different name and brief — a
+different task that happens to run the same commands — reported
+REPLAY MATCHED against a record sealed for the original task.
 
 For a repair report, attempt 0 is replayed from the submitted candidate
 and each later attempt is *reconstructed*: the report already carries
@@ -66,6 +71,7 @@ def _replay_one(
     spec_label: str,
 ) -> dict:
     """Re-verify ``candidate_dir`` and compare against ``expected``."""
+    header = header_of(expected)
     result = {
         "label": label,
         "chain_ok": verify_chain(expected),
@@ -74,9 +80,9 @@ def _replay_one(
         "verdict_match": False,
         "checks_match": False,
         "candidate_match": False,
+        "spec_match": header.get("spec_hash") == spec.hash,
         "error": None,
     }
-    header = header_of(expected)
     try:
         result["candidate_match"] = (
             tree_hash(candidate_dir) == header.get("candidate_tree_hash"))
@@ -133,6 +139,8 @@ def replay_document(
                         "verdict_match": False,
                         "checks_match": False,
                         "candidate_match": False,
+                        "spec_match": header_of(expected).get("spec_hash")
+                                      == spec.hash,
                         "error": "no applied patch recorded for this "
                                  "attempt; cannot reconstruct it",
                     })
@@ -150,6 +158,8 @@ def replay_document(
                         "verdict_match": False,
                         "checks_match": False,
                         "candidate_match": False,
+                        "spec_match": header_of(expected).get("spec_hash")
+                                      == spec.hash,
                         "error": f"recorded patch no longer applies: {exc}",
                     })
                     break
@@ -169,6 +179,6 @@ def replay_ok(results: list[dict]) -> bool:
     """True iff every record's chain is intact and its run reproduced."""
     return bool(results) and all(
         r["chain_ok"] and r["verdict_match"] and r["checks_match"]
-        and r["candidate_match"] and r["error"] is None
+        and r["candidate_match"] and r["spec_match"] and r["error"] is None
         for r in results
     )
