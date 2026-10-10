@@ -25,6 +25,10 @@
 #      real-mode repair reports are replayed in Judge Mode with the
 #      standalone `verifygate replay` CLI (patched attempts are
 #      reconstructed from the recorded patches; zero keys)
+#  10. installed package: `pip install` the exported tree into a scratch
+#      target and run the installed `verifygate` console script (not
+#      `python3 -m verifygate`) from a different working directory —
+#      `--version` plus a Judge Mode PASS run on the Python sample
 #
 # Usage: scripts/rehearse.sh   (run from anywhere; it locates the repo root)
 # Exit code: 0 when every step behaves as expected, 1 otherwise.
@@ -39,14 +43,14 @@ mkdir -p "$WORK/tree"
 git -C "$REPO_ROOT" archive HEAD | tar -x -C "$WORK/tree"
 cd "$WORK/tree"
 
-echo "== 1/9 pytest suite"
+echo "== 1/10 pytest suite"
 python3 -m pytest -q
 
-echo "== 2/9 run: passing candidate (expect PASS, exit 0)"
+echo "== 2/10 run: passing candidate (expect PASS, exit 0)"
 python3 -m verifygate run --spec samples/spec.json \
     --candidate samples/passing --mode judge --out "$WORK/pass.json"
 
-echo "== 3/9 run: failing candidate (expect FAIL, exit 1)"
+echo "== 3/10 run: failing candidate (expect FAIL, exit 1)"
 set +e
 python3 -m verifygate run --spec samples/spec.json \
     --candidate samples/failing --mode judge --out "$WORK/fail.json"
@@ -58,12 +62,12 @@ if [ "$rc" -ne 1 ]; then
 fi
 echo "   (exit 1 as expected)"
 
-echo "== 4/9 repair: failing candidate (expect FAIL -> PASS, exit 0)"
+echo "== 4/10 repair: failing candidate (expect FAIL -> PASS, exit 0)"
 python3 -m verifygate repair --spec samples/spec.json \
     --candidate samples/failing --mode judge --max-rounds 3 \
     --out "$WORK/repair.json" --patched-out "$WORK/patched"
 
-echo "== 5/9 JavaScript sample: run passing + failing, repair failing"
+echo "== 5/10 JavaScript sample: run passing + failing, repair failing"
 python3 -m verifygate run --spec samples-js/spec.json \
     --candidate samples-js/passing --mode judge --out "$WORK/js-pass.json"
 set +e
@@ -80,7 +84,7 @@ python3 -m verifygate repair --spec samples-js/spec.json \
     --candidate samples-js/failing --mode judge --max-rounds 3 \
     --out "$WORK/js-repair.json"
 
-echo "== 6/9 view: real-mode repair report renders with valid chains"
+echo "== 6/10 view: real-mode repair report renders with valid chains"
 python3 -m verifygate view --record samples/evidence_real_repair.json \
     --out "$WORK/view.html"
 python3 - "$WORK/view.html" <<'PYEOF'
@@ -92,11 +96,11 @@ assert "5,367" in html or "5367" in html, "sealed token usage missing"
 print("   view OK: chains verified, sealed usage shown")
 PYEOF
 
-echo "== 7/9 dogfood: VerifyGate verifies this repository (expect PASS, exit 0)"
+echo "== 7/10 dogfood: VerifyGate verifies this repository (expect PASS, exit 0)"
 python3 -m verifygate run --spec dogfood_spec.json \
     --candidate . --mode judge --out "$WORK/dogfood.json"
 
-echo "== 8/9 verify every record written in this rehearsal (verifygate verify)"
+echo "== 8/10 verify every record written in this rehearsal (verifygate verify)"
 python3 -m verifygate verify --record "$WORK/pass.json" \
     --spec samples/spec.json --candidate samples/passing
 python3 -m verifygate verify --record "$WORK/fail.json" \
@@ -114,12 +118,28 @@ python3 -m verifygate verify --record "$WORK/dogfood.json" \
 python3 -m verifygate verify --record samples-js/evidence_real_repair.json \
     --spec samples-js/spec.json --candidate samples-js/failing
 
-echo "== 9/9 replay: rehearsal repair report + committed real-mode reports (Judge Mode)"
+echo "== 9/10 replay: rehearsal repair report + committed real-mode reports (Judge Mode)"
 python3 -m verifygate replay --record "$WORK/repair.json" \
     --spec samples/spec.json --candidate samples/failing --mode judge
 python3 -m verifygate replay --record samples/evidence_real_repair.json \
     --spec samples/spec.json --candidate samples/failing --mode judge
 python3 -m verifygate replay --record samples-js/evidence_real_repair.json \
     --spec samples-js/spec.json --candidate samples-js/failing --mode judge
+
+echo "== 10/10 installed package: pip install + console script from another directory"
+# --no-build-isolation first (uses the interpreter's own setuptools,
+# no downloads); fall back to a standard isolated build. Either way
+# the install must succeed and the installed script must work.
+python3 -m pip install --quiet --no-build-isolation \
+    --target "$WORK/pkg" . \
+    || python3 -m pip install --quiet --target "$WORK/pkg" .
+mkdir -p "$WORK/elsewhere"
+cd "$WORK/elsewhere"
+PYTHONPATH="$WORK/pkg" "$WORK/pkg/bin/verifygate" --version
+PYTHONPATH="$WORK/pkg" "$WORK/pkg/bin/verifygate" run \
+    --spec "$WORK/tree/samples/spec.json" \
+    --candidate "$WORK/tree/samples/passing" --mode judge \
+    --out "$WORK/installed-pass.json"
+cd "$WORK/tree"
 
 echo "REHEARSAL PASSED — clean tree, Judge Mode spine end-to-end green."

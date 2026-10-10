@@ -213,6 +213,20 @@ Entries are hash-chained and the record hash is HMAC-signed
 default). `verifygate.evidence.verify_chain()` detects any edit, and the
 record's `replay` field is the exact command to reproduce the verdict.
 
+## CLI contract
+
+All five subcommands (`run`, `repair`, `view`, `verify`, `replay`)
+share one exit-code contract: **0** = PASS / record intact / replay
+matched, **1** = FAIL / record tampered / replay did not reproduce,
+**2** = usage or output error. Every error in the third class — a
+missing candidate directory, a candidate path that is a file, an
+unwritable `--out` / `--patched-out` path, a malformed record — is
+reported as a one-line message on stderr, never as a traceback.
+`verifygate --version` prints the package version, and the package
+installs a `verifygate` console script (`pip install .`) that behaves
+identically to `python3 -m verifygate` from any working directory;
+the clean-tree rehearsal exercises both invocation forms.
+
 ## Verifying an evidence record
 
 A record's whole point is that a *third party* can check it without
@@ -323,8 +337,10 @@ expected exit codes, the FAIL → PASS repair loop, the evidence web view
 of the committed real-mode report, a dogfood run of VerifyGate on its
 own tree, a `verifygate verify` check of every record written
 during the rehearsal plus the committed real-mode report for the
-JavaScript sample, and a `verifygate replay` reproduction of the
-rehearsal's repair report and both committed real-mode reports.
+JavaScript sample, a `verifygate replay` reproduction of the
+rehearsal's repair report and both committed real-mode reports, and
+an installed-package smoke test (`pip install` the export, then run
+the `verifygate` console script from a different directory).
 
 ## License
 
@@ -332,6 +348,16 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.4.0 — CLI contract hardening: every subcommand now reports usage
+and output errors (missing or non-directory candidate, unwritable
+`--out` / `--patched-out`, malformed record) as a one-line stderr
+message with exit code 2, never as a traceback — before this release
+`run` on a missing candidate and every unwritable `--out` crashed
+with one, contradicting the documented exit codes. `verifygate
+--version` added. The clean-tree rehearsal gains an
+installed-package step (`pip install` the export, run the console
+script from another directory), so the pip-installed entry point is
+exercised exactly as a judge would use it (10 steps).
 1.3.0 — true replay: `verifygate replay` re-runs a record's checks
 and compares verdicts (repair attempts are reconstructed from the
 original candidate plus the patches recorded in the report, tree

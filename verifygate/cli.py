@@ -25,6 +25,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from . import __version__
 from .mock_llm import MockLLMAdapter
 from .replay import replay_document, replay_ok
 from .repair import run_repair
@@ -46,6 +47,8 @@ def _adapters(mode: str, model: str | None = None):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="verifygate")
+    parser.add_argument("--version", action="version",
+                        version=f"verifygate {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
     run_p = sub.add_parser("run", help="verify a candidate against a task spec")
     run_p.add_argument("--spec", required=True)
@@ -172,6 +175,10 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, json.JSONDecodeError) as exc:
             print(f"record error: {exc}", file=sys.stderr)
             return 2
+        if args.candidate and not Path(args.candidate).is_dir():
+            print(f"record error: candidate directory not found: "
+                  f"{args.candidate}", file=sys.stderr)
+            return 2
         spec_hash = None
         if args.spec:
             try:
@@ -214,7 +221,17 @@ def main(argv: list[str] | None = None) -> int:
             print("record error: not a VerifyGate record", file=sys.stderr)
             return 2
         out = Path(args.out or Path(args.record).with_suffix(".html"))
-        out.write_text(render_document(data), encoding="utf-8")
+        try:
+            html = render_document(data)
+        except (KeyError, TypeError, ValueError) as exc:
+            print(f"record error: cannot render this record: {exc}",
+                  file=sys.stderr)
+            return 2
+        try:
+            out.write_text(html, encoding="utf-8")
+        except OSError as exc:
+            print(f"output error: {exc}", file=sys.stderr)
+            return 2
         print(f"Rendered -> {out}")
         return 0
 
@@ -223,6 +240,10 @@ def main(argv: list[str] | None = None) -> int:
             spec = load_spec(args.spec)
         except SpecError as exc:
             print(f"spec error: {exc}", file=sys.stderr)
+            return 2
+        if not Path(args.candidate).is_dir():
+            print(f"candidate error: candidate directory not found: "
+                  f"{args.candidate}", file=sys.stderr)
             return 2
         try:
             llm, references = _adapters(args.mode, args.model)
@@ -242,8 +263,15 @@ def main(argv: list[str] | None = None) -> int:
         except RuntimeError as exc:
             print(f"adapter error: {exc}", file=sys.stderr)
             return 2
+        except OSError as exc:
+            print(f"candidate error: {exc}", file=sys.stderr)
+            return 2
         out = Path(args.out or f"evidence-{spec.name}.json")
-        write_record(record, out)
+        try:
+            write_record(record, out)
+        except OSError as exc:
+            print(f"output error: {exc}", file=sys.stderr)
+            return 2
         checks = [e for e in record["entries"] if e["kind"] == "check"]
         for c in checks:
             print(f"  [{c['verdict']}] {c['name']}: {c['command']} "
@@ -280,21 +308,34 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         out = Path(args.out or f"repair-{spec.name}.json")
-        out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-        for a in report["attempts"]:
-            patch = a["patch_from_previous"]
-            note = ""
-            if patch and patch["applied"]:
-                note = f" (patch applied: {', '.join(patch['changed_files'])})"
-            print(f"  attempt {a['round']}: {a['verdict']}{note}")
-        if report["last_patch_error"]:
-            print(f"  repair stopped: {report['last_patch_error']}")
-        if args.patched_out and report["rounds_used"] > 0 \
-                and report["attempts"][-1]["patch_from_previous"]:
-            dest = Path(args.patched_out)
-            shutil.copytree(report["attempts"][-1]["candidate_dir"], dest,
-                            dirs_exist_ok=True, ignore=_IGNORE)
-            print(f"  patched candidate copied to {dest}")
+        copy_error: OSError | shutil.Error | None = None
+        try:
+            out.write_text(json.dumps(report, indent=2) + "\n",
+                           encoding="utf-8")
+        except OSError as exc:
+            print(f"output error: {exc}", file=sys.stderr)
+            copy_error = exc
+        if copy_error is None:
+            for a in report["attempts"]:
+                patch = a["patch_from_previous"]
+                note = ""
+                if patch and patch["applied"]:
+                    note = (f" (patch applied: "
+                            f"{', '.join(patch['changed_files'])})")
+                print(f"  attempt {a['round']}: {a['verdict']}{note}")
+            if report["last_patch_error"]:
+                print(f"  repair stopped: {report['last_patch_error']}")
+            if args.patched_out and report["rounds_used"] > 0 \
+                    and report["attempts"][-1]["patch_from_previous"]:
+                dest = Path(args.patched_out)
+                try:
+                    shutil.copytree(
+                        report["attempts"][-1]["candidate_dir"], dest,
+                        dirs_exist_ok=True, ignore=_IGNORE)
+                    print(f"  patched candidate copied to {dest}")
+                except (OSError, shutil.Error) as exc:
+                    print(f"output error: {exc}", file=sys.stderr)
+                    copy_error = exc
         # The repair loop keeps its final patched copy for the caller;
         # the CLI has now copied it out (or not been asked to), and the
         # sealed report is self-contained — remove the temp copy so a
@@ -303,6 +344,8 @@ def main(argv: list[str] | None = None) -> int:
             final_dir = Path(report["attempts"][-1]["candidate_dir"])
             if final_dir.name.startswith("verifygate-"):
                 shutil.rmtree(final_dir, ignore_errors=True)
+        if copy_error is not None:
+            return 2
         usage = report.get("llm_usage_total") or {}
         if usage.get("llm_calls"):
             print(f"  LLM usage: {usage['llm_calls']} call(s), "
