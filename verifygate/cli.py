@@ -3,20 +3,26 @@
 Usage:
   python3 -m verifygate run --spec samples/spec.json \
       --candidate samples/passing --mode judge --out evidence-passing.json
+  python3 -m verifygate repair --spec samples/spec.json \
+      --candidate samples/failing --mode judge --max-rounds 3
 
-Exit code: 0 when the verdict is PASS, 1 when FAIL, 2 on usage/spec errors.
-The evidence record is written either way — a FAIL record is a deliverable,
-not an error.
+Exit code: 0 when the (final) verdict is PASS, 1 when FAIL, 2 on
+usage/spec errors. The evidence record is written either way — a FAIL
+record is a deliverable, not an error.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
+import shutil
 import sys
 from pathlib import Path
 
 from .mock_llm import MockLLMAdapter
+from .repair import run_repair
 from .runner import run_verification, write_record
+from .sandbox import _IGNORE
 from .spec import SpecError, load_spec
 from .tavily import MockReferenceLookup, TavilyReferenceLookup
 
@@ -38,6 +44,17 @@ def main(argv: list[str] | None = None) -> int:
     run_p.add_argument("--mode", choices=["judge", "real"], default="judge")
     run_p.add_argument("--out", default=None,
                        help="evidence record path (default: evidence-<spec>.json)")
+    rep_p = sub.add_parser(
+        "repair", help="verify, then loop: LLM patch -> apply -> re-verify")
+    rep_p.add_argument("--spec", required=True)
+    rep_p.add_argument("--candidate", required=True)
+    rep_p.add_argument("--mode", choices=["judge", "real"], default="judge")
+    rep_p.add_argument("--max-rounds", type=int, default=3,
+                       help="maximum patch attempts (default: 3)")
+    rep_p.add_argument("--out", default=None,
+                       help="repair report path (default: repair-<spec>.json)")
+    rep_p.add_argument("--patched-out", default=None,
+                       help="copy the final patched candidate into this directory")
     args = parser.parse_args(argv)
 
     if args.command == "run":
@@ -68,6 +85,55 @@ def main(argv: list[str] | None = None) -> int:
                   f"(exit {c['exit_code']}, {c['duration_ms']} ms)")
         print(f"VERDICT: {record['verdict']}  ->  {out}")
         return 0 if record["verdict"] == "PASS" else 1
+
+    if args.command == "repair":
+        if args.max_rounds < 0:
+            print("usage error: --max-rounds must be >= 0", file=sys.stderr)
+            return 2
+        try:
+            spec = load_spec(args.spec)
+        except SpecError as exc:
+            print(f"spec error: {exc}", file=sys.stderr)
+            return 2
+        try:
+            llm, references = _adapters(args.mode)
+        except ValueError as exc:
+            print(f"adapter error: {exc}", file=sys.stderr)
+            return 2
+        try:
+            report = run_repair(
+                spec=spec,
+                candidate_dir=args.candidate,
+                mode=args.mode,
+                llm=llm,
+                references=references,
+                spec_label=args.spec,
+                candidate_label=args.candidate,
+                max_rounds=args.max_rounds,
+            )
+        except FileNotFoundError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        out = Path(args.out or f"repair-{spec.name}.json")
+        out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        for a in report["attempts"]:
+            patch = a["patch_from_previous"]
+            note = ""
+            if patch and patch["applied"]:
+                note = f" (patch applied: {', '.join(patch['changed_files'])})"
+            print(f"  attempt {a['round']}: {a['verdict']}{note}")
+        if report["last_patch_error"]:
+            print(f"  repair stopped: {report['last_patch_error']}")
+        if args.patched_out and report["rounds_used"] > 0 \
+                and report["attempts"][-1]["patch_from_previous"]:
+            dest = Path(args.patched_out)
+            shutil.copytree(report["attempts"][-1]["candidate_dir"], dest,
+                            dirs_exist_ok=True, ignore=_IGNORE)
+            print(f"  patched candidate copied to {dest}")
+        print(f"FINAL VERDICT: {report['final_verdict']} after "
+              f"{report['rounds_used']} repair round(s) "
+              f"({report['stopped_reason']})  ->  {out}")
+        return 0 if report["final_verdict"] == "PASS" else 1
     return 2
 
 

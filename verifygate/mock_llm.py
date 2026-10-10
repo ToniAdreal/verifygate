@@ -3,17 +3,46 @@
 Produces stable, template-rendered text derived only from its inputs, so a
 zero-key, zero-network run is fully reproducible. It never invents check
 outcomes; explanations quote the actual failing commands and outputs.
+
+For the bundled sample task, generate_patch returns the known-good fix as
+a real unified diff (CONCEPT.md: in Judge Mode the mock returns the bundled
+known-good candidate), so the repair loop can apply it and the validators
+— not the mock — decide whether the repair worked. For any other brief it
+returns a plan with no diff, and the repair loop stops cleanly.
 """
 
 from __future__ import annotations
 
 from .llm import LLMAdapter
 
+# The known-good slugify fix for the bundled sample, as a unified diff
+# against samples/failing/stringtools.py. Deterministic by construction.
+_SAMPLE_SLUGIFY_DIFF = '''\
+--- a/stringtools.py
++++ b/stringtools.py
+@@ -4,9 +4,14 @@
+ removes punctuation, so the spec's checks must catch it.
+ """
+ 
++import re
++
+ 
+ def slugify(text: str) -> str:
+-    return text.strip().replace(" ", "-")
++    """Lowercase, drop punctuation, join words with single hyphens."""
++    lowered = text.strip().lower()
++    hyphenated = re.sub(r"[^a-z0-9]+", "-", lowered)
++    return hyphenated.strip("-")
+ 
+'''
+
 
 class MockLLMAdapter(LLMAdapter):
     name = "mock-deterministic"
 
     def generate_patch(self, brief: str, failing_evidence: dict | None = None) -> str:
+        if "slugify" in brief.lower():
+            return _SAMPLE_SLUGIFY_DIFF
         lines = [
             "MOCK PATCH PROPOSAL (deterministic, Judge Mode)",
             f"Brief: {brief.strip() or '(no brief)'}",

@@ -31,6 +31,27 @@ still runs for real — only the *words* (patch proposals, explanations) are
 template-rendered. A FAIL record is a deliverable, not an error: it carries
 the diagnosis meant to feed the next repair iteration.
 
+## Repair loop (Judge Mode)
+
+```bash
+python3 -m verifygate repair --spec samples/spec.json \
+    --candidate samples/failing --mode judge --max-rounds 3 \
+    --out repair-report.json --patched-out patched-candidate/
+# attempt 0: FAIL -> mock proposes the known-good slugify fix as a unified
+# diff -> VerifyGate applies it to a *copy* of the candidate -> re-verifies
+# attempt 1: PASS
+```
+
+The loop feeds each FAIL's check results to the LLM adapter, applies the
+proposed unified diff to a fresh copy of the candidate (the original is
+never modified; a diff whose context does not match the file on disk is
+rejected, never forced), and re-runs every check from scratch. It stops
+at the first PASS, when no usable patch is produced, or after
+`--max-rounds` patch attempts. The repair report embeds every attempt's
+full evidence record, so each intermediate verdict stays independently
+replayable. In real mode the same loop drives Nemotron via Token Factory:
+the model proposes diffs, deterministic checks still dispose.
+
 The sample candidates' own checks use `pytest` (the sample library's test
 suite); VerifyGate itself is standard-library only.
 
@@ -69,7 +90,8 @@ record's `replay` field is the exact command to reproduce the verdict.
 ## Layout
 
 ```
-verifygate/   spec, sandbox, validators, evidence, llm adapters, cli
+verifygate/   spec, sandbox, validators, evidence, patch application,
+              repair loop, llm adapters, cli
 samples/      fictional demo task + passing / failing candidates
 tests/        pytest suite for VerifyGate itself
 ```
