@@ -213,6 +213,16 @@ Entries are hash-chained and the record hash is HMAC-signed
 default). `verifygate.evidence.verify_chain()` detects any edit, and the
 record's `replay` field is the exact command to reproduce the verdict.
 
+Records sealed by this version carry `chain_version: 2`: every entry's
+hash covers its *kind* as well as its content. Chain v1 hashed the
+content only, so an entry could be relabelled (a FAIL check re-tagged
+as a "diagnosis", which consumers render as commentary) without
+breaking the chain; verification now also enforces the record's
+structure — kinds, their order, and the fields each kind must carry —
+for both chain versions, so a relabelled legacy record fails too,
+while every untampered legacy record (including all the committed
+real-mode evidence) still verifies exactly as before.
+
 ## CLI contract
 
 All five subcommands (`run`, `repair`, `view`, `verify`, `replay`)
@@ -235,8 +245,8 @@ trusting the producer — and without re-running anything:
 ```bash
 python3 -m verifygate verify --record samples/evidence_real_repair.json \
     --spec samples/spec.json --candidate samples/failing
-#   attempt 0: verdict FAIL, mode real, spec stringtools-slugify-fix — chain OK; candidate: match; spec: match
-#   attempt 1: verdict PASS, mode real, spec stringtools-slugify-fix — chain OK; candidate: not bound (patched copy); spec: match
+#   attempt 0: verdict FAIL, mode real, spec stringtools-slugify-fix — chain OK; candidate: match; spec: match; report summary: match
+#   attempt 1: verdict PASS, mode real, spec stringtools-slugify-fix — chain OK; candidate: not bound (patched copy); spec: match; report summary: match
 # RECORD INTACT: 2 record(s) verified
 ```
 
@@ -248,10 +258,15 @@ all are intact. Two optional bindings answer "does this record describe
 against the sealed header. For a repair report the candidate binding
 applies to attempt 0 (the submitted candidate); later attempts verify
 patched copies that no longer exist on disk, so they are reported as
-not bound rather than mismatched. Tampering with a verdict, a check
-result, a diagnosis, or a sealed token-usage figure fails verification
-(exit 1); usage errors exit 2. No checks are re-run, and no keys or
-network are needed.
+not bound rather than mismatched. A repair report's own summary fields
+(`final_verdict`, `spec_name`, `mode`, and each attempt wrapper's
+`verdict` / `record_hash`) sit outside the chains, so they are
+cross-checked against the sealed records they summarise — flipping a
+stated final verdict to disagree with the sealed attempts fails
+verification just like editing a record. Tampering with a verdict, a
+check result, a diagnosis, or a sealed token-usage figure fails
+verification (exit 1); usage errors exit 2. No checks are re-run, and
+no keys or network are needed.
 
 ## Replaying an evidence record
 
@@ -348,6 +363,19 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.5.0 — chain-integrity hardening: chain v2 seals each entry's kind
+together with its content, and verification enforces the record
+structure (kinds, order, per-kind required fields) for both chain
+versions — closing a relabel hole in which a FAIL check entry in a
+legacy (v1) record could be re-tagged as a diagnosis without breaking
+its chain, while every untampered legacy record still verifies.
+`verifygate verify` now also cross-checks a repair report's unchained
+summary fields (stated final verdict, per-attempt wrapper verdicts
+and record hashes, spec name, mode) against its sealed attempt
+records, and the evidence web view derives its repair-report verdict
+badges from the sealed records, rendering a visible SUMMARY MISMATCH
+banner when a stated summary disagrees. 18 new integrity tests
+(135 total).
 1.4.0 — CLI contract hardening: every subcommand now reports usage
 and output errors (missing or non-directory candidate, unwritable
 `--out` / `--patched-out`, malformed record) as a one-line stderr

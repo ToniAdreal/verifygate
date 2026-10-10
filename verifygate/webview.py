@@ -235,17 +235,33 @@ def render_record(record: dict) -> str:
 def render_repair_report(report: dict) -> str:
     """Render a repair report: summary card + one section per attempt."""
     total = report.get("llm_usage_total") or {}
+    attempts = report.get("attempts", [])
+    # The report-level summary fields are not inside any hash chain.
+    # The authoritative final verdict is the last attempt's *sealed*
+    # record verdict; a stated summary that disagrees with it renders
+    # as a visible mismatch, never as the verdict itself.
+    sealed_final = None
+    if attempts and isinstance(attempts[-1].get("evidence"), dict):
+        sealed_final = attempts[-1]["evidence"].get("verdict")
+    stated_final = report.get("final_verdict", "")
+    final_verdict = sealed_final if sealed_final is not None else stated_final
     parts = [
         '<div class="card"><h3>Repair report</h3>'
         f"<p>spec: {_e(report.get('spec_name', ''))}"
         f" · mode: {_e(report.get('mode', ''))}"
         f" · LLM adapter: {_e(report.get('llm_adapter', ''))}</p>"
         f"<p>final verdict: "
-        f"{_verdict_badge(report.get('final_verdict', ''))}"
+        f"{_verdict_badge(final_verdict)}"
         f" · repair rounds used: {_e(report.get('rounds_used'))}"
         f" / {_e(report.get('max_rounds'))}"
         f" · stopped: {_e(report.get('stopped_reason', ''))}</p>",
     ]
+    if sealed_final is not None and stated_final != sealed_final:
+        parts.append(
+            '<div class="chain-bad">⚠ REPORT SUMMARY MISMATCH — this '
+            f"report's stated final verdict ({_e(stated_final)}) does "
+            f"not match its sealed final attempt record "
+            f"({_e(sealed_final)}). Trust the sealed records.</div>")
     if total.get("llm_calls"):
         parts.append(
             f"<p>LLM usage total: {_e(total.get('llm_calls'))} call(s), "
@@ -256,10 +272,22 @@ def render_repair_report(report: dict) -> str:
             f"{_e(report.get('last_patch_error'))}</p>")
     parts.append("</div>")
 
-    for attempt in report.get("attempts", []):
+    for attempt in attempts:
+        evidence = attempt.get("evidence")
+        sealed_verdict = evidence.get("verdict") \
+            if isinstance(evidence, dict) else None
+        heading_verdict = sealed_verdict \
+            if sealed_verdict is not None else attempt.get("verdict", "")
         parts.append(
             f"<h2>Attempt {_e(attempt.get('round'))} — "
-            f"{_e(attempt.get('verdict', ''))}</h2>")
+            f"{_e(heading_verdict)}</h2>")
+        if sealed_verdict is not None \
+                and attempt.get("verdict") not in (None, sealed_verdict):
+            parts.append(
+                '<div class="chain-bad">⚠ ATTEMPT SUMMARY MISMATCH — '
+                "this attempt's stated verdict "
+                f"({_e(attempt.get('verdict'))}) does not match its "
+                f"sealed record ({_e(sealed_verdict)}).</div>")
         patch = attempt.get("patch_from_previous")
         if patch:
             if patch.get("applied"):

@@ -1,32 +1,33 @@
 {
   "tool": "verifygate",
-  "version": "1.4.0",
-  "created_at": "2026-10-10T21:13:37.563670+00:00",
+  "version": "1.5.0",
+  "chain_version": 2,
+  "created_at": "2026-10-10T21:45:35.798777+00:00",
   "verdict": "PASS",
   "replay": "python3 -m verifygate run --spec dogfood_spec.json --candidate . --mode judge",
   "entries": [
     {
       "kind": "header",
-      "hash": "4da49e53cceb65c2b8a939feac1e871840749ce5e4d9b938bab2fccbe21faf77",
+      "hash": "f182ecaff297b3684cb58f080ad993dddecd366602bb86e8110cf22ee0ca02fe",
       "spec_name": "verifygate-self-check",
       "spec_hash": "9a88c58688f6202f3362cd0b626fb652cb683148b8b756f066e63306d60fe043",
-      "candidate_tree_hash": "5a67c63eacdeed184be6c69af662e8110f16c9bbf670fb5c16308f339c594820",
+      "candidate_tree_hash": "0b8343c4948245ddea76b251d02ed57d2c24382c6bbb6c0ea03f56d03459a2f0",
       "mode": "judge"
     },
     {
       "kind": "check",
-      "hash": "eb4ca10f35c11fc7b0050fff64615ff2998945c60295e3e8e07439205312a4d5",
+      "hash": "fb3d7fb90e296a5a21c261c3568a9f2cc1a189bd4f3a3134d71556a85548b0cb",
       "name": "unit_tests",
       "command": "python3 -m pytest -q",
       "exit_code": 0,
-      "duration_ms": 42585,
-      "stdout_tail": "........................................................................ [ 61%]\n.............................................                            [100%]\n117 passed in 42.04s\n",
+      "duration_ms": 38938,
+      "stdout_tail": "........................................................................ [ 53%]\n...............................................................          [100%]\n135 passed in 38.26s\n",
       "stderr_tail": "",
       "timed_out": false,
       "verdict": "PASS"
     }
   ],
-  "record_hash": "cf66d383f31a8fbef555b2089cb873218819a885107d53c1abb09497061c89c5",
-  "signature": "f50eef754eee203990b350e71b9687057e79fb65674a17950a2bb535a6e554bd",
+  "record_hash": "f077dd86bc34b41c0134e5aa2d6bcdea1e14e11fcca88e46af0ff8a4397fe832",
+  "signature": "c1842a99b089b377ceae0eca488f49bf6d8d5bc5fd0ea1bd10e371011f156958",
   "signing_key_is_default_dev_key": true
 }

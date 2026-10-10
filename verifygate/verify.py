@@ -18,6 +18,13 @@ the spec binding applies to every attempt (the loop never changes the
 spec), while the candidate binding applies to attempt 0 only: later
 attempts verify patched copies that no longer exist on disk, so their
 candidate hash is reported as not bound rather than mismatched.
+
+A repair report also carries *unchained* summary fields — its
+``final_verdict``, ``spec_name`` and ``mode``, and each attempt
+wrapper's ``verdict`` / ``record_hash`` duplicates. Those are
+cross-checked against the sealed records they summarise
+(``report_match``): editing a summary to disagree with the sealed
+attempts fails verification, exactly like editing a record itself.
 """
 
 from __future__ import annotations
@@ -70,6 +77,7 @@ def check_record(
         "chain_ok": verify_chain(record),
         "candidate_match": None,
         "spec_match": None,
+        "report_match": None,
     }
     if candidate_hash is not None and bind_candidate:
         result["candidate_match"] = (
@@ -104,6 +112,27 @@ def verify_document(
             spec_hash=spec_hash,
             bind_candidate=bind_candidate,
         )))
+    if is_report:
+        # The report's summary fields are not inside any hash chain;
+        # cross-check them against the sealed records they summarise
+        # so a summary edited to disagree with the attempts fails.
+        attempts = data["attempts"]
+        report_match = (
+            data.get("final_verdict") == pairs[-1][1].get("verdict")
+            and all(
+                isinstance(a, dict)
+                and a.get("verdict") == a["evidence"].get("verdict")
+                and a.get("record_hash") == a["evidence"].get("record_hash")
+                for a in attempts
+            )
+            and all(
+                header_of(record).get("spec_name") == data.get("spec_name")
+                and header_of(record).get("mode") == data.get("mode")
+                for _, record in pairs
+            )
+        )
+        for _, result in results:
+            result["report_match"] = report_match
     return results
 
 
@@ -112,5 +141,6 @@ def document_ok(results: list[tuple[str, dict]]) -> bool:
     return all(
         r["chain_ok"] and r["candidate_match"] is not False
         and r["spec_match"] is not False
+        and r.get("report_match") is not False
         for _, r in results
     )

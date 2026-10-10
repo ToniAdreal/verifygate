@@ -204,6 +204,9 @@ def main(argv: list[str] | None = None) -> int:
             if r["spec_match"] is not None:
                 parts.append("spec: "
                              + ("match" if r["spec_match"] else "MISMATCH"))
+            if r.get("report_match") is not None:
+                parts.append("report summary: "
+                             + ("match" if r["report_match"] else "MISMATCH"))
             print("  " + "; ".join(parts))
         if document_ok(results):
             print(f"RECORD INTACT: {len(results)} record(s) verified")
