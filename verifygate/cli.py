@@ -5,6 +5,8 @@ Usage:
       --candidate samples/passing --mode judge --out evidence-passing.json
   python3 -m verifygate repair --spec samples/spec.json \
       --candidate samples/failing --mode judge --max-rounds 3
+  python3 -m verifygate verify --record evidence.json \
+      --spec samples/spec.json --candidate samples/passing
 
 Exit code: 0 when the (final) verdict is PASS, 1 when FAIL, 2 on
 usage/spec errors. The evidence record is written either way — a FAIL
@@ -25,6 +27,7 @@ from .runner import run_verification, write_record
 from .sandbox import _IGNORE
 from .spec import SpecError, load_spec
 from .tavily import MockReferenceLookup, TavilyReferenceLookup
+from .verify import document_ok, verify_document
 from .webview import render_document
 
 
@@ -68,7 +71,58 @@ def main(argv: list[str] | None = None) -> int:
                         help="evidence record or repair report JSON")
     view_p.add_argument("--out", default=None,
                         help="HTML path (default: <record stem>.html)")
+    ver_p = sub.add_parser(
+        "verify",
+        help="verify an evidence record / repair report: hash chain, "
+             "signature, and optionally its spec/candidate bindings — "
+             "no checks are re-run, no keys or network needed")
+    ver_p.add_argument("--record", required=True,
+                       help="evidence record or repair report JSON")
+    ver_p.add_argument("--candidate", default=None,
+                       help="candidate directory: its tree hash must match "
+                            "the record header (repair reports: attempt 0)")
+    ver_p.add_argument("--spec", default=None,
+                       help="task spec file: its hash must match the "
+                            "record header")
     args = parser.parse_args(argv)
+
+    if args.command == "verify":
+        try:
+            data = json.loads(Path(args.record).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"record error: {exc}", file=sys.stderr)
+            return 2
+        spec_hash = None
+        if args.spec:
+            try:
+                spec_hash = load_spec(args.spec).hash
+            except SpecError as exc:
+                print(f"spec error: {exc}", file=sys.stderr)
+                return 2
+        try:
+            results = verify_document(
+                data, candidate_dir=args.candidate, spec_hash=spec_hash)
+        except (ValueError, OSError) as exc:
+            print(f"record error: {exc}", file=sys.stderr)
+            return 2
+        for label, r in results:
+            chain = "chain OK" if r["chain_ok"] else "CHAIN INVALID"
+            parts = [f"{label}: verdict {r['verdict']}, mode {r['mode']}, "
+                     f"spec {r['spec_name']} — {chain}"]
+            if r["candidate_match"] is not None:
+                parts.append("candidate: "
+                             + ("match" if r["candidate_match"] else "MISMATCH"))
+            elif args.candidate:
+                parts.append("candidate: not bound (patched copy)")
+            if r["spec_match"] is not None:
+                parts.append("spec: "
+                             + ("match" if r["spec_match"] else "MISMATCH"))
+            print("  " + "; ".join(parts))
+        if document_ok(results):
+            print(f"RECORD INTACT: {len(results)} record(s) verified")
+            return 0
+        print("RECORD FAILED VERIFICATION", file=sys.stderr)
+        return 1
 
     if args.command == "view":
         try:

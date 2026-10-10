@@ -175,11 +175,37 @@ Entries are hash-chained and the record hash is HMAC-signed
 default). `verifygate.evidence.verify_chain()` detects any edit, and the
 record's `replay` field is the exact command to reproduce the verdict.
 
+## Verifying an evidence record
+
+A record's whole point is that a *third party* can check it without
+trusting the producer — and without re-running anything:
+
+```bash
+python3 -m verifygate verify --record samples/evidence_real_repair.json \
+    --spec samples/spec.json --candidate samples/failing
+#   attempt 0: verdict FAIL, mode real, spec stringtools-slugify-fix — chain OK; candidate: match; spec: match
+#   attempt 1: verdict PASS, mode real, spec stringtools-slugify-fix — chain OK; candidate: not bound (patched copy); spec: match
+# RECORD INTACT: 2 record(s) verified
+```
+
+`verify` recomputes the hash chain and signature of every record (for a
+repair report, every attempt's embedded record) and exits 0 only when
+all are intact. Two optional bindings answer "does this record describe
+*these* artifacts?": `--spec` recomputes the spec file's hash and
+`--candidate` the candidate directory's tree hash, each compared
+against the sealed header. For a repair report the candidate binding
+applies to attempt 0 (the submitted candidate); later attempts verify
+patched copies that no longer exist on disk, so they are reported as
+not bound rather than mismatched. Tampering with a verdict, a check
+result, a diagnosis, or a sealed token-usage figure fails verification
+(exit 1); usage errors exit 2. No checks are re-run, and no keys or
+network are needed.
+
 ## Layout
 
 ```
 verifygate/   spec, sandbox, validators, evidence, patch application,
-              repair loop, llm adapters, cli
+              repair loop, record verification, llm adapters, cli
 samples/      fictional demo task + passing / failing candidates
 tests/        pytest suite for VerifyGate itself
 dogfood_spec.json / evidence_self_check.json
@@ -212,8 +238,8 @@ clone contains) into a fresh directory and runs the whole Judge Mode
 spine there: the pytest suite, PASS and FAIL sample runs with their
 expected exit codes, the FAIL → PASS repair loop, the evidence web view
 of the committed real-mode report, a dogfood run of VerifyGate on its
-own tree, and a hash-chain check of every record written during the
-rehearsal.
+own tree, and a `verifygate verify` check of every record written
+during the rehearsal.
 
 ## License
 
@@ -221,6 +247,11 @@ MIT — see `LICENSE`.
 
 ## Version
 
+0.9.0 — standalone record verification: `verifygate verify` lets any
+third party recompute a record's (or a repair report's) hash chain and
+signature and bind it to the spec file and candidate directory on disk,
+without re-running any check and without keys or network; the
+clean-tree rehearsal now chain-checks its records through this CLI.
 0.8.0 — in-repo dogfooding: `dogfood_spec.json` and the committed
 self-check PASS record (`evidence_self_check.json`) now live at the
 repository root, so a fresh clone can reproduce VerifyGate verifying

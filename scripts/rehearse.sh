@@ -14,8 +14,9 @@
 #      samples/, asserting both hash chains render as verified
 #   6. dogfood: `verifygate run` on this repository itself, using the
 #      committed dogfood_spec.json -> PASS, exit 0
-#   7. every evidence record written during the rehearsal is chain-checked
-#      with verifygate.evidence.verify_chain()
+#   7. every evidence record written during the rehearsal is verified
+#      with the standalone `verifygate verify` CLI (spec binding where
+#      the rehearsal's own spec applies)
 #
 # Usage: scripts/rehearse.sh   (run from anywhere; it locates the repo root)
 # Exit code: 0 when every step behaves as expected, 1 otherwise.
@@ -70,21 +71,14 @@ echo "== 6/7 dogfood: VerifyGate verifies this repository (expect PASS, exit 0)"
 python3 -m verifygate run --spec dogfood_spec.json \
     --candidate . --mode judge --out "$WORK/dogfood.json"
 
-echo "== 7/7 chain-check every record written in this rehearsal"
-python3 - "$WORK/pass.json" "$WORK/fail.json" "$WORK/repair.json" "$WORK/dogfood.json" <<'PYEOF'
-import json, sys
-sys.path.insert(0, ".")
-from verifygate.evidence import verify_chain
-
-for path in sys.argv[1:]:
-    data = json.load(open(path, encoding="utf-8"))
-    if "attempts" in data:
-        records = [a["evidence"] for a in data["attempts"]]
-    else:
-        records = [data]
-    for record in records:
-        assert verify_chain(record), f"hash chain invalid: {path}"
-    print(f"   chain OK: {path}")
-PYEOF
+echo "== 7/7 verify every record written in this rehearsal (verifygate verify)"
+python3 -m verifygate verify --record "$WORK/pass.json" \
+    --spec samples/spec.json --candidate samples/passing
+python3 -m verifygate verify --record "$WORK/fail.json" \
+    --spec samples/spec.json --candidate samples/failing
+python3 -m verifygate verify --record "$WORK/repair.json" \
+    --spec samples/spec.json --candidate samples/failing
+python3 -m verifygate verify --record "$WORK/dogfood.json" \
+    --spec dogfood_spec.json
 
 echo "REHEARSAL PASSED — clean tree, Judge Mode spine end-to-end green."
