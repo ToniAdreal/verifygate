@@ -586,6 +586,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.57.0 — patch-applier root validation:
+the `root` a patch applies under was the
+one workspace argument `apply_patch` still
+took on trust, coerced with a bare
+`Path(...)`. A non-path root crashed with a
+raw `TypeError` — not a `PatchError`, so it
+escaped the repair loop's rejection
+handling; an empty string silently meant
+the *current directory*, whose whole tree
+the bounds check then measured as the
+"candidate"; and a missing root was
+silently *created* by a creation diff's
+parent-directory creation, materialising a
+tree wherever the path pointed. The root is
+now validated through
+`sandbox.validate_candidate_dir`, exactly
+as the run paths judge theirs (candidate
+directories v1.41.0, `run_command`'s `cwd`
+v1.51.0), before anything is parsed, staged,
+or written: type / emptiness / length
+faults are one `ValueError` (a usage error
+about the call, deliberately not a
+`PatchError`), and a path that does not
+name an existing directory is the
+`FileNotFoundError` every other entry point
+raises. Directory creation *inside* a
+validated root is unchanged. 16 new tests
+(1830 total).
 1.56.0 — result-aggregation validation:
 `document_ok` and `replay_ok`, the two
 functions that turn per-record results into

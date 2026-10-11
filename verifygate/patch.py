@@ -100,6 +100,35 @@ override silently disabled the patch-result bound for that call.
 A malformed override is now one ``ValueError`` up front (it is a
 usage error about the *call*, not a rejection of the *patch*, so
 it is deliberately not a :class:`PatchError`).
+
+Root validation (since v1.57.0): the ``root`` a patch applies
+under was the one workspace argument the applier still took on
+trust — every other entry point had its directory judged
+(candidate directories in v1.41.0, ``run_command``'s ``cwd``
+in v1.51.0), but ``apply_patch`` coerced its root with a bare
+``Path(...)``. A non-path root (``None``, an ``int``, a
+``bool``) crashed with a raw ``TypeError`` — again not a
+:class:`PatchError`, so it escaped the repair loop's rejection
+handling for any direct caller. An empty string silently meant
+the *current directory*: the staged-result bounds check then
+measured the caller's whole working tree as the "candidate",
+and only that tree happening to exceed the file bound prevented
+a write into it. Worst, a *missing* root was silently created:
+a creation diff's parent-directory creation materialised the
+root itself, so the applier grew a brand-new tree wherever the
+path pointed instead of patching the candidate the caller
+named. The root is now validated through
+``sandbox.validate_candidate_dir`` exactly as the run paths
+judge theirs, before anything is parsed, staged, or written:
+type / emptiness / length faults are one ``ValueError`` (a
+usage error about the *call*, deliberately not a
+:class:`PatchError` — the same doctrine as the bound overrides
+above), and a well-formed path that does not name an existing
+directory is the ``FileNotFoundError`` every other entry point
+raises. The repair loop and replay only ever pass prepared
+workspaces, so their behaviour is unchanged; directory
+creation *inside* a validated root (a new file in a new
+subdirectory) is unchanged too.
 """
 
 from __future__ import annotations
@@ -459,6 +488,14 @@ def apply_patch(
     :data:`MAX_PATCH_TEXT_CHARS` (enforced in :func:`parse_patch`):
     an oversize or non-string proposal is a :class:`PatchError`
     before anything is parsed, staged, or written.
+
+    The root must name an existing directory (validated through
+    ``sandbox.validate_candidate_dir``, v1.57.0 — see the module
+    docstring): a non-path, empty, or over-long root is a
+    ``ValueError`` and a well-formed path that does not name a
+    directory is a ``FileNotFoundError``, both before anything is
+    parsed, staged, or written. The root is never created,
+    and an empty string never means the current directory.
     """
     if max_files is None:
         max_files = sandbox.MAX_CANDIDATE_FILES
@@ -470,7 +507,12 @@ def apply_patch(
     else:
         max_bytes = sandbox.validate_candidate_bound(
             max_bytes, "max_bytes", sandbox.MAX_CANDIDATE_BYTES)
-    root = Path(root)
+    # The root is the caller's own argument, judged like every
+    # other entry point's directory (v1.57.0): until now a bare
+    # Path(...) coercion crashed non-path roots with a TypeError,
+    # read an empty string as the current directory, and let a
+    # creation diff silently materialise a missing root.
+    root = sandbox.validate_candidate_dir(root, name="root")
     changed: list[str] = []
     staged: dict[Path, _Staged] = {}
 
