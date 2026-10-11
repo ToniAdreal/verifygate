@@ -13,7 +13,12 @@ returns a plan with no diff, and the repair loop stops cleanly.
 
 from __future__ import annotations
 
-from .llm import LLMAdapter
+from .llm import (
+    LLMAdapter,
+    validate_brief,
+    validate_check_results,
+    validate_failing_evidence,
+)
 
 # The known-good slugify fix for the bundled sample, as a unified diff
 # against samples/failing/stringtools.py. Deterministic by construction.
@@ -58,6 +63,10 @@ class MockLLMAdapter(LLMAdapter):
     name = "mock-deterministic"
 
     def generate_patch(self, brief: str, failing_evidence: dict | None = None) -> str:
+        # Method arguments are validated at the method (v1.52.0):
+        # a non-string brief used to crash here with AttributeError.
+        brief = validate_brief(brief)
+        failing_evidence = validate_failing_evidence(failing_evidence)
         if "slugify" in brief.lower():
             return _SAMPLE_SLUGIFY_DIFF
         if "cart" in brief.lower():
@@ -69,24 +78,32 @@ class MockLLMAdapter(LLMAdapter):
             "then let the deterministic checks decide whether it worked.",
         ]
         if failing_evidence:
-            failed = [c["name"] for c in failing_evidence.get("checks", [])
-                      if c.get("verdict") == "FAIL"]
+            checks = failing_evidence.get("checks", [])
+            if not isinstance(checks, list):
+                checks = []
+            failed = [str(c.get("name") or "(unnamed check)")
+                      for c in checks
+                      if isinstance(c, dict) and c.get("verdict") == "FAIL"]
             if failed:
                 lines.append(f"Previous failures to address: {', '.join(failed)}")
         return "\n".join(lines)
 
     def explain_failure(self, check_results: list[dict]) -> str:
-        failed = [c for c in check_results if c["verdict"] == "FAIL"]
+        check_results = validate_check_results(check_results)
+        failed = [c for c in check_results if c.get("verdict") == "FAIL"]
         if not failed:
             return "All checks passed; no diagnosis required."
         out = ["## Diagnosis (mock, template-rendered from real check output)"]
         for c in failed:
-            out.append(f"\n### {c['name']} — `{c['command']}`")
+            out.append(
+                f"\n### {c.get('name') or '(unnamed check)'}"
+                f" — `{c.get('command') or ''}`")
             if c.get("timed_out"):
                 out.append(f"Timed out before completing (exit code: none).")
             else:
-                out.append(f"Exit code: {c['exit_code']}.")
-            tail = (c.get("stderr_tail") or c.get("stdout_tail") or "").strip()
+                out.append(f"Exit code: {c.get('exit_code')}.")
+            tail = (c.get("stderr_tail") or c.get("stdout_tail") or "")
+            tail = tail.strip() if isinstance(tail, str) else ""
             if tail:
                 last = tail.splitlines()[-1] if tail.splitlines() else ""
                 out.append(f"Key output line: `{last[:200]}`")

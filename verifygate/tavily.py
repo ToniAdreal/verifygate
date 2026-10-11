@@ -89,6 +89,32 @@ _ERROR_LIMIT = 200
 MAX_TIMEOUT_S = 3600
 MAX_API_KEY_CHARS = 512
 
+# Ceiling for a lookup query (v1.52.0). Queries are built by
+# diagnosis_query from one failing check's last output line (at
+# most ~160 characters); the ceiling is generous over that and far
+# under anything a search API would accept as a query string.
+MAX_QUERY_CHARS = 1000
+
+
+def _query_problem(query) -> str | None:
+    """Why ``query`` cannot be looked up, or None when it can.
+
+    Lookup-argument validation (v1.52.0): ``lookup`` took its query
+    on trust — the mock crashed on a non-string with a ``TypeError``
+    (violating the lookup contract, *implementations must not
+    raise*), and the real adapter sent a non-string verbatim as the
+    JSON body's ``query``. An unusable query now degrades exactly
+    like a failed lookup: no references, the reason on
+    ``last_error``, never an exception.
+    """
+    if not isinstance(query, str):
+        return (f"lookup query must be a string "
+                f"(got {type(query).__name__}); references skipped")
+    if len(query) > MAX_QUERY_CHARS:
+        return (f"lookup query exceeds the maximum of "
+                f"{MAX_QUERY_CHARS} characters; references skipped")
+    return None
+
 
 def validate_timeout_s(timeout_s, name: str = "timeout_s"):
     """Validate an adapter constructor's ``timeout_s`` (v1.44.0).
@@ -225,6 +251,10 @@ class MockReferenceLookup(ReferenceLookup):
 
     def lookup(self, query: str, max_results: int = 3) -> list[dict]:
         self.last_error = None
+        problem = _query_problem(query)
+        if problem is not None:
+            self.last_error = problem
+            return []
         return [
             {
                 "title": "Mock reference (Judge Mode): Python documentation",
@@ -291,6 +321,10 @@ class TavilyReferenceLookup(ReferenceLookup):
 
     def lookup(self, query: str, max_results: int = 3) -> list[dict]:
         self.last_error = None
+        problem = _query_problem(query)
+        if problem is not None:
+            self.last_error = problem
+            return []
         if not self.api_key:
             self.last_error = (
                 "TAVILY_API_KEY is not set; references skipped "
@@ -325,11 +359,26 @@ class TavilyReferenceLookup(ReferenceLookup):
 
 
 def diagnosis_query(check_results: list[dict]) -> str:
-    """Build a search query from the first failing check's key output line."""
+    """Build a search query from the first failing check's key output line.
+
+    Tolerant by design (and, since v1.52.0, tolerant of the whole
+    input shape, not just missing fields): a non-list input, a
+    non-object entry, or a non-string tail/command yields no query
+    rather than an exception — the query is commentary plumbing,
+    and a malformed one must never break the run asking for it.
+    """
+    if not isinstance(check_results, (list, tuple)):
+        return ""
     for c in check_results:
+        if not isinstance(c, dict):
+            continue
         if c.get("verdict") == "FAIL":
-            tail = (c.get("stderr_tail") or c.get("stdout_tail") or "").strip()
-            lines = tail.splitlines()
+            tail = (c.get("stderr_tail") or c.get("stdout_tail") or "")
+            if not isinstance(tail, str):
+                tail = ""
+            lines = tail.strip().splitlines()
             last = lines[-1] if lines else (c.get("command") or "")
+            if not isinstance(last, str):
+                last = ""
             return f"{last[:120]} — error reference and current documentation"
     return ""

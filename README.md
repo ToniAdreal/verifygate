@@ -586,6 +586,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.52.0 — adapter-method argument validation: the
+adapters themselves were validated at the entry
+points (1.42.0), but their two advisory methods
+took their arguments on trust. A non-string brief
+crashed the mock adapter with an `AttributeError`
+and was silently stringified by the real adapter
+into a paid prompt ("Task brief: 123"); an
+over-long brief bloated that prompt without
+bound; a non-dict `failing_evidence` crashed on
+`.items()` and a non-JSON-serializable one in
+`json.dumps`; a non-list `check_results` crashed
+`explain_failure` with a `TypeError` and an entry
+missing `verdict` with a `KeyError`. A non-string
+lookup query crashed the mock lookup — whose
+contract is *must not raise* — and was sent
+verbatim to the real Tavily API as the JSON
+body's `query`; `diagnosis_query` crashed on a
+non-list input despite tolerating missing fields
+since the beginning. The LLM methods now raise
+one `ValueError` for a malformed argument before
+any model call (brief = a string within the
+spec's own brief ceiling; an entry missing
+`verdict` simply is not a failure), lookups
+degrade on an unusable query exactly like a
+failed lookup (no references, the reason on
+`last_error`), and `diagnosis_query` tolerates
+the whole input shape. 67 new tests (1583 total).
 1.51.0 — check-execution argument validation:
 `sandbox.run_command`, the one execution primitive
 every verdict passes through, validated its

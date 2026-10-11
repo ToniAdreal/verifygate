@@ -113,7 +113,12 @@ import sys
 import urllib.request
 
 from .evidence import MAX_FINISH_REASON_CHARS, MAX_MODEL_CHARS
-from .llm import LLMAdapter
+from .llm import (
+    LLMAdapter,
+    validate_brief,
+    validate_check_results,
+    validate_failing_evidence,
+)
 
 BASE_URL = "https://api.tokenfactory.nebius.com/v1/chat/completions"
 ALLOWED_HOSTS = ["api.tokenfactory.nebius.com"]
@@ -358,19 +363,33 @@ class TokenFactoryAdapter(LLMAdapter):
     # -- the two advisory jobs -------------------------------------------
 
     def generate_patch(self, brief: str, failing_evidence: dict | None = None) -> str:
+        # Method arguments are validated at the method (v1.52.0):
+        # a non-string brief used to be stringified verbatim into
+        # this paid prompt ("Task brief: 123"), a non-dict evidence
+        # crashed on .items(), and a non-JSON-serializable evidence
+        # value crashed in json.dumps — all before, or instead of,
+        # the one clean ValueError a caller bug deserves, and the
+        # brief itself was unbounded.
+        brief = validate_brief(brief)
+        failing_evidence = validate_failing_evidence(failing_evidence)
         user = (
             f"Task brief:\n{brief}\n\n"
             "Propose the minimal code change that satisfies the brief."
         )
         if failing_evidence:
-            user += (
-                "\n\nA previous candidate failed these deterministic checks; "
-                "address the failures:\n"
-                + json.dumps(
+            try:
+                evidence_json = json.dumps(
                     {k: v for k, v in failing_evidence.items()
                      if k not in ("candidate_files", "patch_error")},
                     indent=2,
-                )[:6000]
+                )
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "failing_evidence must be JSON-serializable") from None
+            user += (
+                "\n\nA previous candidate failed these deterministic checks; "
+                "address the failures:\n"
+                + evidence_json[:6000]
             )
             if failing_evidence.get("patch_error"):
                 user += (
@@ -382,6 +401,8 @@ class TokenFactoryAdapter(LLMAdapter):
                     "every line from the file contents below verbatim."
                 )
             files = failing_evidence.get("candidate_files") or {}
+            if not isinstance(files, dict):
+                files = {}
             for path, content in files.items():
                 user += f"\n\nCurrent contents of {path}:\n```\n{content}\n```"
         user += (
@@ -417,13 +438,19 @@ class TokenFactoryAdapter(LLMAdapter):
         )
 
     def explain_failure(self, check_results: list[dict]) -> str:
-        failed = [c for c in check_results if c["verdict"] == "FAIL"]
+        check_results = validate_check_results(check_results)
+        failed = [c for c in check_results if c.get("verdict") == "FAIL"]
+        try:
+            failed_json = json.dumps(failed, indent=2)
+        except (TypeError, ValueError):
+            raise ValueError(
+                "check_results must be JSON-serializable") from None
         return self._chat(
             "You explain failing software checks to the engineer who owns "
             "the code. Be brief, concrete, and cite the actual commands "
             "and output. Never suggest weakening a check to make it pass.",
             "These deterministic checks failed:\n"
-            + json.dumps(failed, indent=2)[:6000]
+            + failed_json[:6000]
             + "\n\nWrite a short markdown diagnosis: what failed, the most "
               "likely cause, and the smallest next fix to try.",
             purpose="explain_failure",

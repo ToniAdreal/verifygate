@@ -34,6 +34,77 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from .spec import MAX_BRIEF_CHARS
+
+
+def _bounded_repr(value) -> str:
+    desc = repr(value)
+    if len(desc) > 80:
+        desc = desc[:77] + "..."
+    return desc
+
+
+def validate_brief(brief, name: str = "brief") -> str:
+    """Return ``brief`` if it is a usable task brief, else raise.
+
+    Adapter-method argument validation (v1.52.0): the entry points
+    validate the adapters themselves (v1.42.0), but the two advisory
+    methods took their *arguments* on trust. A non-string brief
+    crashed the mock adapter with an ``AttributeError`` and was
+    silently stringified by the real adapter into a paid prompt
+    (``Task brief: 123`` / ``Task brief: None``); an over-long brief
+    bloated that prompt without bound. A brief must now be a string
+    of at most :data:`MAX_BRIEF_CHARS` — the ceiling the spec parser
+    already enforces, so a brief taken from a validated spec always
+    passes — and anything else is a ``ValueError`` before any model
+    call is made. An empty brief stays legal: a spec's brief may be
+    empty, and the mock renders it as ``(no brief)``.
+    """
+    if not isinstance(brief, str) or len(brief) > MAX_BRIEF_CHARS:
+        raise ValueError(
+            f"{name} must be a string of at most "
+            f"{MAX_BRIEF_CHARS} characters, got {_bounded_repr(brief)}")
+    return brief
+
+
+def validate_failing_evidence(evidence, name: str = "failing_evidence"):
+    """Return ``evidence`` if it is a dict or None, else raise.
+
+    Part of the v1.52.0 adapter-method argument validation: the
+    real adapter read ``failing_evidence.items()`` / ``.get()``
+    unguarded, so a list (or any non-dict) crashed
+    ``generate_patch`` with an ``AttributeError`` before the call.
+    The repair loop always passes a dict it built itself; a direct
+    caller passing anything else now gets a ``ValueError``.
+    """
+    if evidence is not None and not isinstance(evidence, dict):
+        raise ValueError(
+            f"{name} must be an object or None, "
+            f"got {_bounded_repr(evidence)}")
+    return evidence
+
+
+def validate_check_results(check_results, name: str = "check_results"):
+    """Return ``check_results`` as a list of objects, else raise.
+
+    Part of the v1.52.0 adapter-method argument validation: both
+    adapters filtered their input with ``c["verdict"]``, so a
+    non-list crashed with a ``TypeError``, a string iterated into
+    characters, and an entry missing ``verdict`` crashed with a
+    ``KeyError``. The value must now be a list (or tuple) of
+    objects; anything else is a ``ValueError`` before any work.
+    A missing ``verdict`` *inside* an entry is not an error: the
+    entry simply is not a failure, exactly as
+    ``tavily.diagnosis_query`` has always tolerated entries with
+    missing fields — the adapters now read it with ``.get`` too.
+    """
+    if not isinstance(check_results, (list, tuple)) or any(
+            not isinstance(c, dict) for c in check_results):
+        raise ValueError(
+            f"{name} must be a list of check-result objects, "
+            f"got {_bounded_repr(check_results)}")
+    return list(check_results)
+
 
 def validate_llm(llm, name: str = "llm"):
     """Validate an LLM adapter argument (v1.42.0).
