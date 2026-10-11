@@ -38,6 +38,33 @@ instead of feeding the rejection back and stopping cleanly. The
 harness verifies text source files; a diff against binary content
 is a clean rejection, never a crash.
 
+Patch-input bound (since v1.37.0): the patch *text itself* is
+bounded by :data:`MAX_PATCH_TEXT_CHARS`, enforced in
+:func:`parse_patch` before a single line is parsed. Before this,
+the repair loop *applied* a proposal of any size but *stored*
+only its first 8,000 characters in the repair report — so a
+valid proposal longer than the stored cap applied, passed, and
+sealed a PASS report whose recorded patch was a truncated
+fragment: ``verify`` reported the report INTACT (the fragment
+is within the stored cap), yet ``verifygate replay`` could not
+reconstruct the attempt from it (reproduced with a 9,413-char
+valid diff: replay's attempt-1 tree and verdict did not match).
+An applied patch must be the patch the report carries, in
+full, or the record's replay promise is false. The ceiling is
+therefore now the *application* ceiling as well as the stored
+ceiling, and it is generous: 65,536 characters covers a full
+maximum-token model response (the real adapter's patch budget
+is 8,192 tokens) with headroom, and the committed real-mode
+patches peak at 571 characters. A longer proposal raises
+:class:`PatchError` like any other inapplicable diff — the
+repair loop preserves it (truncated to the same cap) as a
+rejected patch, feeds the size error back, and the model can
+retry with a smaller diff within ``max_rounds``; replay only
+ever applies stored patches, which are within the cap by
+construction. A non-string patch text is likewise a
+:class:`PatchError`, never a ``TypeError`` from ``len`` /
+``splitlines``.
+
 Patch-result bounds (since v1.25.0): the *result* of a patch is
 bounded by the sandbox's candidate ceilings
 (``MAX_CANDIDATE_FILES`` / ``MAX_CANDIDATE_BYTES``). Before this,
@@ -68,6 +95,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import sandbox
+
+
+# The patch-proposal ceiling (v1.37.0): the largest patch text
+# parse_patch / apply_patch will accept, and — because repair.py
+# re-exports it as the repair report's stored cap — also the
+# largest patch a report can carry. One value for both, by
+# construction: an applied patch is always stored in full, so a
+# report's recorded patches always reconstruct their attempts
+# under replay. Generous, not a target (see the module docstring).
+MAX_PATCH_TEXT_CHARS = 65_536
 
 
 class PatchError(ValueError):
@@ -123,6 +160,15 @@ def _mode_value(line: str) -> int | None:
 
 def parse_patch(text: str) -> list[FilePatch]:
     """Extract file patches from (possibly prose-wrapped) unified diff text."""
+    if not isinstance(text, str):
+        raise PatchError(
+            f"patch text must be a string, not {type(text).__name__}")
+    if len(text) > MAX_PATCH_TEXT_CHARS:
+        raise PatchError(
+            f"patch text exceeds the maximum of {MAX_PATCH_TEXT_CHARS} "
+            f"characters (got {len(text)}); a patch VerifyGate applies "
+            "must fit, in full, in the repair report that records it — "
+            "propose a smaller diff")
     lines = text.splitlines()
     patches: list[FilePatch] = []
     # Git extended headers seen since the last file patch: the paths
@@ -393,6 +439,11 @@ def apply_patch(
     sandbox ceilings at call time — see the module docstring): a
     patch that would grow the candidate past them is a
     :class:`PatchError`, raised before any write.
+
+    The patch text itself must be a string within
+    :data:`MAX_PATCH_TEXT_CHARS` (enforced in :func:`parse_patch`):
+    an oversize or non-string proposal is a :class:`PatchError`
+    before anything is parsed, staged, or written.
     """
     if max_files is None:
         max_files = sandbox.MAX_CANDIDATE_FILES

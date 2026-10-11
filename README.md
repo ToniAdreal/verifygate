@@ -574,6 +574,22 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.37.0 — patch-input bound: the repair loop applied a
+proposal of any size but stored only its first 8,000
+characters in the report, so a valid 9,413-character diff
+applied, passed, and verified INTACT while its recorded
+patch was a truncated fragment replay could not reconstruct
+the attempt from — the report's replay promise was false for
+exactly the patches too large to store. The patch text is
+now bounded at the applier, before parsing, by one generous
+ceiling (65,536 characters — a full maximum-token model
+response with headroom; committed real-mode patches peak at
+571) that is also the stored cap and `verify`'s mirror: an
+oversize proposal is a clean `PatchError` rejection (stored
+truncated, fed back, retried within the round budget), and
+every applied patch is stored in full and replays. A
+non-string patch text is likewise a `PatchError`, never a
+`TypeError`. 8 new tests (677 total).
 1.36.0 — JSON input file bounds: every loader read its file
 in full with no size bound, while every field inside those
 documents was already capped — a spec file padded to 5 MiB

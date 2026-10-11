@@ -67,6 +67,20 @@ inflating a committed report's preserved patch, its rejection
 error, its changed-file list, or its usage snapshot to
 500,000-character strings still verified INTACT.
 
+Patch-input bound (v1.37.0): the stored cap above was only a
+*storage* truncation — the loop applied the proposal in full,
+so a valid proposal longer than the cap (then 8,000 characters)
+produced a PASS report carrying a truncated fragment of the
+patch that actually passed, and replay could not reconstruct
+the attempt from the fragment. ``MAX_PATCH_TEXT_CHARS`` is now
+defined in ``patch.py`` (re-exported here), raised to a
+generous 65,536, and enforced by the applier *before* parsing:
+an oversize proposal is a ``PatchError`` rejection — preserved
+below truncated to the cap, fed back, retried within
+``max_rounds`` — so every applied patch is stored in full and
+every report this loop emits replays from its own recorded
+patches.
+
 Usage sealing normalisation (v1.35.0): the report-level copies of
 adapter-supplied metadata — the credited ``llm_adapter`` name, each
 patch linkage's ``llm_usage`` snapshot, and the
@@ -111,7 +125,7 @@ from .evidence import (
     update_replay_command,
 )
 from .llm import LLMAdapter
-from .patch import PatchError, apply_patch
+from .patch import MAX_PATCH_TEXT_CHARS, PatchError, apply_patch
 from .runner import run_verification
 from .sandbox import iter_candidate_files, prepare_workspace
 from .spec import TaskSpec
@@ -130,7 +144,10 @@ MAX_ROUNDS = 10
 # a stored patch error (an applier rejection, whose text embeds
 # the offending path, or a generation failure) is truncated to
 # this many. ``verify`` mirrors both caps — see its docstring.
-MAX_PATCH_TEXT_CHARS = 8000
+# Since v1.37.0 the text cap is defined in patch.py and is also
+# the applier's input ceiling, so the truncation below can only
+# ever cut a *rejected* proposal (oversize, or no diff in it) —
+# an applied proposal is within the cap and stored in full.
 MAX_PATCH_ERROR_CHARS = 2000
 
 
