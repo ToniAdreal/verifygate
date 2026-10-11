@@ -574,6 +574,25 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.38.0 — mode validation: the run mode was validated only
+by the CLI's argparse choices — every library entry point
+accepted any value verbatim and sealed it into the record
+header and the replay string, so mode `bogus`, `judge `
+(trailing space), an empty string, `None`, a number, or a
+shell fragment (`judge; echo pwned` — a second command
+smuggled into the string a reader is told to copy and run)
+produced a fully-run PASS record that failed its own
+verification the moment it was written, a repair report
+full of such records, and a CLI adapter factory that
+silently treated any non-`judge` mode — including one read
+from a record's own untrusted header on the replay path —
+as real mode, selecting paid adapters instead of reporting
+a usage error. The runner, the repair loop, replay, and
+the adapter factory now validate through one helper
+(`evidence.validate_mode`) before any workspace is
+prepared, any check runs, or any adapter is chosen: an
+invalid mode is a `ValueError` (CLI exit 2), never a run.
+82 new tests (759 total).
 1.37.0 — patch-input bound: the repair loop applied a
 proposal of any size but stored only its first 8,000
 characters in the report, so a valid 9,413-character diff

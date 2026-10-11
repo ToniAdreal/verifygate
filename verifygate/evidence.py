@@ -226,6 +226,17 @@ an over-long or empty configured model id at construction
 (``ValueError``, which the CLI maps to its exit-2 adapter error).
 Every first-party value is far below every cap, so honest records
 are sealed byte-identical.
+
+Mode validation (v1.38.0): the run ``mode`` was the mirror image
+of all of the above — the structure check has always required the
+header mode to be ``judge`` or ``real``, but nothing on the
+emitting side enforced it except the CLI's argparse choices. The
+runner, the repair loop, replay, and the CLI's adapter factory
+(which silently treated any non-``judge`` value as real) now all
+validate through :func:`validate_mode` before any work happens,
+so an invalid mode — including a shell fragment interpolated into
+the replay string — is a usage error, never a sealed record. See
+:func:`validate_mode`.
 """
 
 from __future__ import annotations
@@ -551,8 +562,40 @@ def update_replay_command(record: dict, replay_command: str) -> None:
             hashlib.sha256).hexdigest()
 
 
-_MODES = ("judge", "real")
+MODES = ("judge", "real")
+_MODES = MODES
 _USAGE_TOKEN_KEYS = {"prompt_tokens", "completion_tokens", "total_tokens"}
+
+
+def validate_mode(mode) -> str:
+    """Return ``mode`` if it is a run mode, else raise ``ValueError``.
+
+    Mode validation (v1.38.0): the run mode was the one run parameter
+    validated only by the CLI's argparse ``choices`` — every library
+    entry point (the runner, the repair loop, replay, and the CLI's
+    own adapter factory, which treated any non-``judge`` value as
+    real mode) accepted any value verbatim. An invalid mode was
+    sealed into the record header and interpolated raw into the
+    record's ``replay`` string, so a run with mode ``bogus`` — or
+    ``judge; echo pwned``, a shell injection into the command a
+    reader is told to copy and run — produced a PASS record that
+    failed its own verification the moment it was written (the
+    structure check requires the header mode to be a real mode and
+    the replay string to match a template ending in a real mode),
+    after every check had already run. The entry points now call
+    this helper before any check runs or any adapter is chosen, so
+    an invalid mode is a usage error (``ValueError``, CLI exit 2),
+    never a run. ``build_record`` itself stays a permissive
+    assembler, as in earlier rounds: the structure mirror in
+    :func:`verify_chain` is what judges a record sealed over an
+    invalid mode, however it was produced.
+    """
+    if mode not in MODES:
+        desc = repr(mode)
+        if len(desc) > 80:
+            desc = desc[:77] + "..."
+        raise ValueError(f"mode must be 'judge' or 'real', got {desc}")
+    return mode
 
 
 def _is_int(value) -> bool:

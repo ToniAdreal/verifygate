@@ -45,6 +45,14 @@ from .webview import render_document
 
 
 def _adapters(mode: str, model: str | None = None):
+    # The mode is validated, never assumed (v1.38.0): before this,
+    # any non-"judge" value silently selected the real adapters —
+    # including the replay path's mode, which comes from a record's
+    # own (untrusted) header — so a bogus mode could trigger real,
+    # paid Token Factory calls instead of a usage error.
+    from .evidence import validate_mode
+
+    validate_mode(mode)
     if mode == "judge":
         return MockLLMAdapter(), MockReferenceLookup()
     from .tokenfactory import TokenFactoryAdapter

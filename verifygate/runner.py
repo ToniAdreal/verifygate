@@ -54,6 +54,20 @@ record the v1.29.0 structure mirror rejects). Both notes now pass
 through :func:`_cap_error` on this sealing path, so every sealed
 note is within ``MAX_ERROR_CHARS`` by construction.
 
+Mode validation (v1.38.0): the run ``mode`` is validated here, at
+the one sealing path's entry (``evidence.validate_mode``), before
+any workspace is prepared or any check runs. Before this, the
+mode was validated only by the CLI's argparse choices: a library
+caller passing ``bogus``, ``REAL``, ``judge `` (trailing space),
+an empty string, ``None``, a number, or a shell fragment
+(``judge; echo pwned``) got a fully-run PASS/FAIL whose record
+failed its own verification instantly — the header mode is not a
+real mode, and the replay string (which interpolates the mode
+raw) matches no template; the fragment form also smuggled a
+second shell command into the replay string a reader is told to
+copy and run. An invalid mode is now a ``ValueError`` before any
+work happens (the CLI maps it to its exit-2 usage error).
+
 Usage sealing normalisation (v1.35.0): the last verbatim inputs on
 this path were the adapter-supplied names (``llm.name`` /
 ``references.name``, sealed into the diagnosis entry) and the
@@ -82,6 +96,7 @@ from .evidence import (
     normalise_usage_calls,
     quote_label,
     tree_hash,
+    validate_mode,
 )
 from .llm import LLMAdapter
 from .sandbox import prepare_workspace
@@ -172,6 +187,10 @@ def run_verification(
     spec_label: str,
     candidate_label: str,
 ) -> dict:
+    # Fail fast on an invalid mode (v1.38.0): no workspace, no
+    # checks, no adapter calls for a run whose record could never
+    # verify (see the module docstring).
+    validate_mode(mode)
     workspace = prepare_workspace(candidate_dir)
     try:
         results = run_checks(spec, workspace)

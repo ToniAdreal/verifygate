@@ -40,7 +40,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from .evidence import tree_hash, verify_chain
+from .evidence import tree_hash, validate_mode, verify_chain
 from .llm import LLMAdapter
 from .patch import PatchError, apply_patch
 from .runner import run_verification
@@ -113,10 +113,14 @@ def replay_document(
 ) -> list[dict]:
     """Replay a record / repair report; one result dict per record.
 
-    Raises ValueError for non-VerifyGate input (via ``collect_records``).
+    Raises ValueError for non-VerifyGate input (via ``collect_records``)
+    and for an invalid ``mode`` (v1.38.0 — validated before any record
+    is replayed; the CLI's replay mode can come from a record's own
+    header, an untrusted field, so it must never be trusted verbatim).
     Reconstruction copies are removed before returning; the caller's
     candidate directory is never modified.
     """
+    validate_mode(mode)
     pairs = collect_records(data)
     is_report = isinstance(data, dict) and "attempts" in data
     results: list[dict] = []

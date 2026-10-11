@@ -123,6 +123,7 @@ from .evidence import (
     normalise_usage_calls,
     quote_label,
     update_replay_command,
+    validate_mode,
 )
 from .llm import LLMAdapter
 from .patch import MAX_PATCH_TEXT_CHARS, PatchError, apply_patch
@@ -216,6 +217,13 @@ def run_repair(
     candidate_label: str,
     max_rounds: int = 3,
 ) -> dict:
+    # The mode is validated the same way, before any verification
+    # run (v1.38.0): the loop seals it into every attempt's header
+    # and into its own report summary, so an invalid mode would
+    # otherwise run the whole loop and deliver a report whose every
+    # record fails verification. The runner validates it too; this
+    # is the loop's own fail-fast, beside its budget validation.
+    validate_mode(mode)
     # bool is an int subclass: JSON true would otherwise become a
     # 1-round budget whose report then fails verify's non-bool-int
     # rule; a float would silently allow more rounds than stated; a
