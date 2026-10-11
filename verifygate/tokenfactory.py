@@ -35,6 +35,24 @@ sealed call's model at ``MAX_MODEL_CHARS``, so a response naming a
 500,000-character "model" would otherwise be recorded verbatim and
 seal a record that fails its own verification.
 
+Finish-reason normalisation (v1.34.0): one recorded field still
+escaped both hardenings above — ``finish_reason`` was copied from
+the decoded response into the usage log verbatim, with no type or
+length check at all. The evidence structure check caps a sealed
+call's ``finish_reason`` at ``MAX_FINISH_REASON_CHARS`` and
+requires it to be a string or ``None``, so an API response carrying
+``finish_reason: 123``, an object, a list, ``true``, or a
+500,000-character string produced a usable completion whose call
+was then sealed into a record that fails its own verification —
+the exact failure the v1.18.0 / v1.29.0 work closed for the usage
+counts and the model name. ``_response_parts`` now normalises it
+the same way the model name is handled: a string within the cap is
+kept verbatim (``"stop"``, ``"length"``, …), anything else is
+recorded as ``None`` — the neutral value the structure check
+already accepts for an unstated finish reason — instead of being
+allowed to poison the sealed record. The completion itself, the
+part that matters, is unaffected either way.
+
 Nothing in here can affect a verdict; it only produces advisory text.
 """
 
@@ -45,7 +63,7 @@ import os
 import sys
 import urllib.request
 
-from .evidence import MAX_MODEL_CHARS
+from .evidence import MAX_FINISH_REASON_CHARS, MAX_MODEL_CHARS
 from .llm import LLMAdapter
 
 BASE_URL = "https://api.tokenfactory.nebius.com/v1/chat/completions"
@@ -119,17 +137,26 @@ class TokenFactoryAdapter(LLMAdapter):
     # -- chat plumbing ----------------------------------------------------
 
     @staticmethod
-    def _response_parts(data) -> tuple[dict, dict, dict]:
+    def _response_parts(data) -> tuple[dict, dict, dict, str | None]:
         """Validate one decoded chat response; return its usable parts.
 
-        Returns ``(choice, message, usage)`` where ``usage`` is a
-        fresh dict carrying exactly the three token counts, each a
-        non-negative int or ``None`` when the API did not return it —
-        the only shape the evidence chain's consistency rules accept
-        for a sealed call. Any other shape raises ``RuntimeError``:
-        a malformed response is a clean adapter error, never an
-        unhandled ``AttributeError`` traceback and never a nonsense
-        usage entry sealed into a record (see module docstring).
+        Returns ``(choice, message, usage, finish_reason)`` where
+        ``usage`` is a fresh dict carrying exactly the three token
+        counts, each a non-negative int or ``None`` when the API did
+        not return it — the only shape the evidence chain's consistency
+        rules accept for a sealed call. Any other shape raises
+        ``RuntimeError``: a malformed response is a clean adapter
+        error, never an unhandled ``AttributeError`` traceback and
+        never a nonsense usage entry sealed into a record (see module
+        docstring).
+
+        ``finish_reason`` is *normalised*, not validated (v1.34.0):
+        it is descriptive metadata with a neutral fallback, exactly
+        like the model name in :meth:`_chat`. A string within
+        ``MAX_FINISH_REASON_CHARS`` is returned verbatim; a
+        non-string or over-long value becomes ``None``, so a usable
+        completion is never recorded with a finish reason the
+        evidence chain would reject at sealing time.
         """
         def malformed() -> RuntimeError:
             return RuntimeError(
@@ -163,7 +190,11 @@ class TokenFactoryAdapter(LLMAdapter):
                     or value < 0):
                 raise malformed()
             usage[field] = value
-        return choice, message, usage
+        finish_reason = choice.get("finish_reason")
+        if not (isinstance(finish_reason, str)
+                and len(finish_reason) <= MAX_FINISH_REASON_CHARS):
+            finish_reason = None
+        return choice, message, usage, finish_reason
 
     def _chat(self, system: str, user: str, *, purpose: str, max_tokens: int) -> str:
         body = {
@@ -181,7 +212,8 @@ class TokenFactoryAdapter(LLMAdapter):
         last_finish = None
         for _attempt in range(2):
             data = self._transport(body)
-            choice, message, usage = self._response_parts(data)
+            choice, message, usage, finish_reason = \
+                self._response_parts(data)
             # Reasoning models may place the answer in
             # reasoning_content when content is empty; accept either.
             # Both were validated as strings (or absent) above.
@@ -196,12 +228,16 @@ class TokenFactoryAdapter(LLMAdapter):
                        and len(model) <= MAX_MODEL_CHARS
                        else self.model,
                 "purpose": purpose,
-                "finish_reason": choice.get("finish_reason"),
+                # Normalised in _response_parts (v1.34.0): a string
+                # within the evidence cap, else None — never the
+                # raw API value, which could be a non-string or an
+                # over-long string the sealed record would reject.
+                "finish_reason": finish_reason,
                 "usage": usage,
             })
             if content.strip():
                 return content
-            last_finish = choice.get("finish_reason")
+            last_finish = finish_reason
         raise RuntimeError(
             f"Token Factory returned an empty completion for {purpose} "
             f"(finish_reason={last_finish!r}) after one retry; "

@@ -574,6 +574,18 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.34.0 — Token Factory finish-reason normalisation: the
+real adapter recorded a response's `finish_reason` verbatim —
+the one decoded field the v1.18.0 response-shape hardening and
+the v1.29.0 model-name cap both missed — so a response carrying
+an int, object, list, bool, or 500,000-character finish reason
+produced a usable completion whose call was sealed into a
+record that failed its own verification (the structure check
+requires a string within 100 characters, or None). The adapter
+now normalises the field when the response is decoded, exactly
+like the model name: a string within the cap is kept verbatim,
+anything else is recorded as None, and a record sealed over any
+finish-reason shape verifies. 36 new tests (613 total).
 1.33.0 — check-result numeric bounds: a check entry's
 numbers were the last unbounded values in a record — its
 duration was checked only as a non-negative int (a record
