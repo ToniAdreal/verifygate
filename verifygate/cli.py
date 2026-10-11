@@ -28,7 +28,7 @@ from pathlib import Path
 from . import __version__
 from .mock_llm import MockLLMAdapter
 from .replay import replay_document, replay_ok
-from .repair import run_repair
+from .repair import MAX_ROUNDS, run_repair
 from .runner import run_verification, write_record
 from .sandbox import _IGNORE
 from .spec import SpecError, load_spec
@@ -68,7 +68,8 @@ def main(argv: list[str] | None = None) -> int:
                        help="real mode: Token Factory model id "
                             "(default: NEBIUS_MODEL or Nemotron 3 Nano)")
     rep_p.add_argument("--max-rounds", type=int, default=3,
-                       help="maximum patch attempts (default: 3)")
+                       help=f"maximum patch attempts (default: 3, "
+                            f"maximum: {MAX_ROUNDS})")
     rep_p.add_argument("--out", default=None,
                        help="repair report path (default: repair-<spec>.json)")
     rep_p.add_argument("--patched-out", default=None,
@@ -285,8 +286,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if record["verdict"] == "PASS" else 1
 
     if args.command == "repair":
-        if args.max_rounds < 0:
-            print("usage error: --max-rounds must be >= 0", file=sys.stderr)
+        if not 0 <= args.max_rounds <= MAX_ROUNDS:
+            print(f"usage error: --max-rounds must be between 0 and "
+                  f"{MAX_ROUNDS}", file=sys.stderr)
             return 2
         try:
             spec = load_spec(args.spec)

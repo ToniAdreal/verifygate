@@ -25,6 +25,22 @@ chain v3 the ``replay`` field is sealed into the record hash, so the
 correction goes through ``evidence.update_replay_command`` — the one
 sanctioned post-seal edit, which re-seals the record it touches.
 
+Round-budget validation (v1.22.0): ``max_rounds`` is validated the
+way spec timeouts have been since v1.7.0 — a real ``int`` (JSON
+``true`` is an ``int`` subclass and used to slip through as 1), in
+range ``0..MAX_ROUNDS``. Before this, the only check was
+``max_rounds < 0``: a bool or float budget produced a report whose
+own ``max_rounds`` verification rejects (``verify`` requires a
+non-bool int), so the loop happily emitted reports that fail their
+own verification; a string or ``None`` crashed the comparison with
+an unhandled ``TypeError`` instead of the documented ``ValueError``;
+a float budget of 2.5 silently allowed 3 rounds; and there was no
+upper bound at all — ``--max-rounds 1000000000`` was accepted
+verbatim, each round being a paid Token Factory call plus a full
+re-verification, with a full evidence record embedded per attempt.
+``verify``'s narrative check mirrors the bound: a report claiming a
+budget above ``MAX_ROUNDS`` is not one this loop can have produced.
+
 Generation resilience (v1.20.0): ``llm.generate_patch`` is guarded
 exactly like the diagnosis call in the runner. Before this, a
 generation failure — a network error, a malformed Token Factory
@@ -60,6 +76,13 @@ from .runner import run_verification
 from .sandbox import iter_candidate_files, prepare_workspace
 from .spec import TaskSpec
 from .tavily import ReferenceLookup
+
+# A generous ceiling, not a target: the default is 3, and every round
+# costs one LLM patch call plus a full re-verification, with a full
+# evidence record embedded per attempt. The bound exists so a typo'd
+# or adversarial budget cannot loop (and, in real mode, bill) without
+# limit — the same reasoning that caps a check's timeout at 3600s.
+MAX_ROUNDS = 10
 
 
 def _check_dicts(record: dict) -> list[dict]:
@@ -127,8 +150,14 @@ def run_repair(
     candidate_label: str,
     max_rounds: int = 3,
 ) -> dict:
-    if max_rounds < 0:
-        raise ValueError("max_rounds must be >= 0")
+    # bool is an int subclass: JSON true would otherwise become a
+    # 1-round budget whose report then fails verify's non-bool-int
+    # rule; a float would silently allow more rounds than stated; a
+    # string/None would crash the old ``< 0`` comparison outright.
+    if isinstance(max_rounds, bool) or not isinstance(max_rounds, int) \
+            or not 0 <= max_rounds <= MAX_ROUNDS:
+        raise ValueError(
+            f"max_rounds must be an int between 0 and {MAX_ROUNDS}")
     attempts: list[dict] = []
     current_dir = Path(candidate_dir)
     current_label = candidate_label

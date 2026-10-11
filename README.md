@@ -47,7 +47,13 @@ proposed unified diff to a fresh copy of the candidate (the original is
 never modified; a diff whose context does not match the file on disk is
 rejected, never forced), and re-runs every check from scratch. It stops
 at the first PASS, when no usable patch is produced, or after
-`--max-rounds` patch attempts. The repair report embeds every attempt's
+`--max-rounds` patch attempts. The budget itself is validated like a
+spec timeout (v1.22.0): a real int between 0 and 10 — a bool or float
+budget previously produced a report that fails its own verification
+(and a float silently allowed more rounds than stated), a string
+crashed with a `TypeError`, and an absurd budget was accepted verbatim
+even though every round is a paid model call; `verify` likewise
+rejects a report claiming a budget above the loop maximum. The repair report embeds every attempt's
 full evidence record, so each intermediate verdict stays independently
 replayable. In real mode the same loop drives Nemotron via Token Factory:
 the model proposes diffs, deterministic checks still dispose.
@@ -500,6 +506,22 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.22.0 — round-budget validation: the repair loop's `max_rounds`
+was checked only for `< 0`, so a bool budget (`True` — an `int`
+subclass) or a float (`2.5`) produced a report whose stated budget
+fails `verify`'s own non-bool-int narrative rule: the loop emitted
+reports that fail their own verification, and a float silently
+allowed more rounds than stated (2.5 → 3). A string or `None`
+crashed the comparison with an unhandled `TypeError` instead of
+the documented `ValueError`, and no upper bound existed —
+`--max-rounds 1000000000` was accepted verbatim, each round a paid
+Token Factory call plus a full re-verification with a full evidence
+record per attempt. The budget is now a real int in `0..10`
+(`MAX_ROUNDS`) at the library and the CLI (usage error, exit 2),
+and `verify`'s narrative check mirrors the bound, so a report
+claiming a budget above the loop maximum fails verification and
+the web view flags it in the SUMMARY MISMATCH banner. 19 new
+tests (417 total).
 1.21.0 — replay-label quoting: the runner interpolated the
 caller's spec/candidate paths into the record's `replay` command
 raw, while the metadata template only accepts bare path tokens —

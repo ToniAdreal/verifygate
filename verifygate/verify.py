@@ -83,6 +83,17 @@ now requires every attempt to carry the same sealed ``spec_hash``;
 binding a report to an externally supplied spec (``--spec`` in
 ``verify``, and ``replay``) is unchanged and complementary.
 
+Round-budget bound (v1.22.0): the narrative check also bounds
+``max_rounds`` itself by the loop's ``MAX_ROUNDS``. Before this, the
+field was judged only for shape (a non-negative int) and for the
+rounds-used comparison — so a report claiming a billion-round budget
+verified INTACT even though the loop (which now validates its
+budget) can never have run under one; the CLI accepted such a budget
+verbatim. A stated budget above the loop maximum is a narrative
+problem like any other rewritten field, and the web view flags it
+through the same SUMMARY MISMATCH banner (it renders
+``narrative_problems``).
+
 Generation resilience (v1.20.0): the repair loop's preserved
 ``failed_patch`` gained an ``error_kind`` — ``patch_rejected`` for a
 diff the applier refused, ``generation_failed`` when the adapter
@@ -100,6 +111,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .evidence import tree_hash, verify_chain
+from .repair import MAX_ROUNDS
 
 
 def collect_records(data) -> list[tuple[str, dict]]:
@@ -362,11 +374,15 @@ def narrative_problems(data) -> list[str]:
         if data.get("last_patch_error") != expected_error:
             problems.append("last_patch_error does not match failed_patch")
 
-    # The round budget: rounds used can never exceed it.
+    # The round budget: it must be a budget the loop itself accepts
+    # (a non-negative int no larger than MAX_ROUNDS — see the module
+    # docstring), and rounds used can never exceed it.
     max_rounds = data.get("max_rounds")
     if max_rounds is not None:
         if not _is_round(max_rounds) or max_rounds < 0:
             problems.append("max_rounds is not a non-negative integer")
+        elif max_rounds > MAX_ROUNDS:
+            problems.append("max_rounds exceeds the loop maximum")
         elif derived_rounds is not None and derived_rounds > max_rounds:
             problems.append("rounds used exceed max_rounds")
 
