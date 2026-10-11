@@ -574,6 +574,19 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.31.0 — report-level bounds: a repair report's
+`unsealed_llm_usage` list was totalled by `verify` but never
+bounded — a coordinated edit (inflating the list and the
+stated total together) carrying 5,000 calls with
+500,000-character model strings still verified INTACT, as
+did each attempt's `candidate_dir` inflated to 500,000
+characters. The narrative check now bounds the unsealed list
+by the same sealed-call ceilings as a patch linkage's usage
+snapshot (at most 50 calls, per-field string caps), caps
+every attempt's `candidate_dir` at 1,000 characters, and caps
+the report's own `spec_name` / `llm_adapter` at the sealed
+ceilings as defence in depth, while every committed report
+still verifies. 12 new tests (545 total).
 1.30.0 — repair-report patch bounds: a repair report's patch
 linkage — the preserved `patch_text`, the patch `error`
 strings, the `changed_files` lists, and each linkage's

@@ -114,6 +114,27 @@ the same ceilings ``evidence`` enforces inside a record). The
 committed reports sit far below every cap (patch texts peak at
 571 characters, errors at 92, one changed file, one call).
 
+Report-level bounds (v1.31.0): two unchained report surfaces the
+narrative check never judged at all. The report-level
+``unsealed_llm_usage`` list — calls never sealed into a record —
+was totalled by ``derived_usage_total`` but never bounded: a
+coordinated edit (inflating the list and the stated total
+together) carrying 5,000 calls with 500,000-character model
+strings still verified INTACT, as did each attempt's
+``candidate_dir`` inflated to 500,000 characters (all reproduced).
+The narrative check now bounds both: the unsealed list must pass
+the same sealed-call ceilings as a patch linkage's usage snapshot
+(``_patch_usage_ok`` — at most ``MAX_CALLS_PER_USAGE_ENTRY``
+calls, per-field string caps), and every attempt's
+``candidate_dir``, when present, must be a string of at most
+``MAX_CANDIDATE_DIR_CHARS`` characters. The report's own
+``spec_name`` / ``llm_adapter`` are likewise capped at the sealed
+ceilings (``MAX_SPEC_NAME_CHARS`` / ``MAX_ADAPTER_NAME_CHARS``)
+as defence in depth — they are already cross-checked against the
+sealed attempts, but a bound is cheaper than a comparison the
+reader must trust. Committed reports sit far below every cap
+(unsealed usage peaks at 2 calls; candidate dirs are temp paths).
+
 Generation resilience (v1.20.0): the repair loop's preserved
 ``failed_patch`` gained an ``error_kind`` — ``patch_rejected`` for a
 diff the applier refused, ``generation_failed`` when the adapter
@@ -143,6 +164,7 @@ from .evidence import (
 )
 from .repair import MAX_PATCH_ERROR_CHARS, MAX_PATCH_TEXT_CHARS, MAX_ROUNDS
 from .sandbox import MAX_CANDIDATE_FILES
+from .spec import MAX_SPEC_NAME_CHARS
 
 # Ceilings over a patch linkage's changed-file list (v1.30.0): a
 # patch's staged result must fit inside the candidate file
@@ -151,6 +173,12 @@ from .sandbox import MAX_CANDIDATE_FILES
 # generously at 1,000 characters.
 MAX_CHANGED_FILES = MAX_CANDIDATE_FILES
 MAX_CHANGED_FILE_CHARS = 1000
+
+# Ceiling over an attempt's stated candidate directory (v1.31.0):
+# a filesystem path (a temp workspace or the caller's directory),
+# capped generously at the same 1,000 characters as a changed-file
+# name.
+MAX_CANDIDATE_DIR_CHARS = 1000
 
 
 def collect_records(data) -> list[tuple[str, dict]]:
@@ -386,6 +414,29 @@ def narrative_problems(data) -> list[str]:
         return ["attempts missing or malformed"]
     attempts = data["attempts"]
     adapter = data.get("llm_adapter")
+
+    # Report-level bounds (v1.31.0): the report's own name/adapter
+    # fields and its unsealed usage list, plus each attempt's stated
+    # candidate directory — unchained surfaces judged only when
+    # present, matching the legacy policy below.
+    if isinstance(data.get("spec_name"), str) \
+            and len(data["spec_name"]) > MAX_SPEC_NAME_CHARS:
+        problems.append("report spec_name exceeds the sealed maximum")
+    if isinstance(adapter, str) and len(adapter) > MAX_ADAPTER_NAME_CHARS:
+        problems.append("report llm_adapter exceeds the sealed maximum")
+    unsealed = data.get("unsealed_llm_usage")
+    if unsealed is not None and not _patch_usage_ok(unsealed):
+        problems.append("unsealed_llm_usage exceeds the stored bounds")
+    for attempt in attempts:
+        if not isinstance(attempt, dict):
+            continue
+        cdir = attempt.get("candidate_dir")
+        if cdir is not None and not (
+                isinstance(cdir, str)
+                and len(cdir) <= MAX_CANDIDATE_DIR_CHARS):
+            problems.append(
+                "attempt candidate_dir exceeds the stored bounds")
+            break
 
     # Attempt rounds: the loop numbers the submitted candidate 0 and
     # each applied patch with the round that produced it, in order.
