@@ -135,6 +135,31 @@ sealed attempts, but a bound is cheaper than a comparison the
 reader must trust. Committed reports sit far below every cap
 (unsealed usage peaks at 2 calls; candidate dirs are temp paths).
 
+Report shape bounds (v1.32.0): a repair report's *shape* itself
+was never judged. A single evidence record's top-level fields are
+held to an exact field set (chain v3 seals them; legacy records get
+metadata consistency rules), but a repair report — which is not
+hash-chained at the top level at all — could carry any extra field
+at any level: a 500,000-character string injected as a new
+top-level field, as a new field on an attempt wrapper, or as a new
+field on a patch linkage (applied or preserved) all verified
+INTACT, as did the report's ``kind`` rewritten to anything at all,
+its ``version`` rewritten to a 500,000-character string, and an
+attempt list far longer than the loop's round budget can produce
+(all reproduced). ``narrative_problems`` now judges the shape:
+the top-level keys must be a subset of the fields the loop emits
+(a legacy report that *omits* the fields added later — the
+v0.2.0-era shape carries no ``failed_patch`` /
+``llm_usage_total`` / ``unsealed_llm_usage`` — is a subset, not
+an offence), every attempt wrapper's keys a subset of its six
+emitted fields, every patch linkage's keys a subset of its eight
+emitted fields (the seven base fields plus the v1.20.0
+``error_kind``), ``kind`` when present must be ``repair-report``,
+``version`` when present must be a semver string like the one a
+record carries, and the attempt count must fit the loop's budget
+(at most ``MAX_ROUNDS + 1`` attempts: the submitted candidate
+plus one per round). Every committed report satisfies all of it.
+
 Generation resilience (v1.20.0): the repair loop's preserved
 ``failed_patch`` gained an ``error_kind`` — ``patch_rejected`` for a
 diff the applier refused, ``generation_failed`` when the adapter
@@ -149,6 +174,7 @@ rewritten story. Reports sealed before v1.20.0 carry no
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .evidence import (
@@ -179,6 +205,32 @@ MAX_CHANGED_FILE_CHARS = 1000
 # capped generously at the same 1,000 characters as a changed-file
 # name.
 MAX_CANDIDATE_DIR_CHARS = 1000
+
+# Report shape bounds (v1.32.0, see the module docstring): the exact
+# field vocabularies ``repair.run_repair`` emits. A report or
+# wrapper carrying any other field is not a shape the loop produces.
+# Judgement is by subset, not equality: fields the loop added later
+# (the report's ``failed_patch`` / ``llm_usage_total`` /
+# ``unsealed_llm_usage``; a patch linkage's ``error_kind``) are
+# omitted by legacy reports, and omission is never an offence.
+REPORT_KEYS = {
+    "tool", "version", "kind", "spec_name", "mode", "llm_adapter",
+    "max_rounds", "rounds_used", "final_verdict", "stopped_reason",
+    "last_patch_error", "failed_patch", "llm_usage_total",
+    "unsealed_llm_usage", "attempts",
+}
+ATTEMPT_KEYS = {
+    "round", "candidate_dir", "verdict", "record_hash",
+    "patch_from_previous", "evidence",
+}
+PATCH_KEYS = {
+    "round", "llm_adapter", "applied", "changed_files", "error",
+    "error_kind", "llm_usage", "patch_text",
+}
+# The most attempts a genuine report can carry: the submitted
+# candidate (round 0) plus one attempt per round in the budget.
+MAX_ATTEMPTS = MAX_ROUNDS + 1
+_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def collect_records(data) -> list[tuple[str, dict]]:
@@ -415,6 +467,32 @@ def narrative_problems(data) -> list[str]:
     attempts = data["attempts"]
     adapter = data.get("llm_adapter")
 
+    # Report shape bounds (v1.32.0): the field vocabularies the loop
+    # emits, the report kind/version, and the attempt count — judged
+    # by subset, so a legacy report omitting a later-added field is
+    # not failed for the omission (see the module docstring).
+    if set(data) - REPORT_KEYS:
+        problems.append("repair report carries unknown top-level fields")
+    if data.get("kind") is not None and data["kind"] != "repair-report":
+        problems.append("report kind is not repair-report")
+    if data.get("version") is not None and not (
+            isinstance(data["version"], str)
+            and _VERSION_RE.match(data["version"])):
+        problems.append("report version is not a version string")
+    if len(attempts) > MAX_ATTEMPTS:
+        problems.append("attempt count exceeds the loop maximum")
+    for attempt in attempts:
+        if isinstance(attempt, dict) and set(attempt) - ATTEMPT_KEYS:
+            problems.append("attempt carries unknown fields")
+            break
+    for attempt in attempts:
+        if not isinstance(attempt, dict):
+            continue
+        patch = attempt.get("patch_from_previous")
+        if isinstance(patch, dict) and set(patch) - PATCH_KEYS:
+            problems.append("patch linkage carries unknown fields")
+            break
+
     # Report-level bounds (v1.31.0): the report's own name/adapter
     # fields and its unsealed usage list, plus each attempt's stated
     # candidate directory — unchained surfaces judged only when
@@ -515,6 +593,8 @@ def narrative_problems(data) -> list[str]:
                     None, "patch_rejected", "generation_failed"):
             problems.append("failed_patch error_kind is not a known failure kind")
         if isinstance(failed, dict):
+            if set(failed) - PATCH_KEYS:
+                problems.append("failed_patch carries unknown fields")
             if isinstance(failed.get("error"), str) \
                     and len(failed["error"]) > MAX_PATCH_ERROR_CHARS:
                 problems.append("failed_patch error exceeds the stored maximum")

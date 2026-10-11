@@ -574,6 +574,22 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.32.0 — report shape bounds: a repair report's shape itself
+was never judged — a single record's top-level fields are held
+to an exact field set, but a repair report (unchained at the
+top level) could carry any extra field at any level: a
+500,000-character string injected as a new top-level field, a
+new attempt-wrapper field, or a new patch-linkage field all
+verified INTACT, as did a rewritten `kind`, a
+500,000-character `version`, and an attempt list far longer
+than the loop's round budget can produce. The narrative check
+now holds the report to the loop's field vocabularies
+(top-level, attempt, and patch linkage — by subset, so a
+legacy report omitting a later-added field is not failed for
+the omission), requires `kind` to be `repair-report` and
+`version` to be a semver string when present, and caps the
+attempt count at the loop maximum (11). 14 new tests (559
+total).
 1.31.0 — report-level bounds: a repair report's
 `unsealed_llm_usage` list was totalled by `verify` but never
 bounded — a coordinated edit (inflating the list and the
