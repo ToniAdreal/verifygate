@@ -30,6 +30,23 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   failed with exit 126 inside VerifyGate while passing on disk —
   the sandbox judged a different tree than the one submitted. The
   reverse also holds: a non-executable file is never made executable.
+* **Candidate size bounds** — a candidate may carry at most
+  :data:`MAX_CANDIDATE_FILES` verified files totalling at most
+  :data:`MAX_CANDIDATE_BYTES` bytes (v1.23.0). Before this, the copy,
+  the tree hash, and every repair round re-copied the candidate with
+  no bound at all: a candidate carrying a vendored ``node_modules``
+  tree, build output, or one huge binary was copied in full, once
+  per verification and once per repair round, into a temp filesystem
+  that this project has already filled in practice (the v1.0.0
+  Errno 28 incident). The bounds are checked *before* any copy is
+  made (a rejected candidate leaves no workspace behind) and in
+  ``evidence.tree_hash``, so every entry point — run, repair,
+  verify's candidate binding, replay — rejects the same oversized
+  candidate with the same one-line usage error instead of copying
+  or hashing it first. The bounds count exactly the files the
+  containment traversal would verify (ignored names and escaping
+  symlinks excluded), and they are generous ceilings, not targets:
+  the bundled samples are three orders of magnitude below them.
 
 This is a local/CI-grade sandbox (temp dir + timeout + scrubbed env),
 not a multi-tenant security boundary — see CONCEPT.md risks.
@@ -48,6 +65,22 @@ from pathlib import Path
 
 MAX_OUTPUT_CHARS = 4000
 _READ_BYTES = 16_384  # > MAX_OUTPUT_CHARS even for multibyte text
+
+# Candidate size ceilings (see the module docstring): generous bounds
+# in the same spirit as MAX_TIMEOUT_S (spec.py) and MAX_ROUNDS
+# (repair.py) — a real code change is far below them, while a
+# vendored dependency tree or a huge binary is stopped before the
+# harness copies or hashes it into the temp filesystem.
+MAX_CANDIDATE_FILES = 10_000
+MAX_CANDIDATE_BYTES = 256 * 1024 * 1024  # 256 MiB
+
+
+class CandidateTooLargeError(ValueError):
+    """Raised when a candidate exceeds the size bounds above.
+
+    A ``ValueError`` so every CLI entry point reports it through its
+    existing usage-error path (one line, exit 2), never a traceback.
+    """
 _IGNORE = shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache", "*.pyc")
 _IGNORED_NAMES = {".git", "__pycache__", ".pytest_cache"}
 
@@ -118,6 +151,45 @@ def iter_candidate_files(root: str | Path):
     yield from walk(root, "")
 
 
+def check_candidate_bounds(
+    root: str | Path,
+    *,
+    max_files: int | None = None,
+    max_bytes: int | None = None,
+) -> tuple[int, int]:
+    """Count the candidate's verified files/bytes; reject oversize.
+
+    Returns ``(file_count, total_bytes)`` for an in-bounds candidate
+    and raises :class:`CandidateTooLargeError` as soon as a bound is
+    exceeded (the scan stops there — an oversized candidate is not
+    walked to the end just to be rejected). Only the files
+    :func:`iter_candidate_files` yields are counted: exactly the set
+    the workspace copy, tree hash, and repair snapshot operate on.
+    ``max_files`` / ``max_bytes`` default to the module ceilings at
+    call time (tests may override them per call or monkeypatch the
+    constants).
+    """
+    if max_files is None:
+        max_files = MAX_CANDIDATE_FILES
+    if max_bytes is None:
+        max_bytes = MAX_CANDIDATE_BYTES
+    count = 0
+    total = 0
+    for _rel, source in iter_candidate_files(root):
+        count += 1
+        if count > max_files:
+            raise CandidateTooLargeError(
+                f"candidate exceeds the maximum of {max_files} files "
+                f"(more than {max_files} verified files under {root})")
+        total += source.stat().st_size
+        if total > max_bytes:
+            raise CandidateTooLargeError(
+                f"candidate exceeds the maximum total size of "
+                f"{max_bytes} bytes (verified files under {root} "
+                f"pass that bound)")
+    return count, total
+
+
 def prepare_workspace(candidate_dir: str | Path) -> Path:
     """Copy the candidate into a fresh temp dir and return its path.
 
@@ -134,6 +206,11 @@ def prepare_workspace(candidate_dir: str | Path) -> Path:
     candidate_dir = Path(candidate_dir)
     if not candidate_dir.is_dir():
         raise FileNotFoundError(f"candidate directory not found: {candidate_dir}")
+    # Pre-flight: an oversized candidate is rejected before any copy
+    # exists, so the rejection itself cannot fill the temp filesystem
+    # it protects (and leaves no workspace behind for the caller to
+    # clean up).
+    check_candidate_bounds(candidate_dir)
     ws = Path(tempfile.mkdtemp(prefix="verifygate-"))
     # Recreate the real directory skeleton (incl. empty dirs), without
     # ever descending through a symlink.

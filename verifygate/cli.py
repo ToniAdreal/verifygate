@@ -269,7 +269,10 @@ def main(argv: list[str] | None = None) -> int:
         except RuntimeError as exc:
             print(f"adapter error: {exc}", file=sys.stderr)
             return 2
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
+            # ValueError here is the sandbox's candidate-bounds
+            # rejection (CandidateTooLargeError): a usage error, one
+            # line, never a traceback.
             print(f"candidate error: {exc}", file=sys.stderr)
             return 2
         out = Path(args.out or f"evidence-{spec.name}.json")
@@ -311,7 +314,9 @@ def main(argv: list[str] | None = None) -> int:
                 candidate_label=args.candidate,
                 max_rounds=args.max_rounds,
             )
-        except (FileNotFoundError, RuntimeError) as exc:
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            # ValueError covers the sandbox's candidate-bounds
+            # rejection, raised by the loop's first verification run.
             print(f"error: {exc}", file=sys.stderr)
             return 2
         out = Path(args.out or f"repair-{spec.name}.json")

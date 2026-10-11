@@ -134,8 +134,15 @@ def tree_hash(root: str | Path) -> str:
     the candidate (and directory symlinks) are excluded, so the hash
     describes exactly the tree that was copied into the workspace and
     verified — never a host file reached through a link.
+
+    The sandbox's candidate size bounds are enforced first (v1.23.0):
+    binding a record to an oversized candidate directory (``verify
+    --candidate``, replay) is a usage error, not an invitation to
+    read an unbounded tree into the hash.
     """
-    from .sandbox import iter_candidate_files
+    from .sandbox import check_candidate_bounds, iter_candidate_files
+
+    check_candidate_bounds(root)
 
     lines = [
         f"{rel}:{_sha_bytes(source.read_bytes())}"

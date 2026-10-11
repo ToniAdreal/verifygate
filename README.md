@@ -253,6 +253,12 @@ Candidate code is untrusted, so the sandbox treats it that way:
   when rejected or superseded; the CLI removes the final patched copy
   after copying it out). A leaked-copy bug once filled a temp
   filesystem during dogfooding; lifecycle tests pin the contract.
+- **Candidate size bounds** — a candidate may carry at most 10,000
+  verified files totalling at most 256 MiB; the bound is checked
+  before any copy is made and again in the tree hash, so an
+  oversized candidate (a vendored dependency tree, one huge binary)
+  is a one-line usage error at every entry point, not a temp
+  filesystem filled one copy per repair round.
 - **Permission fidelity** — the workspace copy preserves each file's
   permission bits, and the patch applier honours git mode lines
   (`new file mode`, `old mode`/`new mode`, including mode-only
@@ -506,6 +512,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.23.0 — candidate size bounds: nothing limited how large a
+candidate could be — the sandbox copy, the tree hash, and every
+repair round re-copied the candidate in full, so a candidate
+carrying a vendored `node_modules` tree, build output, or one huge
+binary filled the temp filesystem a copy at a time (a 12,000-file
+probe candidate was accepted and copied in full; this project has
+already filled its 512 MB temp filesystem in practice). Candidates
+are now bounded at 10,000 verified files / 256 MiB total
+(`MAX_CANDIDATE_FILES` / `MAX_CANDIDATE_BYTES` in `sandbox.py`),
+counting exactly the files the containment traversal verifies.
+The check is pre-flight in `prepare_workspace` (a rejected
+candidate leaves no workspace behind) and in `evidence.tree_hash`,
+so run, repair, `verify --candidate`, and replay all reject the
+same oversized candidate as a one-line usage error (exit 2). 10
+new tests (427 total).
 1.22.0 — round-budget validation: the repair loop's `max_rounds`
 was checked only for `< 0`, so a bool budget (`True` — an `int`
 subclass) or a float (`2.5`) produced a report whose stated budget
