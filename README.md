@@ -574,6 +574,22 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.39.0 — spec-object validation: every spec rule was
+enforced only by `parse_spec`, i.e. only on the JSON path —
+but `TaskSpec`/`Check` are plain dataclasses, so a library
+caller could construct one directly and bypass them all: a
+whitespace-only command sealed a vacuous PASS, a bool or
+float `timeout_s` ran as 1 / 2.5 seconds, an empty check
+list and a 500,000-character name each sealed a record that
+failed its own verification, and with `raw` empty (the
+dataclass default) the sealed `spec_hash` was the hash of
+`{}`, binding none of the fields that actually ran. The
+runner, the repair loop, and replay now call
+`spec.validate_spec` before any work: the fields must
+satisfy the same rules `parse_spec` enforces, and `raw`
+must parse back to exactly those fields, so the sealed
+hash always binds the spec that ran. 52 new tests
+(811 total).
 1.38.0 — mode validation: the run mode was validated only
 by the CLI's argparse choices — every library entry point
 accepted any value verbatim and sealed it into the record

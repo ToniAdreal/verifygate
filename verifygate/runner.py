@@ -54,6 +54,13 @@ record the v1.29.0 structure mirror rejects). Both notes now pass
 through :func:`_cap_error` on this sealing path, so every sealed
 note is within ``MAX_ERROR_CHARS`` by construction.
 
+Spec-object validation (v1.39.0): the ``spec`` is validated here
+too, through ``spec.validate_spec`` — see that helper's docstring.
+Between them, every caller-supplied run parameter that is sealed
+into the record (mode, spec name/brief/checks/timeouts, and the
+spec hash) is now validated at this one sealing path's entry,
+whatever route the caller took to build it.
+
 Mode validation (v1.38.0): the run ``mode`` is validated here, at
 the one sealing path's entry (``evidence.validate_mode``), before
 any workspace is prepared or any check runs. Before this, the
@@ -100,7 +107,7 @@ from .evidence import (
 )
 from .llm import LLMAdapter
 from .sandbox import prepare_workspace
-from .spec import TaskSpec
+from .spec import TaskSpec, validate_spec
 from .tavily import (
     MAX_REFERENCES,
     ReferenceLookup,
@@ -191,6 +198,14 @@ def run_verification(
     # checks, no adapter calls for a run whose record could never
     # verify (see the module docstring).
     validate_mode(mode)
+    # Fail fast on an invalid spec object (v1.39.0): parse_spec's
+    # rules bind only the JSON path, but TaskSpec is a plain
+    # dataclass a library caller can construct directly — a
+    # whitespace command, a bool/float timeout, an empty check
+    # list, an over-long name, or an empty/mismatched raw (whose
+    # hash binds none of the fields that ran) must be a usage
+    # error here, before any workspace exists, never a run.
+    validate_spec(spec)
     workspace = prepare_workspace(candidate_dir)
     try:
         results = run_checks(spec, workspace)

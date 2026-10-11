@@ -45,7 +45,7 @@ from .llm import LLMAdapter
 from .patch import PatchError, apply_patch
 from .runner import run_verification
 from .sandbox import prepare_workspace
-from .spec import TaskSpec
+from .spec import TaskSpec, validate_spec
 from .tavily import ReferenceLookup
 from .verify import collect_records, header_of
 
@@ -117,10 +117,16 @@ def replay_document(
     and for an invalid ``mode`` (v1.38.0 — validated before any record
     is replayed; the CLI's replay mode can come from a record's own
     header, an untrusted field, so it must never be trusted verbatim).
+    The ``spec`` object is validated the same way (v1.39.0 — a
+    directly-constructed TaskSpec bypasses parse_spec, and replay's
+    per-record path catches only OSError/RuntimeError from the
+    runner, so an invalid spec must fail here, up front, not escape
+    as an unhandled error mid-replay).
     Reconstruction copies are removed before returning; the caller's
     candidate directory is never modified.
     """
     validate_mode(mode)
+    validate_spec(spec)
     pairs = collect_records(data)
     is_report = isinstance(data, dict) and "attempts" in data
     results: list[dict] = []

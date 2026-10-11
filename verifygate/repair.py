@@ -129,7 +129,7 @@ from .llm import LLMAdapter
 from .patch import MAX_PATCH_TEXT_CHARS, PatchError, apply_patch
 from .runner import run_verification
 from .sandbox import iter_candidate_files, prepare_workspace
-from .spec import TaskSpec
+from .spec import TaskSpec, validate_spec
 from .tavily import ReferenceLookup
 
 # A generous ceiling, not a target: the default is 3, and every round
@@ -224,6 +224,14 @@ def run_repair(
     # record fails verification. The runner validates it too; this
     # is the loop's own fail-fast, beside its budget validation.
     validate_mode(mode)
+    # The spec object is validated the same way (v1.39.0): a
+    # directly-constructed TaskSpec bypasses parse_spec, and the
+    # loop seals its name/brief into the report summary and hands
+    # its brief to the LLM — an invalid spec must fail here, beside
+    # the budget validation, before the first verification run or
+    # any generation call. The runner validates it too; this is the
+    # loop's own fail-fast.
+    validate_spec(spec)
     # bool is an int subclass: JSON true would otherwise become a
     # 1-round budget whose report then fails verify's non-bool-int
     # rule; a float would silently allow more rounds than stated; a

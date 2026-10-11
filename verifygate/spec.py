@@ -61,6 +61,13 @@ the checks below were accepted and each broke something downstream):
   the sealed fields' caps, so a record carrying a longer spec name
   or check name/command than a valid spec can produce fails
   verification too.
+* The same rules are enforced on a constructed ``TaskSpec``
+  object, not just on parsed JSON (v1.39.0): ``TaskSpec``/``Check``
+  are plain dataclasses, so a library caller could bypass
+  :func:`parse_spec` entirely — :func:`validate_spec` is called by
+  the runner, the repair loop, and replay before any work, and it
+  also requires ``raw`` to parse back to exactly the fields that
+  will run, so the sealed ``spec_hash`` always binds them.
 * The spec *file* itself is size-bounded on load (v1.36.0):
   :func:`load_spec` reads it through ``jsonio.load_json_file``
   with ``MAX_SPEC_FILE_BYTES`` (4 MiB — above what a spec at every
@@ -194,3 +201,89 @@ def parse_spec(raw: dict) -> TaskSpec:
                 f"and {MAX_TIMEOUT_S}")
         checks.append(Check(name=c["name"], command=c["command"], timeout_s=timeout))
     return TaskSpec(name=name, brief=brief, checks=tuple(checks), raw=raw)
+
+
+def validate_spec(spec) -> TaskSpec:
+    """Return ``spec`` if it is a valid TaskSpec, else raise SpecError.
+
+    Spec-object validation (v1.39.0): every rule above was enforced
+    only by :func:`parse_spec`, i.e. only on the JSON path — but
+    ``TaskSpec``/``Check`` are plain dataclasses, so a library caller
+    could construct one directly and hand it to the runner, the
+    repair loop, or replay, bypassing every check. A whitespace-only
+    command sealed a vacuous PASS, a bool or float ``timeout_s`` ran
+    as 1 / 2.5 seconds, an empty check list sealed a FAIL record, a
+    500,000-character name sealed a record that failed its own
+    verification — and with ``raw`` empty (the dataclass default) the
+    sealed ``spec_hash`` was the hash of ``{}``, binding none of the
+    fields that actually ran. The entry points now call this helper
+    before any workspace is prepared or any check runs: the spec
+    must carry the same field values :func:`parse_spec` enforces,
+    and its ``raw`` must be a non-empty object that parses back to
+    exactly those fields, so the hash sealed into the record always
+    binds the spec that ran. Specs produced by
+    :func:`parse_spec`/:func:`load_spec` satisfy this by
+    construction.
+    """
+    if not isinstance(spec, TaskSpec):
+        raise SpecError(
+            f"spec must be a TaskSpec produced by parse_spec/load_spec, "
+            f"got {type(spec).__name__}")
+    if not _non_empty_str(spec.name):
+        raise SpecError("spec.name is required (non-empty string)")
+    if len(spec.name) > MAX_SPEC_NAME_CHARS:
+        raise SpecError(
+            f"spec.name must be at most {MAX_SPEC_NAME_CHARS} characters")
+    if not isinstance(spec.brief, str):
+        raise SpecError("spec.brief must be a string")
+    if len(spec.brief) > MAX_BRIEF_CHARS:
+        raise SpecError(
+            f"spec.brief must be at most {MAX_BRIEF_CHARS} characters")
+    checks = spec.checks
+    if isinstance(checks, (str, bytes)) or not isinstance(checks, (tuple, list)):
+        raise SpecError("spec.checks must be a non-empty tuple of Check")
+    if not checks:
+        raise SpecError("spec.checks must be a non-empty tuple of Check")
+    if len(checks) > MAX_CHECKS:
+        raise SpecError(
+            f"spec.checks must carry at most {MAX_CHECKS} checks")
+    seen: set[str] = set()
+    for i, c in enumerate(checks):
+        if not isinstance(c, Check):
+            raise SpecError(f"spec.checks[{i}] must be a Check")
+        if not _non_empty_str(c.name):
+            raise SpecError(
+                f"spec.checks[{i}].name is required (non-empty string)")
+        if len(c.name) > MAX_CHECK_NAME_CHARS:
+            raise SpecError(
+                f"spec.checks[{i}].name must be at most "
+                f"{MAX_CHECK_NAME_CHARS} characters")
+        if not _non_empty_str(c.command):
+            raise SpecError(
+                f"spec.checks[{i}].command must be a non-empty string "
+                "(a whitespace-only command would pass vacuously)")
+        if len(c.command) > MAX_CHECK_COMMAND_CHARS:
+            raise SpecError(
+                f"spec.checks[{i}].command must be at most "
+                f"{MAX_CHECK_COMMAND_CHARS} characters")
+        if c.name in seen:
+            raise SpecError(f"duplicate check name: {c.name}")
+        seen.add(c.name)
+        if isinstance(c.timeout_s, bool) or not isinstance(c.timeout_s, int) \
+                or not 1 <= c.timeout_s <= MAX_TIMEOUT_S:
+            raise SpecError(
+                f"spec.checks[{i}].timeout_s must be an int between 1 "
+                f"and {MAX_TIMEOUT_S}")
+    if not isinstance(spec.raw, dict) or not spec.raw:
+        raise SpecError(
+            "spec.raw must be the non-empty object the spec was parsed "
+            "from (use parse_spec/load_spec): without it the sealed "
+            "spec_hash binds none of the fields that ran")
+    reparsed = parse_spec(spec.raw)
+    if (reparsed.name, reparsed.brief, reparsed.checks) != (
+            spec.name, spec.brief, tuple(checks)):
+        raise SpecError(
+            "spec fields do not match spec.raw: the sealed spec_hash "
+            "would not bind the checks that ran (build the spec with "
+            "parse_spec/load_spec)")
+    return spec
