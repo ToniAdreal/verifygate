@@ -405,6 +405,17 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.10.0 — patch-application atomicity: a multi-file diff now applies
+all-or-nothing. Every file patch is validated against an in-memory
+staged copy first, and the workspace on disk is written only after
+the whole diff has applied cleanly in staging — before this, files
+were written one by one, so a diff whose second file failed left
+the first file already rewritten (a half-applied patch, contradicting
+the applier's "never partially forced in" contract for any caller
+that did not itself discard the whole workspace). Sequential
+patches to the same file still apply in order, against the staged
+state; on any rejection the tree is byte-for-byte and
+mode-for-mode unchanged. 7 new atomicity tests (206 total).
 1.9.0 — permission-bit fidelity: the sandbox workspace copy now
 preserves each file's permission bits (before this, the copy was
 content-only, so an executable script arrived non-executable and a

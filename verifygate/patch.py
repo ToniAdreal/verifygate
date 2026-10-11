@@ -16,6 +16,18 @@ pair changes an existing file's permission bits, and a mode-only diff
 were silently dropped, so a repair that created a script could never
 make it runnable — the patched candidate failed its ``./script``
 check for a reason that had nothing to do with the model's fix.
+
+Application is **atomic across files** (since v1.10.0): every file
+patch is validated and applied to an in-memory staged copy first,
+and the workspace on disk is written only after the *whole* diff has
+applied cleanly in staging. Before this, files were written one by
+one as their patches were processed, so a multi-file diff whose
+second file failed left the first file already rewritten — a
+half-applied patch, contradicting the "never partially forced in"
+contract above for any caller that did not itself discard the whole
+workspace (the repair loop and replay happened to, by discipline).
+Sequential patches to the same file apply in order against the
+staged state, exactly as they would have against disk.
 """
 
 from __future__ import annotations
@@ -238,41 +250,96 @@ def _write_lines(path: Path, lines: list[str], trailing_newline: bool = True) ->
     path.write_text(text, encoding="utf-8")
 
 
+@dataclass
+class _Staged:
+    """One file's staged post-patch state (nothing on disk yet)."""
+
+    exists: bool
+    lines: list[str] = field(default_factory=list)
+    trailing_newline: bool = True
+    mode: int | None = None  # chmod to apply at commit; None = keep
+
+
 def apply_patch(root: str | Path, patch_text: str) -> list[str]:
-    """Apply a unified diff under root; return the changed relative paths."""
+    """Apply a unified diff under root; return the changed relative paths.
+
+    All-or-nothing: every file patch is validated against an
+    in-memory staging overlay first; disk writes happen only in the
+    commit loop at the end, after the whole diff has applied cleanly
+    in staging. A :class:`PatchError` therefore leaves the tree
+    byte-for-byte and mode-for-mode as it was.
+    """
     root = Path(root)
     changed: list[str] = []
+    staged: dict[Path, _Staged] = {}
+
+    def load(target: Path, rel: str, what: str) -> _Staged:
+        if target in staged:
+            state = staged[target]
+        elif target.is_file():
+            raw = target.read_bytes()
+            state = _Staged(
+                exists=True,
+                lines=_read_lines(target),
+                # Preserve the file's trailing-newline state so a
+                # mode-only commit rewrites byte-identical content.
+                trailing_newline=not raw or raw.endswith(b"\n"),
+            )
+            staged[target] = state
+        else:
+            raise PatchError(f"cannot {what} {rel}: not a file")
+        if not state.exists:
+            raise PatchError(f"cannot {what} {rel}: not a file")
+        return state
+
     for fp in parse_patch(patch_text):
         if fp.old_path == "/dev/null":  # file creation
             target = _safe_target(root, fp.new_path)
-            if target.exists():
+            existing = staged.get(target)
+            if existing is not None:
+                if existing.exists:
+                    raise PatchError(
+                        f"cannot create {fp.new_path}: already exists")
+            elif target.exists():
                 raise PatchError(f"cannot create {fp.new_path}: already exists")
             new_lines = _apply_hunks([], fp)
-            trailing = not any(h.new_no_trailing_newline for h in fp.hunks)
-            _write_lines(target, new_lines, trailing)
-            if fp.new_mode is not None:
-                target.chmod(fp.new_mode & 0o777)
+            staged[target] = _Staged(
+                exists=True,
+                lines=new_lines,
+                trailing_newline=not any(
+                    h.new_no_trailing_newline for h in fp.hunks),
+                mode=fp.new_mode,
+            )
             changed.append(fp.new_path)
         elif fp.new_path == "/dev/null":  # file deletion
             target = _safe_target(root, fp.old_path)
-            if not target.is_file():
-                raise PatchError(f"cannot delete {fp.old_path}: not a file")
-            remaining = _apply_hunks(_read_lines(target), fp)
+            state = load(target, fp.old_path, "delete")
+            remaining = _apply_hunks(state.lines, fp)
             if remaining:
                 raise PatchError(f"deletion patch for {fp.old_path} leaves content")
-            target.unlink()
+            state.exists = False
+            state.lines = []
+            state.mode = None
             changed.append(fp.old_path)
         else:  # modification (possibly mode-only: no hunks)
             target = _safe_target(root, fp.new_path)
-            if not target.is_file():
-                raise PatchError(f"cannot modify {fp.new_path}: not a file")
+            state = load(target, fp.new_path, "modify")
             if fp.hunks:
-                new_lines = _apply_hunks(_read_lines(target), fp)
-                trailing = not any(h.new_no_trailing_newline for h in fp.hunks)
-                _write_lines(target, new_lines, trailing)
+                state.lines = _apply_hunks(state.lines, fp)
+                state.trailing_newline = not any(
+                    h.new_no_trailing_newline for h in fp.hunks)
             # Rewriting an existing file in place preserves its mode;
             # an explicit git mode line overrides it.
             if fp.new_mode is not None:
-                target.chmod(fp.new_mode & 0o777)
+                state.mode = fp.new_mode
             changed.append(fp.new_path)
+
+    # Commit: the whole diff validated in staging, so write it out.
+    for target, state in staged.items():
+        if not state.exists:
+            target.unlink(missing_ok=True)
+            continue
+        _write_lines(target, state.lines, state.trailing_newline)
+        if state.mode is not None:
+            target.chmod(state.mode & 0o777)
     return changed
