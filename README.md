@@ -296,7 +296,12 @@ check `name` / `command` must be strings, and a check name or command
 that is empty or all whitespace is rejected — a whitespace-only
 command is not a check at all, since the shell exits 0 on it and it
 would seal a vacuous PASS. `timeout_s` must be a real integer between
-1 and 3600 (JSON `true` is not accepted as 1). A malformed spec is a
+1 and 3600 (JSON `true` is not accepted as 1), and a spec may carry at
+most 100 checks (`MAX_CHECKS`) — checks run sequentially, each with
+its own timeout, and every result is sealed into the record, so the
+count is bounded like every other dimension of a run; verification
+mirrors the cap, so a record claiming more checks than a valid spec
+can carry fails too. A malformed spec is a
 usage error — one-line message, exit 2 — never a traceback or a
 silently reinterpreted run.
 
@@ -512,6 +517,20 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.24.0 — check-count bound: every other dimension of a run was
+capped (a check's timeout, the repair loop's rounds, a candidate's
+files and bytes), but a spec could carry an unbounded number of
+checks — each runs sequentially, entitled to its full timeout, and
+each result is sealed into the evidence record, so a 5,000-check
+probe spec was accepted with an aggregate timeout budget of
+~208 days and a record sealed over 5,000 checks verified INTACT.
+A spec now carries at most 100 checks (`MAX_CHECKS` in `spec.py`;
+the bundled samples carry 2, the dogfood spec 1 — fold a suite
+into one gate command, as they do), rejected by the parser as a
+usage error (exit 2) at every CLI entry point, and the evidence
+structure check mirrors the cap, so a record claiming more checks
+than a valid spec can produce fails verification for any chain
+version. 11 new tests (438 total).
 1.23.0 — candidate size bounds: nothing limited how large a
 candidate could be — the sandbox copy, the tree hash, and every
 repair round re-copied the candidate in full, so a candidate

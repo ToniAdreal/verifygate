@@ -32,6 +32,17 @@ the checks below were accepted and each broke something downstream):
   subclass in Python and used to be silently accepted as a 1-second
   timeout — between 1 and :data:`MAX_TIMEOUT_S` seconds, so a hung
   or absurd spec cannot hang the harness indefinitely.
+* The number of checks is bounded at :data:`MAX_CHECKS` (v1.24.0).
+  Per-check timeouts were capped, repair rounds were capped, and
+  candidate size was capped, but a spec could still carry an
+  unbounded number of checks: every check runs sequentially (each
+  entitled to its full timeout, so a 5,000-check probe spec carried
+  an aggregate timeout budget of ~208 days) and every check's result
+  is sealed into the evidence record. A gate spec is a handful of
+  commands by design (a whole test suite is one check); the ceiling
+  is generous, and ``evidence``'s structure check mirrors it, so a
+  record claiming more checks than a valid spec can carry fails
+  verification too.
 """
 
 from __future__ import annotations
@@ -43,6 +54,7 @@ from pathlib import Path
 
 
 MAX_TIMEOUT_S = 3600  # one hour: a sane ceiling for a single check
+MAX_CHECKS = 100  # generous ceiling: a gate spec is a handful of commands
 
 
 class SpecError(ValueError):
@@ -94,6 +106,12 @@ def parse_spec(raw: dict) -> TaskSpec:
         raise SpecError("spec.brief must be a string")
     if not isinstance(checks_raw, list) or not checks_raw:
         raise SpecError("spec.checks must be a non-empty list")
+    if len(checks_raw) > MAX_CHECKS:
+        raise SpecError(
+            f"spec.checks must carry at most {MAX_CHECKS} checks "
+            f"(got {len(checks_raw)}); each check runs sequentially "
+            "with its own timeout and is sealed into the evidence "
+            "record — fold suites into a single gate command")
     checks: list[Check] = []
     seen: set[str] = set()
     for i, c in enumerate(checks_raw):

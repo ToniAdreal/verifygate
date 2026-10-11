@@ -82,6 +82,17 @@ reason, instead of the run producing no record at all. The field is
 optional here for the same reason ``reference_error`` is — records
 sealed before it existed do not carry it, and they still verify.
 
+Check-count bound (v1.24.0): the spec parser caps a spec at
+``MAX_CHECKS`` checks (each check runs sequentially with its own
+timeout and is sealed into the record, so the count is the one
+spec dimension that was still unbounded — a 5,000-check probe spec
+carried an aggregate timeout budget of ~208 days, and a record
+sealed over 5,000 checks verified INTACT). ``_structure_ok`` mirrors
+the cap: a record carrying more check entries than any valid spec
+can produce is not a shape ``build_record`` can emit from a real
+run, for any chain version. Every committed record carries at most
+2 checks, so they all still verify.
+
 Replay-label quoting (v1.21.0): the metadata rules above require a
 record's ``replay`` string to match the emitted templates with
 path-like labels — no whitespace, no shell metacharacters — but the
@@ -113,6 +124,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
+from .spec import MAX_CHECKS
 
 DEFAULT_DEV_KEY = "verifygate-dev-key-NOT-FOR-PRODUCTION"
 GENESIS = "verifygate/genesis/v1"
@@ -585,6 +597,11 @@ def _structure_ok(entries, verdict=_UNSPECIFIED) -> bool:
         else:
             return False
     if not check_verdicts:
+        return False
+    # The spec parser caps a spec at MAX_CHECKS checks, so a record
+    # carrying more check entries than that is not a shape a real
+    # run can seal — whatever its chain recomputes to (v1.24.0).
+    if len(check_verdicts) > MAX_CHECKS:
         return False
     if verdict is not _UNSPECIFIED:
         # overall_verdict: PASS iff there is at least one check and
