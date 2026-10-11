@@ -131,6 +131,25 @@ characters) and comfortably above what the real adapter's
 4,096-token explanation budget can produce — so no honest diagnosis
 is ever cut; it exists so one unbounded model reply cannot bloat
 every copy of a record (and every rendering of it) forever.
+
+Spec text bounds (v1.28.0): the spec's own strings were the mirror
+image of the explanation gap — the parser capped a spec's check
+count, timeouts, and (via the sandbox) its candidate's size, but
+not the length of the text the spec carries. A probe spec with a
+100,000-character name, a 500,000-character brief, and
+100,000-character check names/commands was accepted verbatim; the
+name and check names/commands are sealed into every record the spec
+produces (and the brief is embedded verbatim in every real-mode
+patch prompt, a paid call). The parser now caps those fields (see
+``spec.py``) and ``_structure_ok`` / ``_check_entry_ok`` mirror the
+sealed ones: header ``spec_name``, and each check's ``name`` and
+``command``, must be within the parser's ceilings. The same mirror
+covers the check entries' output tails: the sandbox already caps a
+sealed tail at ``MAX_OUTPUT_CHARS`` plus its truncation marker
+(:data:`MAX_TAIL_CHARS`), so a longer tail is not a shape a real
+run emits either. Every committed record is far below every cap
+(longest spec name 23 characters, longest command 20, longest tail
+1,863), so they all still verify.
 """
 
 from __future__ import annotations
@@ -145,7 +164,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
-from .spec import MAX_CHECKS
+from .sandbox import MAX_OUTPUT_CHARS
+from .spec import (
+    MAX_CHECK_COMMAND_CHARS,
+    MAX_CHECK_NAME_CHARS,
+    MAX_CHECKS,
+    MAX_SPEC_NAME_CHARS,
+)
 from .tavily import (
     MAX_REFERENCES,
     SNIPPET_LIMIT,
@@ -162,6 +187,11 @@ CHAIN_VERSION = 3
 # and mirrored here: generous over every real diagnosis (the longest
 # committed one is 2,022 characters), finite against a runaway one.
 MAX_EXPLANATION_CHARS = 20_000
+# A check's sealed stdout/stderr tail: the sandbox's _tail returns at
+# most MAX_OUTPUT_CHARS of output, prefixed (only when it truncated)
+# by the 14-character marker "…[truncated]…\n". A longer tail in a
+# record is therefore not a shape a real run can seal (v1.28.0).
+MAX_TAIL_CHARS = MAX_OUTPUT_CHARS + len("…[truncated]…\n")
 
 
 def _canonical(obj) -> str:
@@ -353,10 +383,21 @@ def _check_entry_ok(entry: dict) -> bool:
             or not isinstance(entry["command"], str) \
             or not entry["command"].strip():
         return False
+    # The spec parser's text ceilings (v1.28.0), mirrored: a check
+    # name or command longer than any valid spec can carry is not a
+    # shape build_record can emit from a real run.
+    if len(entry["name"]) > MAX_CHECK_NAME_CHARS \
+            or len(entry["command"]) > MAX_CHECK_COMMAND_CHARS:
+        return False
     if not _is_int(entry["duration_ms"]) or entry["duration_ms"] < 0:
         return False
+    # The sandbox's tail cap, mirrored the same way: a sealed tail
+    # longer than MAX_OUTPUT_CHARS plus the truncation marker is not
+    # a shape a real run emits.
     if not isinstance(entry["stdout_tail"], str) \
-            or not isinstance(entry["stderr_tail"], str):
+            or not isinstance(entry["stderr_tail"], str) \
+            or len(entry["stdout_tail"]) > MAX_TAIL_CHARS \
+            or len(entry["stderr_tail"]) > MAX_TAIL_CHARS:
         return False
     if not isinstance(entry["timed_out"], bool):
         return False
@@ -611,6 +652,11 @@ def _structure_ok(entries, verdict=_UNSPECIFIED) -> bool:
         return False
     if not isinstance(header["spec_name"], str) \
             or not header["spec_name"]:
+        return False
+    # The spec parser's name ceiling (v1.28.0), mirrored: a header
+    # naming a longer spec than any valid spec can carry is not a
+    # shape build_record can emit from a real run.
+    if len(header["spec_name"]) > MAX_SPEC_NAME_CHARS:
         return False
     # The header binds the record to two SHA-256 hashes and to one of
     # the two modes the CLI can run; anything else is not a header a

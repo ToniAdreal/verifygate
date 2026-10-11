@@ -218,6 +218,21 @@ diagnosis, so no honest diagnosis is ever cut — and the chain's
 structure check mirrors it, so an over-limit record fails
 verification however it was sealed.
 
+A spec's own text is bounded too (v1.28.0): the spec name and each
+check name at 200 characters, the brief at 10,000, and each check
+command at 4,000. Before this, a probe spec carrying a
+100,000-character name, a 500,000-character brief, and
+100,000-character check names/commands was accepted verbatim —
+and the name and check names/commands are sealed into every
+record the spec produces, while the brief is embedded verbatim in
+every real-mode patch prompt. The parser rejects over-ceiling
+text as a usage error before any check runs, the chain's
+structure check mirrors the sealed fields' caps, and the same
+mirror covers the checks' output tails (already capped on the
+sealing path by the sandbox's output limit plus its truncation
+marker). The bundled specs' longest fields — a 148-character
+brief, 20-character commands — sit far below every ceiling.
+
 The diagnosis itself degrades the same way (v1.19.0). The LLM
 explanation is commentary too, so a failed explanation call — a
 network error, a malformed Token Factory response, an empty
@@ -540,6 +555,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.28.0 — spec text bounds: every other dimension of a spec was
+capped (check count, per-check timeouts, candidate size) but the
+length of its text was not — a probe spec with a 100,000-character
+name, a 500,000-character brief, and 100,000-character check
+names/commands was accepted verbatim, and a record sealed over
+those fields (plus a 500,000-character output tail) verified
+INTACT. The parser now caps the spec name and check names at 200
+characters, the brief at 10,000, and check commands at 4,000
+(generous: the bundled specs peak at a 148-character brief and
+20-character commands), rejecting more as a one-line usage error
+before any check runs or any patch prompt is built; the evidence
+structure check mirrors the sealed fields' caps and the sandbox's
+output-tail cap, so an over-limit record fails verification
+however it was sealed, while every committed fixture still
+verifies. 20 new tests (498 total).
 1.27.0 — explanation bounds: the diagnosis text was the last
 unbounded text on the sealing path — the runner sealed whatever
 `explain_failure` returned, verbatim and at any length (a stub

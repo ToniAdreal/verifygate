@@ -43,6 +43,24 @@ the checks below were accepted and each broke something downstream):
   is generous, and ``evidence``'s structure check mirrors it, so a
   record claiming more checks than a valid spec can carry fails
   verification too.
+* The spec's *text* fields are bounded (v1.28.0): ``name`` and each
+  check ``name`` at :data:`MAX_SPEC_NAME_CHARS` /
+  :data:`MAX_CHECK_NAME_CHARS`, ``brief`` at
+  :data:`MAX_BRIEF_CHARS`, and each check ``command`` at
+  :data:`MAX_CHECK_COMMAND_CHARS`. Before this, every other
+  dimension of a spec was capped but its strings were not: a probe
+  spec carrying a 100,000-character name, a 500,000-character brief,
+  and 100,000-character check names/commands was accepted verbatim.
+  The name and the check names/commands are sealed into every
+  evidence record the spec produces (header + one entry per check),
+  and the brief is embedded verbatim in every real-mode patch prompt
+  — a paid Token Factory call — so one oversized spec bloated every
+  record and every prompt it touched. The ceilings are generous
+  (the bundled specs' longest fields are a 148-character brief and
+  20-character commands), and ``evidence``'s structure check mirrors
+  the sealed fields' caps, so a record carrying a longer spec name
+  or check name/command than a valid spec can produce fails
+  verification too.
 """
 
 from __future__ import annotations
@@ -55,6 +73,14 @@ from pathlib import Path
 
 MAX_TIMEOUT_S = 3600  # one hour: a sane ceiling for a single check
 MAX_CHECKS = 100  # generous ceiling: a gate spec is a handful of commands
+# Spec text ceilings (v1.28.0, see the module docstring): generous
+# over every honest spec — the bundled specs peak at a 23-character
+# name, a 148-character brief, 12-character check names, and
+# 20-character commands.
+MAX_SPEC_NAME_CHARS = 200
+MAX_BRIEF_CHARS = 10_000
+MAX_CHECK_NAME_CHARS = 200
+MAX_CHECK_COMMAND_CHARS = 4_000
 
 
 class SpecError(ValueError):
@@ -102,8 +128,18 @@ def parse_spec(raw: dict) -> TaskSpec:
     checks_raw = raw.get("checks")
     if not _non_empty_str(name):
         raise SpecError("spec.name is required (non-empty string)")
+    if len(name) > MAX_SPEC_NAME_CHARS:
+        raise SpecError(
+            f"spec.name must be at most {MAX_SPEC_NAME_CHARS} "
+            f"characters (got {len(name)}); the name is sealed into "
+            "every evidence record the spec produces")
     if not isinstance(brief, str):
         raise SpecError("spec.brief must be a string")
+    if len(brief) > MAX_BRIEF_CHARS:
+        raise SpecError(
+            f"spec.brief must be at most {MAX_BRIEF_CHARS} "
+            f"characters (got {len(brief)}); the brief is embedded "
+            "verbatim in every patch-generation prompt")
     if not isinstance(checks_raw, list) or not checks_raw:
         raise SpecError("spec.checks must be a non-empty list")
     if len(checks_raw) > MAX_CHECKS:
@@ -120,10 +156,23 @@ def parse_spec(raw: dict) -> TaskSpec:
         if not _non_empty_str(c.get("name")):
             raise SpecError(
                 f"spec.checks[{i}].name is required (non-empty string)")
+        if len(c["name"]) > MAX_CHECK_NAME_CHARS:
+            raise SpecError(
+                f"spec.checks[{i}].name must be at most "
+                f"{MAX_CHECK_NAME_CHARS} characters "
+                f"(got {len(c['name'])}); check names are sealed "
+                "into the evidence record")
         if not _non_empty_str(c.get("command")):
             raise SpecError(
                 f"spec.checks[{i}].command must be a non-empty string "
                 "(a whitespace-only command would pass vacuously)")
+        if len(c["command"]) > MAX_CHECK_COMMAND_CHARS:
+            raise SpecError(
+                f"spec.checks[{i}].command must be at most "
+                f"{MAX_CHECK_COMMAND_CHARS} characters "
+                f"(got {len(c['command'])}); commands are sealed "
+                "into the evidence record — put long scripts in a "
+                "file and gate on running it")
         if c["name"] in seen:
             raise SpecError(f"duplicate check name: {c['name']}")
         seen.add(c["name"])
