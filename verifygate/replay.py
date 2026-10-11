@@ -81,6 +81,25 @@ not reproducing. ``_check_summary`` now summarises only object
 entries of a list ``entries`` (anything else summarises as no
 checks, which cannot match a genuine run's summary), so a
 malformed record replays as *not reproduced*, never as a crash.
+
+Result-aggregation validation (v1.56.0): :func:`replay_ok` —
+the one function that turns per-record replay results into the
+reproduced / not-reproduced answer — took its input on trust,
+the v1.55.0 shape one layer up. An empty *iterator* aggregated
+to True (``bool`` of an iterator is always true, and ``all`` of
+nothing is true) while an empty list returned False; ``None``
+silently returned False, an answer about records that were
+never replayed; a string crashed with ``TypeError`` and a list
+of plain dicts with ``KeyError``. The input is now materialised
+and every entry validated through
+:func:`validate_replay_result` before aggregation: an object
+carrying the five match fields (``chain_ok`` /
+``verdict_match`` / ``checks_match`` / ``candidate_match`` /
+``spec_match``) as bools and ``error`` as a string or ``None``
+— the shapes :func:`_replay_one` and the reconstruction path
+emit. An empty input is False; a malformed one is one
+``ValueError``, never an answer. ``verify.document_ok``
+applies the same rule on its side (see that module).
 """
 
 from __future__ import annotations
@@ -263,10 +282,59 @@ def replay_document(
     return results
 
 
+def validate_replay_result(result, name: str = "result") -> dict:
+    """Return a per-record replay result that is safe to aggregate.
+
+    Result-aggregation validation (v1.56.0, see the module
+    docstring): the fields :func:`replay_ok` judges must be the
+    shapes the replay paths emit — the result an object, the
+    five match fields (``chain_ok`` / ``verdict_match`` /
+    ``checks_match`` / ``candidate_match`` / ``spec_match``)
+    present and bools, and ``error`` a string or ``None``.
+    Anything else is a ``ValueError`` naming the field, never
+    an aggregate.
+    """
+    if not isinstance(result, dict):
+        raise ValueError(
+            f"{name} must be an object "
+            f"(got {type(result).__name__})")
+    for field in ("chain_ok", "verdict_match", "checks_match",
+                  "candidate_match", "spec_match"):
+        if field not in result or not isinstance(result[field], bool):
+            raise ValueError(
+                f"{name}.{field} must be a bool "
+                f"(got {type(result.get(field)).__name__})")
+    error = result.get("error")
+    if error is not None and not isinstance(error, str):
+        raise ValueError(
+            f"{name}.error must be a string or None "
+            f"(got {type(error).__name__})")
+    return result
+
+
 def replay_ok(results: list[dict]) -> bool:
-    """True iff every record's chain is intact and its run reproduced."""
-    return bool(results) and all(
+    """True iff every record's chain is intact and its run reproduced.
+
+    The input is materialised and every entry validated first
+    (v1.56.0): an empty input — list or iterator — is False
+    (an empty iterator previously aggregated to True), and a
+    malformed entry is one ``ValueError``, never an answer and
+    never a ``KeyError`` / ``TypeError`` crash.
+    """
+    if results is None or isinstance(results, (str, bytes)):
+        raise ValueError(
+            f"results must be an iterable of replay result objects "
+            f"(got {type(results).__name__})")
+    try:
+        items = list(results)
+    except TypeError:
+        raise ValueError(
+            f"results must be an iterable of replay result objects "
+            f"(got {type(results).__name__})") from None
+    for index, result in enumerate(items):
+        validate_replay_result(result, name=f"results[{index}]")
+    return bool(items) and all(
         r["chain_ok"] and r["verdict_match"] and r["checks_match"]
         and r["candidate_match"] and r["spec_match"] and r["error"] is None
-        for r in results
+        for r in items
     )

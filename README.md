@@ -586,6 +586,31 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.56.0 — result-aggregation validation:
+`document_ok` and `replay_ok`, the two
+functions that turn per-record results into
+the intact / reproduced answers, took their
+input on trust — the verdict-aggregation
+shape one layer up. `document_ok([])` was
+True (`all` of nothing): a document with no
+records was "intact". `replay_ok` over an
+empty *iterator* was True (an iterator is
+always truthy, `all` of nothing is true)
+while the empty list was False, and `None`
+crashed one aggregator with a `TypeError`
+while silently returning False from the
+other — an answer about records that were
+never judged. A string or a list of plain
+dicts crashed with `TypeError` / `KeyError`,
+and a `chain_ok` that was a truthy non-bool
+counted as a verified chain. Both inputs are
+now materialised and every entry validated
+before aggregation (the shapes
+`check_record` / the replay paths emit:
+bool match fields, bindings bool-or-None,
+`error` string-or-None). An empty input is
+False; a malformed one is one `ValueError`,
+never an answer. 51 new tests (1814 total).
 1.55.0 — verdict-aggregation validation:
 `overall_verdict`, the one function that turns
 per-check results into the verdict sealed into

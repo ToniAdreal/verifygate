@@ -227,6 +227,26 @@ view and replay apply the same guards on their side (see their
 module docstrings): a malformed record renders next to its
 CHAIN INVALID banner and replays as not reproduced — it never
 crashes the tool asked to judge it.
+
+Result-aggregation validation (v1.56.0): :func:`document_ok` —
+the one function that turns per-record results into the
+document's intact / not-intact answer — took its input on
+trust, the v1.55.0 shape one layer up. An empty list aggregated
+to True (``all`` of nothing): a document with *no* records was
+"intact". ``None`` and a string crashed with an unhandled
+``TypeError`` / unpacking ``ValueError`` that named no field,
+a list of plain dicts crashed with ``KeyError``, and a result
+whose ``chain_ok`` was a truthy non-bool (a string, an int)
+counted as a verified chain. The input is now materialised and
+every entry validated through :func:`validate_verify_result`
+before aggregation: a ``(label, result)`` pair whose label is
+a string and whose result is an object carrying ``chain_ok``
+as a bool and each requested binding (``candidate_match`` /
+``spec_match`` / ``report_match``) as a bool or ``None`` — the
+shapes :func:`check_record` emits. An empty input is False
+(no records, no intact document); a malformed one is one
+``ValueError``, never an answer. ``replay.replay_ok`` applies
+the same rule on its side (see that module).
 """
 
 from __future__ import annotations
@@ -896,11 +916,73 @@ def verify_document(
     return results
 
 
+def validate_verify_result(result, name: str = "result") -> dict:
+    """Return a per-record result that is safe to aggregate.
+
+    Result-aggregation validation (v1.56.0, see the module
+    docstring): the fields :func:`document_ok` judges must be
+    the shapes :func:`check_record` emits — the result an
+    object, ``chain_ok`` present and a bool, and every binding
+    field present (``candidate_match`` / ``spec_match`` /
+    ``report_match``) a bool or ``None`` (``None`` = that
+    binding was not requested, or, for ``report_match``, the
+    document is a single record). A binding field a caller
+    omits is not judged — :func:`document_ok` reads it through
+    ``.get`` exactly as before — but a present field of any
+    other shape is a ``ValueError`` naming it, never an answer.
+    """
+    if not isinstance(result, dict):
+        raise ValueError(
+            f"{name} must be an object "
+            f"(got {type(result).__name__})")
+    if "chain_ok" not in result \
+            or not isinstance(result["chain_ok"], bool):
+        raise ValueError(
+            f"{name}.chain_ok must be a bool "
+            f"(got {type(result.get('chain_ok')).__name__})")
+    for field in ("candidate_match", "spec_match", "report_match"):
+        value = result.get(field)
+        if value is not None and not isinstance(value, bool):
+            raise ValueError(
+                f"{name}.{field} must be a bool or None "
+                f"(got {type(value).__name__})")
+    return result
+
+
 def document_ok(results: list[tuple[str, dict]]) -> bool:
-    """True iff every chain verifies and every requested binding matches."""
-    return all(
+    """True iff every chain verifies and every requested binding matches.
+
+    The input is materialised and every entry validated first
+    (v1.56.0): an empty input is False — no records, no intact
+    document (``all`` of nothing previously aggregated to
+    True) — and a malformed entry (not a ``(label, result)``
+    pair, a non-string label, a result :func:`check_record`
+    could not have emitted) is one ``ValueError``, never an
+    answer and never a ``KeyError`` / unpacking crash.
+    """
+    if results is None or isinstance(results, (str, bytes)):
+        raise ValueError(
+            f"results must be an iterable of (label, result) pairs "
+            f"(got {type(results).__name__})")
+    try:
+        items = list(results)
+    except TypeError:
+        raise ValueError(
+            f"results must be an iterable of (label, result) pairs "
+            f"(got {type(results).__name__})") from None
+    for index, item in enumerate(items):
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            raise ValueError(
+                f"results[{index}] must be a (label, result) pair")
+        label, result = item
+        if not isinstance(label, str):
+            raise ValueError(
+                f"results[{index}] label must be a string "
+                f"(got {type(label).__name__})")
+        validate_verify_result(result, name=f"results[{index}] result")
+    return bool(items) and all(
         r["chain_ok"] and r["candidate_match"] is not False
         and r["spec_match"] is not False
         and r.get("report_match") is not False
-        for _, r in results
+        for _, r in items
     )
