@@ -574,6 +574,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.41.0 — candidate-directory validation: the candidate
+directory itself was the last run parameter converted with
+`Path(...)` unchecked. A non-path value (`None`, an `int`, a
+list, `bytes`) crashed with an unhandled `TypeError` — in the
+runner before its checks, in replay mid-replay (replay
+validated `str(candidate_dir)`, a stringification, so a bad
+value passed that check), and in `verify`'s candidate binding
+inside `tree_hash`. An empty string silently became the
+*current* directory (`Path("")` is `"."`): a run verified
+whatever tree the caller happened to stand in and sealed its
+hash under an unrelated candidate label, while `verify`
+hashed the same wrong tree and reported a binding mismatch
+instead of a usage error. A regular file raised
+`FileNotFoundError` from the workspace copy but
+`NotADirectoryError` from the tree hash. And an over-long
+path produced a repair report whose stored attempt
+directories exceed the 1,000-character cap verification
+enforces over them. Every entry point — the runner, the
+repair loop, replay, `verify`'s binding, and `tree_hash` /
+`prepare_workspace` as backstops — now validates the
+directory through `sandbox.validate_candidate_dir` before
+any work: a non-string/non-Path, empty, or
+over-1,000-character value is a `ValueError`, a missing /
+not-a-directory / unstatable value is the one
+`FileNotFoundError`, and the ceiling constant is now defined
+once, in `sandbox`, with `verify` importing it. 116 new
+tests (1004 total).
 1.40.0 — label validation: the spec/candidate labels were
 the last caller-supplied run parameters with no validation
 at all. They are interpolated through `quote_label` into

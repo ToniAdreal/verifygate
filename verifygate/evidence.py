@@ -467,6 +467,13 @@ def tree_hash(root: str | Path) -> str:
     binding a record to an oversized candidate directory (``verify
     --candidate``, replay) is a usage error, not an invitation to
     read an unbounded tree into the hash.
+
+    The directory itself is validated on the same path (v1.41.0,
+    through ``check_candidate_bounds``' own validation): a non-path
+    value is a ``ValueError`` rather than a ``TypeError`` from
+    ``Path(...)``, an empty string does not silently hash the
+    current directory, and a regular file is the run path's
+    ``FileNotFoundError``, not a ``NotADirectoryError``.
     """
     from .sandbox import check_candidate_bounds, iter_candidate_files
 

@@ -98,6 +98,17 @@ route the caller took to supply it: a non-string label no longer
 crashes ``quote_label`` after the checks have run, an empty label
 no longer seals as a quoted empty path, and an over-long label no
 longer seals a replay field of any length.
+
+Candidate-directory validation (v1.41.0): ``candidate_dir`` itself
+is validated here too, through ``sandbox.validate_candidate_dir``
+— see that helper's docstring. It was the last run parameter
+converted with ``Path(...)`` unchecked: a non-path value crashed
+with an unhandled ``TypeError``, an empty string silently verified
+the *current* directory's tree and sealed its hash under the
+caller's candidate label, and a regular file's error depended on
+which internal path noticed first. A malformed candidate is now a
+``ValueError`` / ``FileNotFoundError`` here, before any workspace
+is prepared or any check runs.
 """
 
 from __future__ import annotations
@@ -118,7 +129,7 @@ from .evidence import (
     validate_mode,
 )
 from .llm import LLMAdapter
-from .sandbox import prepare_workspace
+from .sandbox import prepare_workspace, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
 from .tavily import (
     MAX_REFERENCES,
@@ -227,6 +238,13 @@ def run_verification(
     # workspace exists, never a run.
     validate_label(spec_label, "spec_label")
     validate_label(candidate_label, "candidate_label")
+    # Fail fast on an invalid candidate directory (v1.41.0): a
+    # non-path value crashed inside Path(...) below, an empty
+    # string silently meant the current directory — the wrong tree,
+    # sealed under the caller's label — and a regular file's error
+    # depended on the path taken. Judged here, beside the labels,
+    # before any workspace exists.
+    validate_candidate_dir(candidate_dir)
     workspace = prepare_workspace(candidate_dir)
     try:
         results = run_checks(spec, workspace)

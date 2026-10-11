@@ -120,6 +120,16 @@ invalid label must fail here, before the first verification run
 or any generation call, not crash ``quote_label`` after attempt
 0's checks have run and lose the whole report. The runner
 validates them too; this is the loop's own fail-fast.
+
+Candidate-directory validation (v1.41.0): ``candidate_dir`` is
+validated the same way, beside the labels — the loop stores its
+string verbatim as every attempt's ``candidate_dir`` and copies
+it once per round, so a non-path value crashed ``Path(...)``
+here with a ``TypeError``, an empty string silently repaired
+the *current* directory's tree, and an over-long path produced
+a report whose stored attempt directories exceed the cap
+verification enforces over them. The runner validates it too;
+this is the loop's own fail-fast, before the first run.
 """
 
 from __future__ import annotations
@@ -139,7 +149,11 @@ from .evidence import (
 from .llm import LLMAdapter
 from .patch import MAX_PATCH_TEXT_CHARS, PatchError, apply_patch
 from .runner import run_verification
-from .sandbox import iter_candidate_files, prepare_workspace
+from .sandbox import (
+    iter_candidate_files,
+    prepare_workspace,
+    validate_candidate_dir,
+)
 from .spec import TaskSpec, validate_spec
 from .tavily import ReferenceLookup
 
@@ -259,6 +273,12 @@ def run_repair(
     # loop's own fail-fast.
     validate_label(spec_label, "spec_label")
     validate_label(candidate_label, "candidate_label")
+    # The candidate directory is validated the same way (v1.41.0):
+    # a non-path, empty, or over-long value must fail here, beside
+    # the budget validation, before the first verification run or
+    # any generation call. The runner validates it too; this is the
+    # loop's own fail-fast.
+    validate_candidate_dir(candidate_dir)
     # The adapter name and the usage snapshots this report carries
     # are adapter-supplied: normalise them the same way the runner
     # normalises the sealed copies (v1.35.0), so the report's own

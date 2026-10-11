@@ -160,6 +160,21 @@ record carries, and the attempt count must fit the loop's budget
 (at most ``MAX_ROUNDS + 1`` attempts: the submitted candidate
 plus one per round). Every committed report satisfies all of it.
 
+Candidate-directory validation (v1.41.0): ``verify_document``'s
+``candidate_dir`` binding argument is validated up front, through
+``sandbox.validate_candidate_dir``. Before this, the binding
+hashed whatever it was handed: a non-path value crashed
+``tree_hash`` with an unhandled ``TypeError``, an empty string
+hashed the *current* directory and reported a binding mismatch
+for a tree nobody asked about, and a regular file raised the tree
+hash's ``NotADirectoryError`` where the run path reports the same
+file as ``FileNotFoundError``. ``None`` remains the "no binding
+requested" sentinel and is not judged; any other malformed value
+is a usage error before any record is checked. The attempt
+``candidate_dir`` ceiling above now imports its constant from
+``sandbox`` — the same 1,000 characters the directory validation
+enforces at run time, one definition for both sides.
+
 Generation resilience (v1.20.0): the repair loop's preserved
 ``failed_patch`` gained an ``error_kind`` — ``patch_rejected`` for a
 diff the applier refused, ``generation_failed`` when the adapter
@@ -189,7 +204,11 @@ from .evidence import (
     verify_chain,
 )
 from .repair import MAX_PATCH_ERROR_CHARS, MAX_PATCH_TEXT_CHARS, MAX_ROUNDS
-from .sandbox import MAX_CANDIDATE_FILES
+from .sandbox import (
+    MAX_CANDIDATE_DIR_CHARS,
+    MAX_CANDIDATE_FILES,
+    validate_candidate_dir,
+)
 from .spec import MAX_SPEC_NAME_CHARS
 
 # Ceilings over a patch linkage's changed-file list (v1.30.0): a
@@ -203,8 +222,10 @@ MAX_CHANGED_FILE_CHARS = 1000
 # Ceiling over an attempt's stated candidate directory (v1.31.0):
 # a filesystem path (a temp workspace or the caller's directory),
 # capped generously at the same 1,000 characters as a changed-file
-# name.
-MAX_CANDIDATE_DIR_CHARS = 1000
+# name. The constant itself lives in ``sandbox`` since v1.41.0
+# (imported above): the directory validation enforces it at run
+# time, this check mirrors it at verification time, and the two
+# must never drift apart.
 
 # Report shape bounds (v1.32.0, see the module docstring): the exact
 # field vocabularies ``repair.run_repair`` emits. A report or
@@ -720,10 +741,16 @@ def verify_document(
 ) -> list[tuple[str, dict]]:
     """Verify a record / repair report document; returns (label, result).
 
-    Raises ValueError for non-VerifyGate input; OSError from hashing a
-    missing candidate directory propagates to the caller.
+    Raises ValueError for non-VerifyGate input and for a malformed
+    ``candidate_dir`` (v1.41.0 — validated before any record is
+    checked); a missing / not-a-directory candidate raises
+    FileNotFoundError, the run path's one message for that fault.
+    ``candidate_dir=None`` requests no candidate binding and is
+    not judged.
     """
     pairs = collect_records(data)
+    if candidate_dir is not None:
+        validate_candidate_dir(candidate_dir)
     candidate_hash = tree_hash(candidate_dir) if candidate_dir is not None else None
     is_report = len(pairs) > 1 or (pairs and pairs[0][0] != "record")
     results = []

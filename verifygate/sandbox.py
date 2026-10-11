@@ -30,6 +30,28 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   failed with exit 126 inside VerifyGate while passing on disk —
   the sandbox judged a different tree than the one submitted. The
   reverse also holds: a non-executable file is never made executable.
+* **Candidate directory validation** — every entry point validates
+  the candidate directory itself through
+  :func:`validate_candidate_dir` before any workspace is prepared,
+  any check runs, or any tree is hashed (v1.41.0). Before this, the
+  parameter was converted with ``Path(...)`` unchecked: a non-path
+  value (``None``, an ``int``, a list, ``bytes``) crashed with an
+  unhandled ``TypeError`` — at different depths on different paths
+  (the runner before its checks, replay mid-replay, past its
+  ``OSError``/``RuntimeError`` handling, and ``verify``'s candidate
+  binding inside ``tree_hash``); an empty string silently became
+  the *current* directory (``Path("")`` is ``"."``), so a run
+  verified whatever tree the caller happened to stand in and sealed
+  its hash under an unrelated candidate label, while ``verify``
+  hashed the same wrong tree and reported a binding mismatch
+  instead of a usage error; and a regular file raised
+  ``FileNotFoundError`` from the workspace copy but
+  ``NotADirectoryError`` from the tree hash. A candidate must now
+  be a non-empty ``str``/``Path`` of at most
+  :data:`MAX_CANDIDATE_DIR_CHARS` characters naming an existing
+  directory: a malformed value is a ``ValueError`` and a missing /
+  not-a-directory value the one ``FileNotFoundError`` every path
+  already produced, both before any work happens (CLI exit 2).
 * **Candidate size bounds** — a candidate may carry at most
   :data:`MAX_CANDIDATE_FILES` verified files totalling at most
   :data:`MAX_CANDIDATE_BYTES` bytes (v1.23.0). Before this, the copy,
@@ -73,6 +95,60 @@ _READ_BYTES = 16_384  # > MAX_OUTPUT_CHARS even for multibyte text
 # harness copies or hashes it into the temp filesystem.
 MAX_CANDIDATE_FILES = 10_000
 MAX_CANDIDATE_BYTES = 256 * 1024 * 1024  # 256 MiB
+
+# Ceiling over a candidate directory's path string (v1.41.0): the
+# repair loop stores the submitted candidate's path verbatim in
+# every attempt wrapper, and verification caps that stored field
+# at this same 1,000 characters (verify.MAX_CANDIDATE_DIR_CHARS
+# imports this constant) — a longer path could only produce a
+# report that fails its own verification. Ordinary paths (the
+# longest committed one is a few dozen characters) sit far below.
+MAX_CANDIDATE_DIR_CHARS = 1000
+
+
+def validate_candidate_dir(candidate_dir, name: str = "candidate_dir") -> Path:
+    """Return ``candidate_dir`` as a ``Path`` to an existing directory.
+
+    Candidate-directory validation (v1.41.0, see the module
+    docstring): the type/emptiness/length faults are ``ValueError``
+    (with the offending value's repr truncated, exactly as
+    ``evidence.validate_label`` truncates it, so a huge value
+    cannot bloat the error line), and a well-formed path that does
+    not name a directory is the ``FileNotFoundError``
+    ``prepare_workspace`` has always raised — one message, one
+    exception, on every entry point, instead of the tree hash's
+    ``NotADirectoryError`` for the same file. ``bool`` is rejected
+    explicitly: it is not an ``int`` subclass problem here, it is
+    simply not a path, and naming it keeps the rule obvious.
+    """
+    if isinstance(candidate_dir, bool) \
+            or not isinstance(candidate_dir, (str, Path)):
+        desc = repr(candidate_dir)
+        if len(desc) > 80:
+            desc = desc[:77] + "..."
+        raise ValueError(
+            f"{name} must be a string or Path naming a directory, "
+            f"got {desc}")
+    if isinstance(candidate_dir, str) and not candidate_dir:
+        raise ValueError(f"{name} must not be an empty string")
+    if len(str(candidate_dir)) > MAX_CANDIDATE_DIR_CHARS:
+        raise ValueError(
+            f"{name} must be at most {MAX_CANDIDATE_DIR_CHARS} "
+            f"characters, got a {len(str(candidate_dir))}-character path")
+    path = Path(candidate_dir)
+    try:
+        is_dir = path.is_dir()
+    except OSError:
+        # A path that cannot even be stat'ed — a component over
+        # the filesystem's name limit raises ENAMETOOLONG out of
+        # is_dir() on some Python versions instead of returning
+        # False — does not name a directory either (the same
+        # unstatable-target rule patch.py applies).
+        is_dir = False
+    if not is_dir:
+        raise FileNotFoundError(
+            f"candidate directory not found: {candidate_dir}")
+    return path
 
 
 class CandidateTooLargeError(ValueError):
@@ -169,6 +245,7 @@ def check_candidate_bounds(
     call time (tests may override them per call or monkeypatch the
     constants).
     """
+    validate_candidate_dir(root)
     if max_files is None:
         max_files = MAX_CANDIDATE_FILES
     if max_bytes is None:
@@ -203,9 +280,7 @@ def prepare_workspace(candidate_dir: str | Path) -> Path:
     Leaking these copies once filled a temp filesystem in practice
     (see tests/test_workspace_cleanup.py).
     """
-    candidate_dir = Path(candidate_dir)
-    if not candidate_dir.is_dir():
-        raise FileNotFoundError(f"candidate directory not found: {candidate_dir}")
+    candidate_dir = validate_candidate_dir(candidate_dir)
     # Pre-flight: an oversized candidate is rejected before any copy
     # exists, so the rejection itself cannot fill the temp filesystem
     # it protects (and leaves no workspace behind for the caller to

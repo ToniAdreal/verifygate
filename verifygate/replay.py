@@ -43,6 +43,21 @@ an empty or over-long one sealing a replay field) would otherwise
 escape mid-replay instead of failing before any record is
 replayed, exactly the escape the spec-object validation (v1.39.0)
 closed for the spec itself.
+
+Candidate-directory validation (v1.41.0): ``candidate_dir`` itself
+is validated up front, through ``sandbox.validate_candidate_dir``
+(judged under the ``candidate_label`` name, as the value replay
+derives its candidate label from). Before this, the v1.40.0 check
+validated ``str(candidate_dir)`` — which *stringifies* a bad value
+instead of judging it, so an ``int`` or ``None`` candidate passed
+that check and crashed with a ``TypeError`` inside the per-record
+path (past its ``OSError``/``RuntimeError`` handling), an empty
+string silently meant the current directory, and a regular file
+surfaced only as a per-record replay error from the tree hash's
+``NotADirectoryError``. A malformed candidate is now a usage
+error before any record is replayed; the directory validation
+subsumes the derived-label check (a validated directory's string
+is a non-empty label within the same 1,000-character ceiling).
 """
 
 from __future__ import annotations
@@ -54,7 +69,7 @@ from .evidence import tree_hash, validate_label, validate_mode, verify_chain
 from .llm import LLMAdapter
 from .patch import PatchError, apply_patch
 from .runner import run_verification
-from .sandbox import prepare_workspace
+from .sandbox import prepare_workspace, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
 from .tavily import ReferenceLookup
 from .verify import collect_records, header_of
@@ -136,13 +151,19 @@ def replay_document(
     ``spec_label``, and the candidate label the per-record path
     derives as ``str(candidate_dir)`` for the runner, must both be
     usable replay labels before any record is replayed.
+    The candidate directory itself is validated the same way
+    (v1.41.0): ``validate_candidate_dir`` judges the value itself,
+    not its stringification — a non-path, empty, over-long, or
+    not-a-directory candidate is a usage error up front, and its
+    guarantees (a string form that is a non-empty label within the
+    same ceiling) subsume the v1.40.0 derived-label check.
     Reconstruction copies are removed before returning; the caller's
     candidate directory is never modified.
     """
     validate_mode(mode)
     validate_spec(spec)
     validate_label(spec_label, "spec_label")
-    validate_label(str(candidate_dir), "candidate_label")
+    validate_candidate_dir(candidate_dir, name="candidate_label")
     pairs = collect_records(data)
     is_report = isinstance(data, dict) and "attempts" in data
     results: list[dict] = []
