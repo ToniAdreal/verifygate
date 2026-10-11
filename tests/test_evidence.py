@@ -21,7 +21,7 @@ def _record():
         check_results=[CHECK],
         verdict="PASS",
         diagnosis=None,
-        replay_command="python3 -m verifygate run --spec s --candidate c",
+        replay_command="python3 -m verifygate run --spec s --candidate c --mode judge",
     )
 
 

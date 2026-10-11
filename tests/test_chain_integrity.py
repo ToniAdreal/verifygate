@@ -70,17 +70,17 @@ def _v2_record():
         diagnosis={"explanation": "it broke", "references": [],
                    "llm_adapter": "mock", "reference_source": "mock",
                    "reference_error": None},
-        replay_command="python3 -m verifygate run --spec s --candidate c",
+        replay_command="python3 -m verifygate run --spec s --candidate c --mode judge",
         llm_usage=[{"adapter": "x", "model": "m", "purpose": "explain_failure",
                     "usage": {"total_tokens": 7}}],
     )
 
 
-# -- chain v2 ---------------------------------------------------------
+# -- chain v2/v3 ------------------------------------------------------
 
-def test_new_records_are_chain_v2_and_verify():
+def test_new_records_are_chain_v3_and_verify():
     record = _v2_record()
-    assert record["chain_version"] == CHAIN_VERSION == 2
+    assert record["chain_version"] == CHAIN_VERSION == 3
     assert verify_chain(record) is True
 
 

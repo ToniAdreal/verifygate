@@ -136,7 +136,7 @@ def _record_with_check(check):
     return build_record(
         spec_name="demo", spec_hash="a" * 64, candidate_tree_hash="b" * 64,
         mode="judge", check_results=[check], verdict=verdict,
-        diagnosis=None, replay_command="python3 -m verifygate run")
+        diagnosis=None, replay_command="python3 -m verifygate run --spec s --candidate c --mode judge")
 
 
 def test_record_with_non_string_check_name_no_longer_verifies():

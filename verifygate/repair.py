@@ -20,9 +20,10 @@ Replay note: a patched attempt's candidate is an ephemeral temp copy
 that the loop (or the CLI) deletes, so its record's ``replay`` field
 must not point at that path — it names the ``verifygate replay``
 command instead, which reconstructs each patched tree from the
-original candidate plus the patches recorded in the report. The
-``replay`` field is top-level record metadata (not part of the hash
-chain), so correcting it here does not affect chain verification.
+original candidate plus the patches recorded in the report. Since
+chain v3 the ``replay`` field is sealed into the record hash, so the
+correction goes through ``evidence.update_replay_command`` — the one
+sanctioned post-seal edit, which re-seals the record it touches.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ import shutil
 from pathlib import Path
 
 from . import __version__
+from .evidence import update_replay_command
 from .llm import LLMAdapter
 from .patch import PatchError, apply_patch
 from .runner import run_verification
@@ -205,12 +207,12 @@ def run_repair(
         # with the truthful instruction: replay the whole report from
         # the original candidate; `verifygate replay` reconstructs
         # this attempt's tree from the recorded patch.
-        record["replay"] = (
+        update_replay_command(record, (
             f"python3 -m verifygate replay --record <repair-report.json> "
             f"--spec {spec_label} --candidate {candidate_label} "
             f"--mode {mode}  # attempt {rounds_used}: patched copy, "
             f"reconstructed from the report's recorded patch"
-        )
+        ))
         attempts.append({
             "round": rounds_used,
             "candidate_dir": str(current_dir),

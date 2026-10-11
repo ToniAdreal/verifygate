@@ -24,6 +24,26 @@ versions — kinds, their order, and the fields each kind must carry —
 so a relabelled legacy record fails verification too, while every
 untampered legacy record still verifies exactly as before.
 
+Record metadata (v1.15.0): the record's *top-level* fields sat outside
+the chain entirely — ``record_hash`` covered only the entries plus the
+verdict — so the ``replay`` command (the field a reader is told to
+copy, paste, and run) could be replaced with an arbitrary shell
+command, ``signing_key_is_default_dev_key`` flipped to hide that the
+labelled public dev key signed the record, and ``version`` /
+``created_at`` rewritten at will, all while the record verified
+INTACT and the web view printed the rewritten fields. Chain v3
+(VerifyGate >= 1.15) seals those fields into ``record_hash`` itself.
+For legacy v1/v2 records, verification instead enforces the metadata
+*consistency* rules a genuine record always satisfies (see
+``_metadata_ok``): exact top-level field set, semver ``version``,
+timezone-aware ISO ``created_at``, the dev-key flag equal to the key
+that actually verifies the signature, and a ``replay`` string that
+matches one of the two command templates the runner emits, in the
+header's mode, with no shell metacharacters in its labels. A legacy
+rewrite that stays inside those rules (a different plausible date)
+is not detectable — that residual is exactly what v3 removes for new
+records.
+
 Header sealing (v1.11.0): the header entry was the one exception to
 full-entry hashing — verification recomputed its hash from a fixed
 four-field subset, so an *extra* field injected into the header was
@@ -61,6 +81,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -68,7 +89,7 @@ from . import __version__
 
 DEFAULT_DEV_KEY = "verifygate-dev-key-NOT-FOR-PRODUCTION"
 GENESIS = "verifygate/genesis/v1"
-CHAIN_VERSION = 2
+CHAIN_VERSION = 3
 
 
 def _canonical(obj) -> str:
@@ -153,7 +174,19 @@ def build_record(
         }
         prev = _sha(prev + _canonical({"kind": "llm_usage", **usage_entry}))
         entries.append({"kind": "llm_usage", "hash": prev, **usage_entry})
-    record_hash = _sha(prev + _canonical({"verdict": verdict}))
+    created_at = datetime.now(timezone.utc).isoformat()
+    dev_key = signing_key() == DEFAULT_DEV_KEY
+    # Chain v3: the top-level metadata is sealed into the record hash
+    # alongside the verdict, so the replay command, the sealing time,
+    # the emitting version, and the dev-key disclosure cannot be
+    # rewritten after the fact (see the module docstring).
+    record_hash = _sha(prev + _canonical({
+        "verdict": verdict,
+        "version": __version__,
+        "created_at": created_at,
+        "replay": replay_command,
+        "signing_key_is_default_dev_key": dev_key,
+    }))
     signature = hmac.new(
         signing_key().encode("utf-8"), record_hash.encode("utf-8"), hashlib.sha256
     ).hexdigest()
@@ -161,14 +194,54 @@ def build_record(
         "tool": "verifygate",
         "version": __version__,
         "chain_version": CHAIN_VERSION,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": created_at,
         "verdict": verdict,
         "replay": replay_command,
         "entries": entries,
         "record_hash": record_hash,
         "signature": signature,
-        "signing_key_is_default_dev_key": signing_key() == DEFAULT_DEV_KEY,
+        "signing_key_is_default_dev_key": dev_key,
     }
+
+
+def _sealed_payload(record: dict, chain_version: int) -> dict:
+    """The top-level payload ``record_hash`` is computed over.
+
+    Chain v1/v2 sealed only the verdict; chain v3 also seals the
+    record's metadata fields (see the module docstring).
+    """
+    if chain_version >= 3:
+        return {
+            "verdict": record["verdict"],
+            "version": record["version"],
+            "created_at": record["created_at"],
+            "replay": record["replay"],
+            "signing_key_is_default_dev_key":
+                record["signing_key_is_default_dev_key"],
+        }
+    return {"verdict": record["verdict"]}
+
+
+def update_replay_command(record: dict, replay_command: str) -> None:
+    """Replace a record's ``replay`` field, re-sealing if needed.
+
+    The repair loop rewrites a patched attempt's replay field after
+    the runner seals its record (the runner's string points at the
+    ephemeral patched copy). Under chain v3 the field is part of the
+    sealed payload, so the record hash and signature are recomputed
+    here — the only sanctioned post-seal edit. Under v1/v2 the field
+    was unsealed metadata and is simply replaced.
+    """
+    record["replay"] = replay_command
+    version = record.get("chain_version", 1)
+    if version >= 3:
+        prev = record["entries"][-1]["hash"]
+        record["record_hash"] = _sha(
+            prev + _canonical(_sealed_payload(record, version)))
+        record["signature"] = hmac.new(
+            signing_key().encode("utf-8"),
+            record["record_hash"].encode("utf-8"),
+            hashlib.sha256).hexdigest()
 
 
 _MODES = ("judge", "real")
@@ -290,6 +363,81 @@ def _usage_entry_ok(entry: dict) -> bool:
     return entry["total_tokens"] == total
 
 
+_RECORD_KEYS = {"tool", "version", "created_at", "verdict", "replay",
+                "entries", "record_hash", "signature",
+                "signing_key_is_default_dev_key"}
+_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
+# A spec/candidate/record label as the runner interpolates it into a
+# replay command: a path-like token with no whitespace and no shell
+# metacharacters, so a sealed replay string can never smuggle a
+# second command past a reader who copy-pastes it. ``<>`` are allowed
+# for the ``<repair-report.json>`` placeholder the repair loop uses.
+_LABEL = r"[A-Za-z0-9_./~@:+\-<>]+"
+_REPLAY_RES = (
+    re.compile(
+        rf"^python3 -m verifygate run --spec {_LABEL} "
+        rf"--candidate {_LABEL} --mode (judge|real)$"),
+    re.compile(
+        rf"^python3 -m verifygate replay --record {_LABEL} "
+        rf"--spec {_LABEL} --candidate {_LABEL} --mode (judge|real)  "
+        rf"# attempt [1-9][0-9]*: patched copy, reconstructed from "
+        rf"the report's recorded patch$"),
+)
+
+
+def _metadata_ok(record: dict) -> bool:
+    """A record's top-level metadata must be what ``build_record``
+    emits (see the module docstring's v1.15.0 note).
+
+    Under chain v3 the metadata is additionally sealed into
+    ``record_hash``, which catches *every* rewrite; these consistency
+    rules are what legacy v1/v2 records get, and they also keep a v3
+    record's metadata well-formed before its hash is recomputed.
+    """
+    if not isinstance(record, dict):
+        return False
+    if not set(record) <= _RECORD_KEYS | {"chain_version"} \
+            or not _RECORD_KEYS <= set(record):
+        return False
+    if record.get("tool") != "verifygate":
+        return False
+    if not isinstance(record.get("version"), str) \
+            or not _VERSION_RE.match(record["version"]):
+        return False
+    chain_version = record.get("chain_version", 1)
+    if not _is_int(chain_version) or chain_version not in (1, 2, 3):
+        return False
+    created_at = record.get("created_at")
+    if not isinstance(created_at, str):
+        return False
+    try:
+        parsed = datetime.fromisoformat(created_at)
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        return False
+    # The disclosure flag must tell the truth about the key that the
+    # signature check below will use: it is derived from the same
+    # environment key, exactly as build_record derived it at sealing.
+    flag = record.get("signing_key_is_default_dev_key")
+    if not isinstance(flag, bool) or flag != (signing_key() == DEFAULT_DEV_KEY):
+        return False
+    if not _is_sha256_hex(record.get("record_hash")) \
+            or not _is_sha256_hex(record.get("signature")):
+        return False
+    # The replay instruction must be one of the two commands the
+    # runner / repair loop emit, in the mode the header seals.
+    replay = record.get("replay")
+    if not isinstance(replay, str):
+        return False
+    entries = record.get("entries") or []
+    header_mode = entries[0].get("mode") if entries \
+        and isinstance(entries[0], dict) else None
+    return any(
+        (m := pattern.match(replay)) and m.group(1) == header_mode
+        for pattern in _REPLAY_RES)
+
+
 _UNSPECIFIED = object()  # sentinel: "no verdict supplied" != verdict None
 
 
@@ -382,8 +530,10 @@ def verify_chain(record: dict) -> bool:
         entries = record["entries"]
         if not _structure_ok(entries, record.get("verdict")):
             return False
+        if not _metadata_ok(record):
+            return False
         version = record.get("chain_version", 1)
-        if version not in (1, 2):
+        if version not in (1, 2, 3):
             return False
         prev = _sha(GENESIS)
         # The header is hashed over its *full* content, like every
@@ -391,7 +541,7 @@ def verify_chain(record: dict) -> bool:
         # left any extra header field unauthenticated. Untampered
         # records (both versions) carry exactly the emitted fields,
         # so their header hashes recompute identically.
-        if version == 2:
+        if version >= 2:
             header = {k: v for k, v in entries[0].items() if k != "hash"}
         else:  # chain v1 hashed the content only, never the kind
             header = {k: v for k, v in entries[0].items()
@@ -400,7 +550,7 @@ def verify_chain(record: dict) -> bool:
         if entries[0]["hash"] != prev:
             return False
         for entry in entries[1:]:
-            if version == 2:
+            if version >= 2:
                 payload = {k: v for k, v in entry.items() if k != "hash"}
             else:  # chain v1 hashed the content only, never the kind
                 payload = {k: v for k, v in entry.items()
@@ -408,7 +558,7 @@ def verify_chain(record: dict) -> bool:
             prev = _sha(prev + _canonical(payload))
             if entry["hash"] != prev:
                 return False
-        record_hash = _sha(prev + _canonical({"verdict": record["verdict"]}))
+        record_hash = _sha(prev + _canonical(_sealed_payload(record, version)))
         if record_hash != record["record_hash"]:
             return False
         expected_sig = hmac.new(

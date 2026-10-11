@@ -77,12 +77,12 @@ def _record(checks, verdict, diagnosis=None, usage=None, **header):
         candidate_tree_hash="b" * 64,
         mode=header.get("mode", "judge"),
         check_results=checks, verdict=verdict, diagnosis=diagnosis,
-        replay_command="python3 -m verifygate run",
+        replay_command="python3 -m verifygate run --spec s --candidate c --mode judge",
         llm_usage=usage)
 
 
 def _rechain(record):
-    """Recompute a (chain v2) record's chain + signature in place.
+    """Recompute a (chain v3) record's chain + signature in place.
 
     The dev signing key is public by design, so a forged record can
     always be re-sealed; these tests use that route to prove the
@@ -93,8 +93,14 @@ def _rechain(record):
         payload = {k: v for k, v in entry.items() if k != "hash"}
         prev = _sha(prev + _canonical(payload))
         entry["hash"] = prev
-    record["record_hash"] = _sha(
-        prev + _canonical({"verdict": record["verdict"]}))
+    record["record_hash"] = _sha(prev + _canonical({
+        "verdict": record["verdict"],
+        "version": record["version"],
+        "created_at": record["created_at"],
+        "replay": record["replay"],
+        "signing_key_is_default_dev_key":
+            record["signing_key_is_default_dev_key"],
+    }))
     record["signature"] = hmac.new(
         signing_key().encode("utf-8"),
         record["record_hash"].encode("utf-8"),

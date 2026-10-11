@@ -321,6 +321,18 @@ And every attempt must have been sealed under the same spec
 sealed under a different spec — same name and mode, different
 brief or checks — spliced into a report fails verification and
 joins the web view's mismatch banner.
+A record's own top-level metadata is sealed too (v1.15.0, chain
+v3): the `replay` command a reader is told to run, the
+`signing_key_is_default_dev_key` disclosure, the emitting
+`version`, and `created_at` are covered by the record hash, so
+replacing the replay string with an arbitrary shell command or
+flipping the dev-key flag breaks verification. Legacy (v1/v2)
+records, whose metadata predates the sealing, are held to the
+consistency rules a genuine record always satisfies instead:
+exact field set, semver version, timezone-aware timestamp, the
+flag matching the key that verifies the signature, and a replay
+string matching one of the two emitted command templates in the
+header's mode, with no shell metacharacters in its labels.
 Tampering with a verdict, a check result, a diagnosis, or a sealed
 token-usage figure fails verification (exit 1); usage errors exit 2.
 No checks are re-run, and no keys or network are needed.
@@ -426,6 +438,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.15.0 — record metadata sealing (chain v3): a record's top-level
+fields sat outside the hash chain entirely — the `replay` command
+could be replaced with an arbitrary shell command, the
+`signing_key_is_default_dev_key` disclosure flipped to hide that
+the labelled public dev key signed the record, and `version` /
+`created_at` rewritten at will, all verifying INTACT while the
+web view printed the rewritten values (9 probes reproduced).
+Chain v3 seals those fields into `record_hash`; the repair loop's
+one post-seal replay correction re-seals through a dedicated
+helper. Legacy v1/v2 records get metadata consistency rules:
+exact field set, semver version, timezone-aware ISO timestamp,
+dev-key flag equal to the verifying key, bool `chain_version`
+rejected, and a replay string matching an emitted command
+template in the header's mode with no shell metacharacters in
+its labels. 15 new tests (314 total).
 1.14.0 — cross-attempt spec binding: a repair report's attempts
 were cross-checked on spec name and mode, but their sealed
 `spec_hash` values were never compared with each other, so an
