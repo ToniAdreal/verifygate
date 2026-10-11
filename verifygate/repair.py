@@ -54,6 +54,19 @@ wrote the oversize tree, and re-verifying it raised
 ``PatchError``, not guarded — so the whole report, attempt 0's
 sealed FAIL evidence included, was lost to a CLI usage error.
 
+Patch-report bounds (v1.30.0): the patch linkage this module
+writes into a report — the preserved ``patch_text``, the patch
+``error`` strings, the ``changed_files`` lists, and each linkage's
+``llm_usage`` snapshot — is capped at the source here
+(``MAX_PATCH_TEXT_CHARS`` for the stored proposal,
+``MAX_PATCH_ERROR_CHARS`` for a stored applier/generation error),
+and ``verify``'s narrative check mirrors the caps (plus generous
+ceilings over the changed-file lists and the usage snapshots).
+Before this, those unchained fields were judged only for type:
+inflating a committed report's preserved patch, its rejection
+error, its changed-file list, or its usage snapshot to
+500,000-character strings still verified INTACT.
+
 Generation resilience (v1.20.0): ``llm.generate_patch`` is guarded
 exactly like the diagnosis call in the runner. Before this, a
 generation failure — a network error, a malformed Token Factory
@@ -96,6 +109,15 @@ from .tavily import ReferenceLookup
 # or adversarial budget cannot loop (and, in real mode, bill) without
 # limit — the same reasoning that caps a check's timeout at 3600s.
 MAX_ROUNDS = 10
+
+# Source caps for the patch linkage stored in a repair report
+# (v1.30.0): the raw proposal is preserved for debuggability and
+# for replay reconstruction, truncated to this many characters;
+# a stored patch error (an applier rejection, whose text embeds
+# the offending path, or a generation failure) is truncated to
+# this many. ``verify`` mirrors both caps — see its docstring.
+MAX_PATCH_TEXT_CHARS = 8000
+MAX_PATCH_ERROR_CHARS = 2000
 
 
 def _check_dicts(record: dict) -> list[dict]:
@@ -257,7 +279,7 @@ def run_repair(
             "llm_usage": patch_calls,
             # The raw proposal, kept so a rejected patch stays
             # debuggable from the report alone (truncated for size).
-            "patch_text": patch_text[:8000],
+            "patch_text": patch_text[:MAX_PATCH_TEXT_CHARS],
         }
         # Fresh copy through the hardened workspace path (scrubbed
         # traversal: no symlink escapes, no housekeeping files).
@@ -267,11 +289,15 @@ def run_repair(
         except PatchError as exc:
             # The rejected copy is never used again; do not leak it.
             shutil.rmtree(new_dir, ignore_errors=True)
-            patch_info["error"] = str(exc)
+            # An applier message embeds the offending path, which
+            # the proposal itself chose: cap what the report stores
+            # (and what feedback/prompts carry) at the source.
+            err_text = str(exc)[:MAX_PATCH_ERROR_CHARS]
+            patch_info["error"] = err_text
             patch_info["error_kind"] = "patch_rejected"
-            patch_error = str(exc)
+            patch_error = err_text
             failed_patch = patch_info
-            patch_feedback = str(exc)
+            patch_feedback = err_text
             if rounds_used < max_rounds:
                 continue  # retry with the rejection as feedback
             stopped_reason = "patch_not_applicable"

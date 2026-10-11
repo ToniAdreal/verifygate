@@ -94,6 +94,26 @@ problem like any other rewritten field, and the web view flags it
 through the same SUMMARY MISMATCH banner (it renders
 ``narrative_problems``).
 
+Patch-report bounds (v1.30.0): the narrative check also bounds
+the patch linkage's text. The loop caps what it stores at the
+source — the preserved ``patch_text`` at
+``repair.MAX_PATCH_TEXT_CHARS``, a stored patch error at
+``repair.MAX_PATCH_ERROR_CHARS`` — but verification judged those
+unchained fields only for type, and the ``changed_files`` lists
+and each linkage's ``llm_usage`` snapshot not at all: inflating
+a committed report's preserved patch, rejection error,
+changed-file list, or usage snapshot with 500,000-character
+strings still verified INTACT (all four reproduced). The
+narrative check now mirrors the source caps, plus generous
+ceilings over the rest: at most ``MAX_CHANGED_FILES`` changed
+files (the candidate file ceiling — a patch's result must fit
+inside it), each name at most ``MAX_CHANGED_FILE_CHARS``, and a
+usage snapshot shaped like a sealed entry's calls (at most
+``MAX_CALLS_PER_USAGE_ENTRY`` calls, per-field string caps —
+the same ceilings ``evidence`` enforces inside a record). The
+committed reports sit far below every cap (patch texts peak at
+571 characters, errors at 92, one changed file, one call).
+
 Generation resilience (v1.20.0): the repair loop's preserved
 ``failed_patch`` gained an ``error_kind`` — ``patch_rejected`` for a
 diff the applier refused, ``generation_failed`` when the adapter
@@ -110,8 +130,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .evidence import tree_hash, verify_chain
-from .repair import MAX_ROUNDS
+from .evidence import (
+    MAX_ADAPTER_NAME_CHARS,
+    MAX_CALLS_PER_USAGE_ENTRY,
+    MAX_CALL_FIELD_CHARS,
+    MAX_CALL_KEYS,
+    MAX_FINISH_REASON_CHARS,
+    MAX_MODEL_CHARS,
+    MAX_PURPOSE_CHARS,
+    tree_hash,
+    verify_chain,
+)
+from .repair import MAX_PATCH_ERROR_CHARS, MAX_PATCH_TEXT_CHARS, MAX_ROUNDS
+from .sandbox import MAX_CANDIDATE_FILES
+
+# Ceilings over a patch linkage's changed-file list (v1.30.0): a
+# patch's staged result must fit inside the candidate file
+# ceiling, so no genuine linkage names more changed files than
+# that; each name is a relative path inside the candidate, capped
+# generously at 1,000 characters.
+MAX_CHANGED_FILES = MAX_CANDIDATE_FILES
+MAX_CHANGED_FILE_CHARS = 1000
 
 
 def collect_records(data) -> list[tuple[str, dict]]:
@@ -279,6 +318,62 @@ def derived_stopped_reason(data) -> str | None:
     return "max_rounds"
 
 
+def _patch_usage_ok(calls) -> bool:
+    """True iff a patch linkage's ``llm_usage`` snapshot is within
+    the ceilings ``evidence`` enforces over a sealed entry's calls
+    (v1.30.0): a bounded list of call objects, each with a bounded
+    key count and per-field string caps. The snapshot is a copy of
+    calls the adapter recorded for one patch round — one generation
+    call, at most doubled by the real adapter's empty-completion
+    retry — so the sealed entry's generous ceilings apply as-is."""
+    if not isinstance(calls, list) \
+            or len(calls) > MAX_CALLS_PER_USAGE_ENTRY:
+        return False
+    text_caps = {
+        "adapter": MAX_ADAPTER_NAME_CHARS,
+        "model": MAX_MODEL_CHARS,
+        "purpose": MAX_PURPOSE_CHARS,
+        "finish_reason": MAX_FINISH_REASON_CHARS,
+    }
+    for call in calls:
+        if not isinstance(call, dict) or len(call) > MAX_CALL_KEYS:
+            return False
+        for field, value in call.items():
+            if field == "usage":
+                continue
+            cap = text_caps.get(field, MAX_CALL_FIELD_CHARS)
+            if field == "finish_reason":
+                if value is not None and not (
+                        isinstance(value, str) and len(value) <= cap):
+                    return False
+            elif field in text_caps:
+                if not (isinstance(value, str) and len(value) <= cap):
+                    return False
+            elif isinstance(value, str) and len(value) > cap:
+                return False
+    return True
+
+
+def _patch_linkage_problems(patch: dict, problems: list[str]) -> None:
+    """Bound one patch linkage's stored text (v1.30.0): the
+    preserved proposal, the changed-file list, and the usage
+    snapshot. Only fields that are present are judged, matching
+    the narrative check's legacy policy."""
+    if patch.get("patch_text") is not None \
+            and isinstance(patch.get("patch_text"), str) \
+            and len(patch["patch_text"]) > MAX_PATCH_TEXT_CHARS:
+        problems.append("patch text exceeds the stored maximum")
+    changed = patch.get("changed_files")
+    if changed is not None and isinstance(changed, list) and (
+            len(changed) > MAX_CHANGED_FILES
+            or any(isinstance(f, str) and len(f) > MAX_CHANGED_FILE_CHARS
+                   for f in changed)):
+        problems.append("patch changed_files exceeds the stored bounds")
+    if patch.get("llm_usage") is not None \
+            and not _patch_usage_ok(patch.get("llm_usage")):
+        problems.append("patch llm_usage exceeds the stored bounds")
+
+
 def narrative_problems(data) -> list[str]:
     """Ways a repair report's unchained narrative disagrees with its
     sealed attempts (empty list = the narrative is the one the loop
@@ -338,6 +433,7 @@ def narrative_problems(data) -> list[str]:
         if patch.get("patch_text") is not None \
                 and not isinstance(patch.get("patch_text"), str):
             problems.append("patch text is not a string")
+        _patch_linkage_problems(patch, problems)
 
     # The preserved rejection: a patch the applier refused, on a
     # round no attempt claims (each round is either an applied patch
@@ -367,6 +463,17 @@ def narrative_problems(data) -> list[str]:
                 and failed.get("error_kind") not in (
                     None, "patch_rejected", "generation_failed"):
             problems.append("failed_patch error_kind is not a known failure kind")
+        if isinstance(failed, dict):
+            if isinstance(failed.get("error"), str) \
+                    and len(failed["error"]) > MAX_PATCH_ERROR_CHARS:
+                problems.append("failed_patch error exceeds the stored maximum")
+            if failed.get("patch_text") is not None \
+                    and not isinstance(failed.get("patch_text"), str):
+                problems.append("failed_patch patch text is not a string")
+            _patch_linkage_problems(failed, problems)
+    if isinstance(data.get("last_patch_error"), str) \
+            and len(data["last_patch_error"]) > MAX_PATCH_ERROR_CHARS:
+        problems.append("last_patch_error exceeds the stored maximum")
     # last_patch_error is exactly the preserved rejection's error:
     # the loop sets it on a rejection and never clears it.
     if "last_patch_error" in data:

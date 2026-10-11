@@ -62,6 +62,7 @@ longer applies.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -238,7 +239,13 @@ def _safe_target(root: Path, rel: str) -> Path:
     p = Path(rel)
     if p.is_absolute() or ".." in p.parts:
         raise PatchError(f"unsafe path in patch: {rel!r}")
-    target = (root / p).resolve()
+    try:
+        target = (root / p).resolve()
+    except (OSError, RuntimeError) as exc:
+        # An unresolvable path (a symlink loop, an over-long
+        # component) is a diff that cannot apply, not a crash —
+        # the same contract _read_lines keeps for binary targets.
+        raise PatchError(f"unusable path in patch: {rel!r}") from exc
     if not target.is_relative_to(root.resolve()):
         raise PatchError(f"patch path escapes workspace: {rel!r}")
     return target
@@ -395,10 +402,33 @@ def apply_patch(
     changed: list[str] = []
     staged: dict[Path, _Staged] = {}
 
+    def _is_file(target: Path) -> bool:
+        try:
+            return target.is_file()
+        except OSError:
+            # A target that cannot even be stat'ed (an over-long
+            # name component raises ENAMETOOLONG, not a clean
+            # False) is not a file the patch can modify — the
+            # caller turns that into a PatchError rejection.
+            return False
+
+    def _exists(target: Path, rel: str) -> bool:
+        try:
+            os.stat(target)
+            return True
+        except FileNotFoundError:
+            return False
+        except OSError as exc:
+            # Not missing — unusable (an over-long component, a
+            # path through a regular file): creating it would only
+            # fail mid-commit, after other files were written, so
+            # reject it here, before anything is staged.
+            raise PatchError(f"cannot create {rel}: unusable path") from exc
+
     def load(target: Path, rel: str, what: str) -> _Staged:
         if target in staged:
             state = staged[target]
-        elif target.is_file():
+        elif _is_file(target):
             raw = target.read_bytes()
             state = _Staged(
                 exists=True,
@@ -422,7 +452,7 @@ def apply_patch(
                 if existing.exists:
                     raise PatchError(
                         f"cannot create {fp.new_path}: already exists")
-            elif target.exists():
+            elif _exists(target, fp.new_path):
                 raise PatchError(f"cannot create {fp.new_path}: already exists")
             new_lines = _apply_hunks([], fp)
             staged[target] = _Staged(

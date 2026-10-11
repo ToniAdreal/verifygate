@@ -574,6 +574,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.30.0 — repair-report patch bounds: a repair report's patch
+linkage — the preserved `patch_text`, the patch `error`
+strings, the `changed_files` lists, and each linkage's
+`llm_usage` snapshot — sits outside every hash chain and was
+judged only for type, so inflating any of it with
+500,000-character strings (the changed-file list and usage
+snapshot were not judged at all) still verified INTACT. The
+loop's source caps are now named constants (`patch_text`
+truncated at 8,000 characters, a stored patch error at
+2,000 — an applier message embeds the path the proposal
+chose, truncated at the source), and `verify`'s narrative
+check mirrors them plus generous ceilings over the lists
+(at most the candidate file ceiling of changed files, each
+name at most 1,000 characters) and the usage snapshots (the
+sealed-call ceilings), while every committed report (patch
+texts peak at 571 characters, errors at 92) still verifies.
+Found on the way: a patch target whose name component is
+over the filesystem limit raised a raw `OSError`
+(ENAMETOOLONG) out of the applier's stat calls, escaping the
+repair loop's `PatchError` handling — unstatable,
+unresolvable, and uncreatable targets are now clean
+rejections, raised before anything is staged or written.
+14 new tests (533 total).
 1.29.0 — diagnosis/usage metadata bounds: a diagnosis entry's
 adapter/lookup names and error notes, and an `llm_usage` entry's
 calls (their count, and every string they carry), were the last
