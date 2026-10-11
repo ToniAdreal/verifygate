@@ -120,6 +120,16 @@ adapter's ``name`` after the guarded advisory call, losing the
 record the checks had already decided. Validation is about
 shape, not behaviour: an adapter whose callable methods *raise*
 still degrades exactly as v1.19.0/v1.20.0 designed.
+
+Signing-key validation (v1.45.0): the sealing key is resolved
+here too, through ``evidence.signing_key`` — see that helper.
+The key comes from the caller's environment, not an argument,
+and was the last sealing input taken on trust: a
+set-but-empty ``VERIFYGATE_SIGNING_KEY`` (the env fallback
+applies only when the variable is unset) silently became an
+empty HMAC key whose record disclosed a custom, non-dev key.
+A malformed key is now a ``ValueError`` here, before any
+workspace exists, exactly like the other run parameters.
 """
 
 from __future__ import annotations
@@ -135,6 +145,7 @@ from .evidence import (
     normalise_adapter_name,
     normalise_usage_calls,
     quote_label,
+    signing_key,
     tree_hash,
     validate_label,
     validate_mode,
@@ -263,6 +274,15 @@ def run_verification(
     # record. Judged here, before any workspace exists.
     validate_llm(llm)
     validate_references(references)
+    # Fail fast on a malformed signing key (v1.45.0): the key is
+    # resolved from the environment at sealing time, so a
+    # set-but-empty / trivially short / control-carrying value
+    # would otherwise be discovered only after every check had
+    # run — and before this round it was not discovered at all:
+    # it silently became the HMAC key while the record disclosed
+    # a custom (non-dev) key. Resolving it here discards the
+    # value; build_record resolves it again when it seals.
+    signing_key()
     workspace = prepare_workspace(candidate_dir)
     try:
         results = run_checks(spec, workspace)

@@ -275,6 +275,25 @@ supplied side was compared verbatim, so a malformed value was
 reported as a binding mismatch instead of the usage error it
 is. A well-formed hash that differs remains a genuine
 mismatch; ``None`` remains the unjudged no-binding sentinel.
+
+Signing-key validation (v1.45.0): the signing key itself was
+resolved with a bare ``os.environ.get(..., DEFAULT_DEV_KEY)``,
+which falls back to the labelled dev key only when the variable
+is *unset*. A variable set but empty — the classic CI/deployment
+mistake — or set to whitespace, a single character, or any other
+trivially guessable value therefore became the HMAC key, while
+the record's ``signing_key_is_default_dev_key`` disclosure read
+``False``: the record claimed a custom key had signed it when
+in fact an empty (or near-empty) key anyone could reproduce
+had. A 500,000-character value was likewise accepted verbatim.
+:func:`signing_key` now validates the resolved value: an unset
+variable still yields the labelled dev key (and an explicit
+value equal to it still discloses ``True``), but a set value
+must be 8..512 characters, not whitespace-only, and free of
+control characters — anything else is a ``ValueError`` (the
+CLI's exit-2 usage error) at sealing and at verification,
+never a silently downgraded signature. The error names only
+the rule and the length; it never echoes the key itself.
 """
 
 from __future__ import annotations
@@ -306,6 +325,12 @@ from .tavily import (
 )
 
 DEFAULT_DEV_KEY = "verifygate-dev-key-NOT-FOR-PRODUCTION"
+# Signing-key bounds (v1.45.0, see the module docstring): a custom
+# key must be long enough not to be trivially guessable and short
+# enough to be a key, not a document. The dev key (37 characters)
+# and ordinary passphrases / generated keys sit comfortably inside.
+MIN_SIGNING_KEY_CHARS = 8
+MAX_SIGNING_KEY_CHARS = 512
 GENESIS = "verifygate/genesis/v1"
 CHAIN_VERSION = 3
 # The diagnosis text sealed beside a FAIL verdict is capped at this
@@ -501,7 +526,35 @@ def _sha_bytes(data: bytes) -> str:
 
 
 def signing_key() -> str:
-    return os.environ.get("VERIFYGATE_SIGNING_KEY", DEFAULT_DEV_KEY)
+    """Resolve and validate the HMAC signing key (v1.45.0).
+
+    Unset ``VERIFYGATE_SIGNING_KEY`` yields the labelled public
+    dev key. A *set* value is validated before it is used, at
+    sealing and at verification alike: it must be a string of
+    ``MIN_SIGNING_KEY_CHARS..MAX_SIGNING_KEY_CHARS`` characters,
+    not whitespace-only, and contain no control characters.
+    Before this, a set-but-empty variable (the ``os.environ.get``
+    default applies only when the variable is absent) silently
+    became an empty HMAC key whose records nonetheless disclosed
+    ``signing_key_is_default_dev_key: False`` — a custom-key
+    claim backed by a key anyone could reproduce. A malformed
+    value is a ``ValueError`` naming only the rule and the
+    length; the key itself is never echoed into an error, a log,
+    or a record.
+    """
+    raw = os.environ.get("VERIFYGATE_SIGNING_KEY")
+    if raw is None:
+        return DEFAULT_DEV_KEY
+    if not isinstance(raw, str) \
+            or not MIN_SIGNING_KEY_CHARS <= len(raw) <= MAX_SIGNING_KEY_CHARS \
+            or not raw.strip() \
+            or any(ord(ch) < 32 or ord(ch) == 127 for ch in raw):
+        raise ValueError(
+            "VERIFYGATE_SIGNING_KEY must be "
+            f"{MIN_SIGNING_KEY_CHARS}..{MAX_SIGNING_KEY_CHARS} characters, "
+            "not whitespace-only, and free of control characters "
+            f"(got length {len(raw) if isinstance(raw, str) else 'n/a'})")
+    return raw
 
 
 def build_record(

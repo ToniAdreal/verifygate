@@ -574,6 +574,28 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.45.0 — signing-key validation: the HMAC signing key
+was resolved with a bare environment fallback, which
+applies only when `VERIFYGATE_SIGNING_KEY` is *unset*.
+A variable set but empty — the classic CI/deployment
+mistake — or set to whitespace, a single character, or
+any other trivially guessable value therefore became
+the signing key, while the record's
+`signing_key_is_default_dev_key` disclosure read
+`False`: the record claimed a custom key had signed it
+when an empty (or near-empty) key anyone could
+reproduce had, and every such record verified intact;
+a 500,000-character value was accepted verbatim too.
+The resolved key is now validated wherever it is used
+— at sealing, at verification, and in the runner
+before any check runs: an unset variable still yields
+the labelled dev key (an explicit value equal to it
+still discloses `True`), but a set value must be
+8..512 characters, not whitespace-only, and free of
+control characters. Anything else is a `ValueError`
+(CLI exit 2), and the error names only the rule and
+the length — never the key itself. 41 new tests
+(1357 total).
 1.44.0 — adapter constructor validation: the two real
 adapters' constructors were the last caller-supplied
 surface taken on trust. `timeout_s` accepted a string,
