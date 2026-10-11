@@ -44,6 +44,25 @@ was rewritten as a bare string made the recomputation itself raise
 reporting the record as failed, and the web view crashed the same
 way. Structurally unusable usage now totals as "malformed" (None),
 which makes the cross-check mismatch and the document fail cleanly.
+
+Repair narrative (v1.13.0): a repair report also tells a *story* in
+unchained fields — why the loop stopped (``stopped_reason``), how
+many rounds it was allowed (``max_rounds``), which patch produced
+each attempt (``patch_from_previous``), and which patch was rejected
+last (``failed_patch`` / ``last_patch_error``). None of it was
+cross-checked: a PASS report could claim it stopped at max rounds,
+a clean report could grow an invented rejection, attempt rounds
+could be renumbered past ``max_rounds``, and the adapter credited
+with the repair could be rewritten — all while ``verify`` reported
+the report INTACT. The loop's narrative is deterministic given the
+sealed attempts, so ``narrative_problems`` re-derives it: attempt
+rounds start at 0 and strictly increase, each later attempt's patch
+linkage names that attempt's round and an applied patch, a rejected
+patch's round is a round no attempt claims, ``last_patch_error``
+is exactly the preserved rejection's error, ``stopped_reason`` is
+the one the loop's exit conditions produce, rounds never exceed
+``max_rounds``, and the report's ``llm_adapter`` is the adapter the
+sealed diagnoses, sealed usage calls, and patch linkages all name.
 """
 
 from __future__ import annotations
@@ -171,6 +190,169 @@ def derived_rounds_used(data) -> int | None:
     return max(rounds) if rounds else None
 
 
+def _is_round(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def derived_stopped_reason(data) -> str | None:
+    """Recompute a repair report's ``stopped_reason`` from its parts.
+
+    The loop's exit conditions leave exactly three outcomes, each
+    determined by the sealed attempts plus the preserved rejection:
+
+      * the final attempt PASSed -> ``passed``;
+      * the loop ended on a rejected patch — the preserved
+        ``failed_patch`` carries the last round used, a round no
+        attempt claims -> ``patch_not_applicable``;
+      * anything else (the round budget ran out on applied patches,
+        or no round was ever attempted) -> ``max_rounds``.
+
+    Returns None when the report's parts are too malformed to tell.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("attempts"), list) \
+            or not data["attempts"]:
+        return None
+    last = data["attempts"][-1]
+    record = last.get("evidence") if isinstance(last, dict) else None
+    final = record.get("verdict") if isinstance(record, dict) else None
+    if final == "PASS":
+        return "passed"
+    if final != "FAIL":
+        return None
+    rounds = derived_rounds_used(data)
+    if rounds is None:
+        return None
+    failed = data.get("failed_patch")
+    if isinstance(failed, dict) and failed.get("round") == rounds:
+        return "patch_not_applicable"
+    return "max_rounds"
+
+
+def narrative_problems(data) -> list[str]:
+    """Ways a repair report's unchained narrative disagrees with its
+    sealed attempts (empty list = the narrative is the one the loop
+    would have written). See the module docstring. Only fields that
+    are present are judged — a legacy report that omits a field is
+    not failed for the omission, matching the figures policy."""
+    problems: list[str] = []
+    if not isinstance(data, dict) or not isinstance(data.get("attempts"), list) \
+            or not data["attempts"]:
+        return ["attempts missing or malformed"]
+    attempts = data["attempts"]
+    adapter = data.get("llm_adapter")
+
+    # Attempt rounds: the loop numbers the submitted candidate 0 and
+    # each applied patch with the round that produced it, in order.
+    rounds: list[int] = []
+    for attempt in attempts:
+        if not isinstance(attempt, dict) or not _is_round(attempt.get("round")):
+            problems.append("attempt round missing or malformed")
+            rounds = []
+            break
+        rounds.append(attempt["round"])
+    if rounds:
+        if rounds[0] != 0:
+            problems.append("first attempt is not round 0")
+        if any(b <= a for a, b in zip(rounds, rounds[1:])):
+            problems.append("attempt rounds do not strictly increase")
+
+    # Patch linkage: attempt 0 is the submitted candidate (no patch);
+    # every later attempt was produced by the patch its linkage
+    # records — that round, applied, no error, by the report's adapter.
+    for idx, attempt in enumerate(attempts):
+        if not isinstance(attempt, dict):
+            continue
+        patch = attempt.get("patch_from_previous")
+        if idx == 0:
+            if patch is not None:
+                problems.append("attempt 0 carries a patch_from_previous")
+            continue
+        if not isinstance(patch, dict):
+            problems.append(f"attempt {attempt.get('round')} has no patch linkage")
+            continue
+        if patch.get("round") != attempt.get("round"):
+            problems.append("patch round does not match its attempt round")
+        if patch.get("applied") is not True or patch.get("error") is not None:
+            problems.append("an attempt's patch is not an applied patch")
+        if adapter is not None and patch.get("llm_adapter") is not None \
+                and patch.get("llm_adapter") != adapter:
+            problems.append("patch adapter does not match the report adapter")
+        changed = patch.get("changed_files")
+        if changed is not None and (
+                not isinstance(changed, list)
+                or not all(isinstance(f, str) for f in changed)):
+            problems.append("patch changed_files is not a list of file names")
+        if patch.get("patch_text") is not None \
+                and not isinstance(patch.get("patch_text"), str):
+            problems.append("patch text is not a string")
+
+    # The preserved rejection: a patch the applier refused, on a
+    # round no attempt claims (each round is either an applied patch
+    # that produced an attempt or a rejection, never both), within
+    # the rounds used, by the report's adapter.
+    failed = data.get("failed_patch")
+    derived_rounds = derived_rounds_used(data)
+    if failed is not None:
+        if not isinstance(failed, dict) or failed.get("applied") is not False \
+                or not isinstance(failed.get("error"), str) \
+                or not failed.get("error"):
+            problems.append("failed_patch is not a rejected patch")
+        elif not _is_round(failed.get("round")) or failed["round"] < 1 \
+                or failed["round"] in rounds \
+                or (derived_rounds is not None
+                    and failed["round"] > derived_rounds):
+            problems.append("failed_patch round is not a rejected round")
+        if isinstance(failed, dict) and adapter is not None \
+                and failed.get("llm_adapter") is not None \
+                and failed.get("llm_adapter") != adapter:
+            problems.append("failed_patch adapter does not match the report adapter")
+    # last_patch_error is exactly the preserved rejection's error:
+    # the loop sets it on a rejection and never clears it.
+    if "last_patch_error" in data:
+        expected_error = failed.get("error") if isinstance(failed, dict) else None
+        if data.get("last_patch_error") != expected_error:
+            problems.append("last_patch_error does not match failed_patch")
+
+    # The round budget: rounds used can never exceed it.
+    max_rounds = data.get("max_rounds")
+    if max_rounds is not None:
+        if not _is_round(max_rounds) or max_rounds < 0:
+            problems.append("max_rounds is not a non-negative integer")
+        elif derived_rounds is not None and derived_rounds > max_rounds:
+            problems.append("rounds used exceed max_rounds")
+
+    # Why the loop stopped is determined by how it ended.
+    if data.get("stopped_reason") is not None:
+        derived_stop = derived_stopped_reason(data)
+        if derived_stop is not None and data["stopped_reason"] != derived_stop:
+            problems.append("stopped_reason does not match the loop outcome")
+
+    # The credited adapter must be the one the sealed parts name:
+    # every FAIL attempt's sealed diagnosis and every sealed usage
+    # call was recorded under the adapter that actually ran.
+    if adapter is not None:
+        sealed_adapters = set()
+        for attempt in attempts:
+            record = attempt.get("evidence") if isinstance(attempt, dict) else None
+            if not isinstance(record, dict):
+                continue
+            for entry in record.get("entries", []):
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("kind") == "diagnosis" \
+                        and isinstance(entry.get("llm_adapter"), str):
+                    sealed_adapters.add(entry["llm_adapter"])
+                if entry.get("kind") == "llm_usage" \
+                        and isinstance(entry.get("calls"), list):
+                    for call in entry["calls"]:
+                        if isinstance(call, dict) \
+                                and isinstance(call.get("adapter"), str):
+                            sealed_adapters.add(call["adapter"])
+        if sealed_adapters and sealed_adapters != {adapter}:
+            problems.append("report adapter does not match the sealed attempts")
+    return problems
+
+
 def check_record(
     record: dict,
     *,
@@ -247,6 +429,10 @@ def verify_document(
                  or data.get("llm_usage_total") == derived_usage_total(data))
             and ("rounds_used" not in data
                  or data.get("rounds_used") == derived_rounds_used(data))
+            # The narrative fields (stopped_reason, max_rounds,
+            # patch linkage, preserved rejection, credited adapter)
+            # must be the ones the sealed attempts imply.
+            and not narrative_problems(data)
         )
         for _, result in results:
             result["report_match"] = report_match

@@ -310,6 +310,12 @@ list, and `rounds_used` from the attempts' round numbers and the
 preserved rejected patch — rewriting the token bill or the round
 count fails verification too, and the web view prints the derived
 figures (with a mismatch banner) rather than the rewritten ones.
+The same holds for the report's narrative (v1.13.0): why the loop
+stopped, the round budget, each attempt's patch linkage, the
+preserved rejection, and the credited adapter are all re-derived
+from the sealed attempts — a PASS report claiming it stopped at
+max rounds, an invented rejection, or a renumbered attempt fails
+verification, and the web view shows the derived stopped reason.
 Tampering with a verdict, a check result, a diagnosis, or a sealed
 token-usage figure fails verification (exit 1); usage errors exit 2.
 No checks are re-run, and no keys or network are needed.
@@ -415,6 +421,22 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.13.0 — repair-report narrative consistency: a repair report's
+unchained narrative was taken at face value — a PASS report could
+claim it stopped at max rounds, a clean report could grow an
+invented rejected patch, attempt rounds could be renumbered past
+`max_rounds`, and the adapter credited with the repair could be
+rewritten, all while `verifygate verify` reported the report
+INTACT (8 probes reproduced). Verification now re-derives the
+narrative from the sealed attempts: attempt rounds start at 0 and
+strictly increase, each attempt's patch linkage names its round
+and an applied patch, a preserved rejection occupies a round no
+attempt claims, `last_patch_error` equals that rejection's error,
+`stopped_reason` is the one the loop's exit conditions produce,
+rounds never exceed `max_rounds`, and the credited adapter is the
+one the sealed diagnoses and usage calls name. The web view shows
+the derived stopped reason and flags narrative disagreement in
+its SUMMARY MISMATCH banner. 21 new tests (290 total).
 1.12.0 — record consistency: verification now recomputes a record's
 internal consistency, not just its chain and shape. A record's
 verdict must be the one its checks imply (PASS stamped over a FAIL

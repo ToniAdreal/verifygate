@@ -27,7 +27,8 @@ import html
 import json
 
 from .evidence import verify_chain
-from .verify import derived_rounds_used, derived_usage_total
+from .verify import (derived_rounds_used, derived_stopped_reason,
+                    derived_usage_total, narrative_problems)
 
 _CSS = """
 :root{color-scheme:light}
@@ -270,6 +271,15 @@ def render_repair_report(report: dict) -> str:
         else stated_rounds
     rounds_mismatch = derived_rounds is not None \
         and stated_rounds is not None and stated_rounds != derived_rounds
+    # The narrative fields get the same treatment (v1.13.0): why the
+    # loop stopped is re-derived from the sealed attempts and shown
+    # in place of a rewritten claim, and any narrative disagreement
+    # (patch linkage, preserved rejection, round budget, credited
+    # adapter) joins the mismatch banner below.
+    derived_stop = derived_stopped_reason(report)
+    stated_stop = report.get("stopped_reason", "")
+    stop_shown = derived_stop if derived_stop is not None else stated_stop
+    narrative = narrative_problems(report)
     parts = [
         '<div class="card"><h3>Repair report</h3>'
         f"<p>spec: {_e(report.get('spec_name', ''))}"
@@ -279,7 +289,7 @@ def render_repair_report(report: dict) -> str:
         f"{_verdict_badge(final_verdict)}"
         f" · repair rounds used: {_e(rounds_shown)}"
         f" / {_e(report.get('max_rounds'))}"
-        f" · stopped: {_e(report.get('stopped_reason', ''))}</p>",
+        f" · stopped: {_e(stop_shown)}</p>",
     ]
     mismatches = []
     if sealed_final is not None and stated_final != sealed_final:
@@ -296,6 +306,12 @@ def render_repair_report(report: dict) -> str:
         mismatches.append(
             f"its stated rounds used ({_e(stated_rounds)}) does not "
             f"match its sealed attempts ({_e(derived_rounds)})")
+    if narrative:
+        mismatches.append(
+            "its repair narrative (stopped reason, patch linkage, "
+            "preserved rejection, round budget, or credited adapter) "
+            "does not match its sealed attempts: "
+            + "; ".join(_e(p) for p in narrative))
     if mismatches:
         parts.append(
             '<div class="chain-bad">⚠ REPORT SUMMARY MISMATCH — this '
