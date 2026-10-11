@@ -574,6 +574,26 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.46.0 — file-path validation: the spec and record
+loaders converted their path argument unchecked.
+`load_spec` ran `Path(...)` outside its error
+handling, so a non-path value (`None`, an int, a list,
+a float, a bool, bytes) escaped as a bare `TypeError`
+instead of the `SpecError` every other malformed spec
+produces; `load_json_file` handed its path straight
+to `open()`, which treats an int as a raw file
+descriptor — reading, and closing, a descriptor the
+caller never offered as a file. Both loaders now
+validate the path first through one helper
+(`jsonio.validate_file_path`): a non-empty string or
+a path-like returning one is accepted, anything else
+is the loaders' own clean error (CLI exit 2), before
+any file is opened. `load_spec`'s error line also
+stays bounded for an arbitrarily long path (the
+displayed path is truncated, and an `OSError`
+contributes only its `strerror` — the full exception
+string repeats the filename). 34 new tests (1391
+total).
 1.45.0 — signing-key validation: the HMAC signing key
 was resolved with a bare environment fallback, which
 applies only when `VERIFYGATE_SIGNING_KEY` is *unset*.

@@ -74,6 +74,16 @@ the checks below were accepted and each broke something downstream):
   field ceiling above serialises to), so a padded or hostile file
   is rejected as a ``SpecError`` from its first bytes instead of
   being loaded into memory in full before the field checks run.
+* The spec file *path* is validated on the same load (v1.46.0):
+  ``load_spec`` converted it with ``Path(...)`` outside its error
+  handling, so a non-path value (``None``, an ``int``, a list, a
+  float, a bool, bytes) escaped as an unhandled ``TypeError``
+  instead of a ``SpecError`` — and the record loader's unchecked
+  ``open()`` would have treated an ``int`` as a raw file
+  descriptor. The path now goes through
+  ``jsonio.validate_file_path`` first, inside the ``SpecError``
+  mapping, exactly as the candidate directory is validated
+  before any run (v1.41.0).
 """
 
 from __future__ import annotations
@@ -83,7 +93,12 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .jsonio import MAX_SPEC_FILE_BYTES, JsonFileError, load_json_file
+from .jsonio import (
+    MAX_SPEC_FILE_BYTES,
+    JsonFileError,
+    load_json_file,
+    validate_file_path,
+)
 
 
 MAX_TIMEOUT_S = 3600  # one hour: a sane ceiling for a single check
@@ -123,11 +138,26 @@ class TaskSpec:
 
 
 def load_spec(path: str | Path) -> TaskSpec:
-    path = Path(path)
+    # The display form of the path, computed up front and truncated:
+    # the path is caller-supplied and can be arbitrarily long (or
+    # not a path at all), and neither it nor an OSError's own
+    # filename echo belongs in full in a one-line error.
+    shown = str(path)
+    if len(shown) > 120:
+        shown = shown[:117] + "..."
     try:
+        # The path is validated inside the SpecError mapping
+        # (v1.46.0): Path(...) on a non-path value used to raise a
+        # bare TypeError here, before the try block was reached.
+        path = validate_file_path(path, "spec path")
         raw = load_json_file(path, max_bytes=MAX_SPEC_FILE_BYTES, kind="spec")
-    except (OSError, JsonFileError) as exc:
-        raise SpecError(f"cannot load spec {path}: {exc}") from exc
+    except JsonFileError as exc:
+        raise SpecError(f"cannot load spec {shown}: {exc}") from exc
+    except OSError as exc:
+        # strerror, not str(exc): the latter repeats the filename,
+        # which `shown` already carries in truncated form.
+        raise SpecError(
+            f"cannot load spec {shown}: {exc.strerror or exc}") from exc
     return parse_spec(raw)
 
 
