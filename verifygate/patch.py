@@ -85,6 +85,21 @@ inapplicable diff: atomicity is preserved (nothing is written),
 the repair loop feeds the rejection back and stops cleanly with
 its report delivered, and replay reports it as a patch that no
 longer applies.
+
+Bound-override validation (since v1.53.0): the per-call
+``max_files`` / ``max_bytes`` overrides of :func:`apply_patch`
+are validated through ``sandbox.validate_candidate_bound``
+before anything is parsed, staged, or written — a real ``int``
+between 0 and the sandbox ceiling in force, exactly as
+``sandbox.check_candidate_bounds`` judges its own overrides.
+Before this, a string override crashed the staged-result check
+with a ``TypeError`` — not a :class:`PatchError`, so it escaped
+the repair loop's rejection handling — ``True`` ran silently as
+a one-file bound, a float compared as-is, and an enormous
+override silently disabled the patch-result bound for that call.
+A malformed override is now one ``ValueError`` up front (it is a
+usage error about the *call*, not a rejection of the *patch*, so
+it is deliberately not a :class:`PatchError`).
 """
 
 from __future__ import annotations
@@ -447,8 +462,14 @@ def apply_patch(
     """
     if max_files is None:
         max_files = sandbox.MAX_CANDIDATE_FILES
+    else:
+        max_files = sandbox.validate_candidate_bound(
+            max_files, "max_files", sandbox.MAX_CANDIDATE_FILES)
     if max_bytes is None:
         max_bytes = sandbox.MAX_CANDIDATE_BYTES
+    else:
+        max_bytes = sandbox.validate_candidate_bound(
+            max_bytes, "max_bytes", sandbox.MAX_CANDIDATE_BYTES)
     root = Path(root)
     changed: list[str] = []
     staged: dict[Path, _Staged] = {}

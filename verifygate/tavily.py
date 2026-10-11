@@ -55,6 +55,24 @@ and keeps its documented meaning (no key: references skipped,
 noted on ``last_error``). A malformed argument is a
 ``ValueError`` (the CLI's exit-2 usage error) at construction,
 never a degraded-looking lookup at run time.
+
+Bound-override validation (v1.53.0): the ``limit`` argument of
+:func:`normalise_references` — the one normalisation helper the
+adapter and the runner's sealing path both call — was taken on
+trust. A string or ``None`` crashed the ``len(refs) >= limit``
+comparison with a ``TypeError``; ``True`` silently ran as a
+one-reference limit; a float compared as-is; a negative limit
+silently returned no references; and an enormous limit silently
+lifted the reference ceiling this module exists to enforce.
+``limit`` must now be a real ``int`` (never ``bool``) between 0
+and :data:`MAX_RESULTS_CEILING` — an override may only tighten
+the sealing limit, never loosen it past the adapter ceiling —
+and a malformed one is a ``ValueError`` before any item is
+normalised. (The lookup *request* count keeps its separate,
+deliberately forgiving rule in ``_effective_max_results``:
+lookups must never break a run, so a bad request falls back to
+the default instead of raising. Normalisation is a pure
+function on the sealing path; its callers pass constants.)
 """
 
 from __future__ import annotations
@@ -166,13 +184,32 @@ def normalise_reference(item) -> dict | None:
     return ref
 
 
+def validate_reference_limit(limit, name: str = "limit") -> int:
+    """Return a ``normalise_references`` limit safe to enforce.
+
+    Bound-override validation (v1.53.0, see the module docstring):
+    a real ``int`` — never ``bool`` — between 0 and
+    :data:`MAX_RESULTS_CEILING`, else a ``ValueError``.
+    """
+    if isinstance(limit, bool) or not isinstance(limit, int) \
+            or not 0 <= limit <= MAX_RESULTS_CEILING:
+        raise ValueError(
+            f"{name} must be an int with 0 <= {name} <= "
+            f"{MAX_RESULTS_CEILING} (got {type(limit).__name__})")
+    return limit
+
+
 def normalise_references(raw, limit: int = MAX_REFERENCES) -> list[dict]:
     """Normalise a lookup result list: at most ``limit`` references.
 
     A non-list input normalises to no references (callers that need
     to *note* the malformation check ``isinstance`` themselves, as
     the runner does). Non-reference items are dropped, never sealed.
+    ``limit`` is validated first (v1.53.0): a malformed limit is a
+    ``ValueError``, not a ``TypeError`` from the comparison below
+    or a silently lifted ceiling.
     """
+    limit = validate_reference_limit(limit)
     if not isinstance(raw, list):
         return []
     refs: list[dict] = []

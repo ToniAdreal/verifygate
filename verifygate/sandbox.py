@@ -94,6 +94,30 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   containment traversal would verify (ignored names and escaping
   symlinks excluded), and they are generous ceilings, not targets:
   the bundled samples are three orders of magnitude below them.
+* **Bound-override validation** — the per-call ``max_files`` /
+  ``max_bytes`` overrides of :func:`check_candidate_bounds` (and,
+  through the shared :func:`validate_candidate_bound` helper, of
+  ``patch.apply_patch``) are validated (v1.53.0): each must be a
+  real ``int`` (never ``bool``) between 0 and the module ceiling
+  in force at call time — an override may only *tighten* a bound,
+  never loosen it past the ceiling it overrides. Before this, the
+  overrides were taken on trust: ``True`` silently ran as a
+  one-file bound, a float was compared as-is, a string crashed
+  with an unhandled ``TypeError`` (inside ``apply_patch`` that
+  ``TypeError`` is not a ``PatchError``, so it escaped the repair
+  loop's rejection handling exactly like the v1.11.0 binary-target
+  escape), a negative bound produced a nonsense
+  ``CandidateTooLargeError`` naming a negative maximum, and an
+  enormous override (``10**9`` files / ``10**12`` bytes) silently
+  disabled the v1.23.0 / v1.25.0 ceilings for that call. A
+  malformed override is now one ``ValueError`` before any file is
+  counted, staged, or written. The same rule closes the last two
+  numeric limits taken on trust: ``jsonio.load_json_file``'s
+  ``max_bytes`` (a string crashed in ``max_bytes + 1``, a float /
+  ``None`` in ``read()``, ``True`` named itself in the error) and
+  ``tavily.normalise_references``' ``limit`` (a string / ``None``
+  crashed the comparison, ``True`` ran as 1, a huge value silently
+  lifted the reference ceiling) — see those modules.
 
 This is a local/CI-grade sandbox (temp dir + timeout + scrubbed env),
 not a multi-tenant security boundary — see CONCEPT.md risks.
@@ -254,6 +278,28 @@ def iter_candidate_files(root: str | Path):
     yield from walk(root, "")
 
 
+def validate_candidate_bound(value, name: str, ceiling: int) -> int:
+    """Return a per-call candidate bound that is safe to enforce.
+
+    Bound-override validation (v1.53.0, see the module docstring):
+    a bound override is a real ``int`` — never ``bool`` (``True``
+    used to slip through as a one-file / one-byte bound) and never
+    a float or a string (both compared as-is before: the float
+    silently, the string as an unhandled ``TypeError``) — between
+    0 and ``ceiling``, the module ceiling in force at call time.
+    An override may tighten a bound for one call; it may never
+    loosen it past the ceiling, so an enormous override cannot
+    silently disable the candidate-size protection. Anything else
+    is a ``ValueError`` before any work happens.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) \
+            or not 0 <= value <= ceiling:
+        raise ValueError(
+            f"{name} must be an int with 0 <= {name} <= {ceiling} "
+            f"(got {type(value).__name__})")
+    return value
+
+
 def check_candidate_bounds(
     root: str | Path,
     *,
@@ -270,13 +316,23 @@ def check_candidate_bounds(
     the workspace copy, tree hash, and repair snapshot operate on.
     ``max_files`` / ``max_bytes`` default to the module ceilings at
     call time (tests may override them per call or monkeypatch the
-    constants).
+    constants). A supplied override is validated through
+    :func:`validate_candidate_bound` (v1.53.0) before the
+    candidate directory itself is judged: it must be a real
+    ``int`` between 0 and the ceiling in force — an override
+    tightens a bound, it never loosens it.
     """
-    validate_candidate_dir(root)
     if max_files is None:
         max_files = MAX_CANDIDATE_FILES
+    else:
+        max_files = validate_candidate_bound(
+            max_files, "max_files", MAX_CANDIDATE_FILES)
     if max_bytes is None:
         max_bytes = MAX_CANDIDATE_BYTES
+    else:
+        max_bytes = validate_candidate_bound(
+            max_bytes, "max_bytes", MAX_CANDIDATE_BYTES)
+    validate_candidate_dir(root)
     count = 0
     total = 0
     for _rel, source in iter_candidate_files(root):

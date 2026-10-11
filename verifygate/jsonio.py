@@ -56,6 +56,20 @@ is a :class:`JsonFileError` naming the argument — which
 is the same one-line usage error (CLI exit 2) as every other
 malformed input. The candidate *directory* got this treatment in
 v1.41.0; the spec/record *files* were left.
+
+Bound-override validation (v1.53.0): the loader's own
+``max_bytes`` was the last numeric limit taken on trust. A
+string crashed in ``max_bytes + 1`` and a float / ``None`` in
+``read()`` — unhandled ``TypeError`` tracebacks instead of the
+one :class:`JsonFileError` every other malformed input produces;
+``True`` was accepted as a one-byte bound and named itself in
+the error message ("exceeds the maximum of True bytes"); a
+negative bound rejected every file with a nonsense maximum;
+and an enormous value silently lifted the v1.36.0 file bound
+for that call. ``max_bytes`` must now be a real ``int`` (never
+``bool``) between 1 and :data:`MAX_RECORD_FILE_BYTES` — the
+largest ceiling any caller legitimately passes — validated
+before the path is even opened, as a :class:`JsonFileError`.
 """
 
 from __future__ import annotations
@@ -104,17 +118,35 @@ def validate_file_path(path, name: str = "path") -> Path:
     return Path(value)
 
 
+def validate_max_bytes(max_bytes, name: str = "max_bytes") -> int:
+    """Return a ``max_bytes`` bound that is safe to enforce.
+
+    Bound-override validation (v1.53.0, see the module docstring):
+    a real ``int`` — never ``bool`` — between 1 and
+    :data:`MAX_RECORD_FILE_BYTES`. Anything else is a
+    :class:`JsonFileError` before any file is opened.
+    """
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) \
+            or not 1 <= max_bytes <= MAX_RECORD_FILE_BYTES:
+        raise JsonFileError(
+            f"{name} must be an int with 1 <= {name} <= "
+            f"{MAX_RECORD_FILE_BYTES} (got {type(max_bytes).__name__})")
+    return max_bytes
+
+
 def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
     """Load and decode a JSON file, rejecting it above ``max_bytes``.
 
     ``kind`` names the document in error messages ("spec",
     "record"). Raises :class:`JsonFileError` for an invalid path
     (v1.46.0 — validated before ``open()`` is ever reached, so an
-    ``int`` is never mistaken for a file descriptor), an oversize
-    file, non-UTF-8 content, or malformed JSON; ``OSError``
-    propagates for a missing/unreadable file, so callers keep
-    their existing handling for both.
+    ``int`` is never mistaken for a file descriptor), an invalid
+    ``max_bytes`` (v1.53.0 — validated before the path), an
+    oversize file, non-UTF-8 content, or malformed JSON;
+    ``OSError`` propagates for a missing/unreadable file, so
+    callers keep their existing handling for both.
     """
+    max_bytes = validate_max_bytes(max_bytes)
     path = validate_file_path(path, f"{kind} path")
     with open(path, "rb") as fh:
         raw = fh.read(max_bytes + 1)

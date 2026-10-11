@@ -586,6 +586,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.53.0 — bound-override validation: every
+ceiling can be tightened per call through an
+override argument, and those overrides were the
+last numeric limits taken on trust. `True`
+silently ran as a bound of 1 (in the JSON loader
+it even named itself in the error: "exceeds the
+maximum of True bytes"); a float compared as-is;
+a string crashed with an unhandled `TypeError`
+— inside `apply_patch` not a `PatchError`, so it
+escaped the repair loop's rejection handling, and
+in `load_json_file` it crashed in `max_bytes + 1`
+while a float / `None` crashed in `read()`; a
+negative bound produced a nonsense rejection (or,
+for reference normalisation, silently no
+references); and an enormous override
+(`10**9` files, `10**12` bytes, a huge reference
+limit) silently *loosened* the ceiling it
+overrode, disabling the protection for that call.
+An override may only tighten a bound now:
+`check_candidate_bounds` / `apply_patch`
+(`max_files` / `max_bytes`, a real `int` in
+`0..` the sandbox ceiling in force),
+`load_json_file` (`max_bytes`, `1..64 MiB`), and
+`normalise_references` (`limit`, `0..10`) each
+validate before any file is counted, staged,
+written, opened, or normalised — one
+`ValueError` for a malformed override. 74 new
+tests (1657 total).
 1.52.0 — adapter-method argument validation: the
 adapters themselves were validated at the entry
 points (1.42.0), but their two advisory methods
