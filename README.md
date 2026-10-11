@@ -574,6 +574,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.33.0 — check-result numeric bounds: a check entry's
+numbers were the last unbounded values in a record — its
+duration was checked only as a non-negative int (a record
+sealed over a duration of 10**12 ms verified INTACT, though
+a check is killed at its timeout, whose ceiling is one
+hour), a timeout entry could carry an exit code (the sandbox
+kills a timed-out check before it can exit and seals None), a
+completed check could carry none, and an exit code of
+999,999 (no POSIX exit status or signal number) all verified
+INTACT. The structure check now mirrors the sandbox's
+emission contract: duration at most twice the longest legal
+timeout in milliseconds, exit code None exactly when the
+check timed out, otherwise a real int in -255..255, while
+every committed record still verifies. 18 new tests (577
+total).
 1.32.0 — report shape bounds: a repair report's shape itself
 was never judged — a single record's top-level fields are held
 to an exact field set, but a repair report (unchained at the

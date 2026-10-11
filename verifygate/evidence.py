@@ -176,6 +176,28 @@ Factory adapter falls back to its configured model when the API
 returns an over-long model string, exactly as it already did for a
 non-string one. Every committed fixture sits far below every cap,
 so they all still verify.
+
+Check-result numeric bounds (v1.33.0): a check entry's numbers were
+the last unbounded values in a record. ``duration_ms`` was checked
+only for being a non-negative int, so a record sealed over a
+duration of 10**12 ms verified INTACT; ``exit_code`` was checked
+only for being an int or None, so a timeout entry could carry an
+exit code (the sandbox kills a timed-out check before it can exit
+and seals None), a completed check could carry None, and an exit
+code of 999,999 — no POSIX exit status or signal number — all
+verified INTACT. ``_check_entry_ok`` now mirrors the sandbox's
+emission contract: the duration is at most
+:data:`MAX_DURATION_MS` (twice the longest legal timeout, in
+milliseconds — a generous overhead allowance over a value that is
+bounded by construction, since the sandbox kills a check at its
+timeout), the exit code is None exactly when the check timed out,
+and otherwise a real int in
+:data:`MIN_EXIT_CODE`..:data:`MAX_EXIT_CODE` (POSIX exit statuses
+are 0..255 and signal deaths are negative signal numbers). Every
+committed fixture sits far below the duration cap (longest
+185,237 ms) and uses exit codes 0/1, with the timeout and
+signal shapes pinned by tests the other way, so they all still
+verify.
 """
 
 from __future__ import annotations
@@ -196,6 +218,7 @@ from .spec import (
     MAX_CHECK_NAME_CHARS,
     MAX_CHECKS,
     MAX_SPEC_NAME_CHARS,
+    MAX_TIMEOUT_S,
 )
 from .tavily import (
     MAX_REFERENCES,
@@ -232,6 +255,17 @@ MAX_ERROR_CHARS = 500
 MAX_CALLS_PER_USAGE_ENTRY = 50
 MAX_CALL_KEYS = 20
 MAX_CALL_FIELD_CHARS = 500
+# Check-result numeric bounds (v1.33.0, see the module docstring):
+# a check is killed at its timeout, whose ceiling is MAX_TIMEOUT_S,
+# so its measured duration cannot exceed that ceiling plus startup
+# and teardown overhead — the cap allows twice the ceiling outright.
+# An exit code is a POSIX exit status (0..255) or a negative signal
+# number; the range allows both with generous headroom. The longest
+# committed duration is 185,237 ms and every committed exit code is
+# 0 or 1.
+MAX_DURATION_MS = MAX_TIMEOUT_S * 2 * 1000
+MIN_EXIT_CODE = -255
+MAX_EXIT_CODE = 255
 
 
 def _canonical(obj) -> str:
@@ -429,7 +463,8 @@ def _check_entry_ok(entry: dict) -> bool:
     if len(entry["name"]) > MAX_CHECK_NAME_CHARS \
             or len(entry["command"]) > MAX_CHECK_COMMAND_CHARS:
         return False
-    if not _is_int(entry["duration_ms"]) or entry["duration_ms"] < 0:
+    if not _is_int(entry["duration_ms"]) or entry["duration_ms"] < 0 \
+            or entry["duration_ms"] > MAX_DURATION_MS:
         return False
     # The sandbox's tail cap, mirrored the same way: a sealed tail
     # longer than MAX_OUTPUT_CHARS plus the truncation marker is not
@@ -442,7 +477,18 @@ def _check_entry_ok(entry: dict) -> bool:
     if not isinstance(entry["timed_out"], bool):
         return False
     exit_code = entry["exit_code"]
-    if exit_code is not None and not _is_int(exit_code):
+    # The sandbox's exit-code contract (v1.33.0): a check that timed
+    # out was killed before it could exit, so its exit code is None;
+    # a check that did not time out always exited, with a POSIX exit
+    # status (0..255) or a negative signal number. The mirror image
+    # shapes — a timeout carrying an exit code, a completed check
+    # carrying none, an exit code outside that range — are not
+    # shapes run_command can seal.
+    if entry["timed_out"]:
+        if exit_code is not None:
+            return False
+    elif not _is_int(exit_code) \
+            or not MIN_EXIT_CODE <= exit_code <= MAX_EXIT_CODE:
         return False
     # The verdict is not free text: validators decide it from the exit
     # code and the timeout alone, so recompute it the same way. A
