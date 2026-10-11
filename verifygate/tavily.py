@@ -16,6 +16,21 @@ runner can note the degradation inside the sealed evidence record
 Judge Mode uses the deterministic mock below. The real adapter's
 transport is a single method (``_post_search``) so tests can inject a
 fake and exercise parsing and failure handling with zero network.
+
+Reference bounds (v1.26.0): references are sealed into the evidence
+record, so their count and field sizes are bounded like every other
+dimension of a run. Before this, the real adapter never sliced its
+results to ``max_results`` (a response carrying 500 results returned
+all 500, titles and URLs unbounded), and the runner sealed whatever
+shape any lookup implementation returned — malformed references from
+a third-party lookup produced a record that failed VerifyGate's own
+chain verification the moment it was written. Now one normalisation
+helper (``normalise_references``) is shared by the real adapter and
+the runner: the adapter slices its response to the requested count
+(hard ceiling ``MAX_RESULTS_CEILING``), the runner seals at most
+``MAX_REFERENCES`` references per diagnosis — each exactly
+{title, url, snippet, source} with per-field length caps — and
+``evidence``'s structure check mirrors the sealing bounds.
 """
 
 from __future__ import annotations
@@ -26,8 +41,82 @@ import urllib.request
 from abc import ABC, abstractmethod
 
 TAVILY_URL = "https://api.tavily.com/search"
-_SNIPPET_LIMIT = 300
+MAX_REFERENCES = 3
+MAX_RESULTS_CEILING = 10
+TITLE_LIMIT = 300
+URL_LIMIT = 2048
+SNIPPET_LIMIT = 300
+SOURCE_LIMIT = 100
+_FIELD_LIMITS = {
+    "title": TITLE_LIMIT,
+    "url": URL_LIMIT,
+    "snippet": SNIPPET_LIMIT,
+    "source": SOURCE_LIMIT,
+}
 _ERROR_LIMIT = 200
+
+
+def normalise_reference(item) -> dict | None:
+    """Coerce one raw lookup result into the sealed reference shape.
+
+    Returns exactly {title, url, snippet, source} with string fields
+    truncated to the per-field caps, or None when the item cannot be
+    a reference (not an object, or a field carrying a container —
+    a dict/list has no honest string form here). Scalar field values
+    (numbers, booleans) are coerced with ``str``; missing/None fields
+    become "". Extra keys are dropped: the evidence record seals
+    exactly this shape and nothing else.
+    """
+    if not isinstance(item, dict):
+        return None
+    ref: dict = {}
+    for field, limit in _FIELD_LIMITS.items():
+        raw_key = "content" if field == "snippet" and "snippet" not in item \
+            else field
+        value = item.get(raw_key)
+        if value is None:
+            text = ""
+        elif isinstance(value, str):
+            text = value
+        elif isinstance(value, (dict, list, tuple, set)):
+            return None
+        else:
+            text = str(value)
+        ref[field] = text[:limit]
+    return ref
+
+
+def normalise_references(raw, limit: int = MAX_REFERENCES) -> list[dict]:
+    """Normalise a lookup result list: at most ``limit`` references.
+
+    A non-list input normalises to no references (callers that need
+    to *note* the malformation check ``isinstance`` themselves, as
+    the runner does). Non-reference items are dropped, never sealed.
+    """
+    if not isinstance(raw, list):
+        return []
+    refs: list[dict] = []
+    for item in raw:
+        if len(refs) >= limit:
+            break
+        ref = normalise_reference(item)
+        if ref is not None:
+            refs.append(ref)
+    return refs
+
+
+def _effective_max_results(max_results) -> int:
+    """Clamp a requested result count to 1..MAX_RESULTS_CEILING.
+
+    A bool or non-int request is not worth raising over (lookups
+    must never break a run); it falls back to the default. The
+    per-diagnosis sealing limit is the stricter MAX_REFERENCES,
+    enforced by the runner — the only path that seals references
+    into a record — and mirrored in evidence's structure check.
+    """
+    if isinstance(max_results, bool) or not isinstance(max_results, int):
+        return MAX_REFERENCES
+    return max(1, min(max_results, MAX_RESULTS_CEILING))
 
 
 class ReferenceLookup(ABC):
@@ -106,9 +195,10 @@ class TavilyReferenceLookup(ReferenceLookup):
                 "TAVILY_API_KEY is not set; references skipped "
                 "(diagnosis proceeds without them)")
             return []
+        effective = _effective_max_results(max_results)
         body = {
             "query": query,
-            "max_results": max_results,
+            "max_results": effective,
             "search_depth": "basic",
         }
         try:
@@ -124,16 +214,12 @@ class TavilyReferenceLookup(ReferenceLookup):
                 "Tavily lookup returned a malformed response "
                 "(no results list); references skipped")
             return []
-        refs: list[dict] = []
-        for item in results:
-            if not isinstance(item, dict):
-                continue
-            refs.append({
-                "title": str(item.get("title") or ""),
-                "url": str(item.get("url") or ""),
-                "snippet": str(item.get("content") or "")[:_SNIPPET_LIMIT],
-                "source": "tavily",
-            })
+        # The API is asked for `effective` results, but the response
+        # is not trusted to honour it: slice and normalise regardless,
+        # and pin the source to this adapter.
+        refs = normalise_references(results, effective)
+        for ref in refs:
+            ref["source"] = "tavily"
         return refs
 
 

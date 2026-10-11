@@ -125,6 +125,13 @@ from pathlib import Path
 
 from . import __version__
 from .spec import MAX_CHECKS
+from .tavily import (
+    MAX_REFERENCES,
+    SNIPPET_LIMIT,
+    SOURCE_LIMIT,
+    TITLE_LIMIT,
+    URL_LIMIT,
+)
 
 DEFAULT_DEV_KEY = "verifygate-dev-key-NOT-FOR-PRODUCTION"
 GENESIS = "verifygate/genesis/v1"
@@ -372,10 +379,19 @@ def _diagnosis_entry_ok(entry: dict) -> bool:
     references = entry["references"]
     if not isinstance(references, list):
         return False
+    # The sealing bounds the runner enforces (v1.26.0), mirrored:
+    # the runner asks for at most MAX_REFERENCES references and
+    # normalises every field to the adapters' caps, so a diagnosis
+    # carrying more references — or a longer field — than any real
+    # run can seal is not a shape build_record's callers produce.
+    if len(references) > MAX_REFERENCES:
+        return False
+    limits = {"title": TITLE_LIMIT, "url": URL_LIMIT,
+              "snippet": SNIPPET_LIMIT, "source": SOURCE_LIMIT}
     return all(
         isinstance(ref, dict)
         and set(ref) == {"title", "url", "snippet", "source"}
-        and all(isinstance(ref[k], str)
+        and all(isinstance(ref[k], str) and len(ref[k]) <= limits[k]
                 for k in ("title", "url", "snippet", "source"))
         for ref in references)
 

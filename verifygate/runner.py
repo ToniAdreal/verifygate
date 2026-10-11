@@ -18,6 +18,18 @@ rendered from the real check results, plus a ``diagnosis_error``
 field documenting the degradation inside the hash chain. Calls the
 adapter recorded before raising stay in the usage log and are sealed
 as usual — the token spend is not dropped either.
+
+Reference normalisation (v1.26.0): the lookup beside the diagnosis
+was guarded against *raising*, but its return value was sealed
+verbatim — a third-party lookup returning malformed references
+(non-object items, non-string fields, extra keys) produced a record
+that failed the chain's own structure check the moment it was
+written, and a lookup returning 500 well-formed references sealed
+all 500. Returned references now pass through
+``tavily.normalise_references`` on this, the one sealing path: at
+most ``MAX_REFERENCES`` items in exactly the adapters' normalised
+shape, and a non-list return degrades to no references with the
+malformation noted in the record.
 """
 
 from __future__ import annotations
@@ -30,7 +42,12 @@ from .evidence import build_record, quote_label, tree_hash
 from .llm import LLMAdapter
 from .sandbox import prepare_workspace
 from .spec import TaskSpec
-from .tavily import ReferenceLookup, diagnosis_query
+from .tavily import (
+    MAX_REFERENCES,
+    ReferenceLookup,
+    diagnosis_query,
+    normalise_references,
+)
 from .validators import overall_verdict, run_checks
 
 
@@ -118,11 +135,32 @@ def run_verification(
             # ReferenceLookup implementation is safe to plug in. The
             # degradation is noted inside the sealed record.
             try:
-                refs = references.lookup(query) or []
+                raw_refs = references.lookup(query)
             except Exception as exc:  # lookup must never break a run
                 reference_error = (
                     f"reference lookup failed ({type(exc).__name__}): "
                     f"{str(exc)[:200]}")
+                raw_refs = []
+            if raw_refs is None:
+                raw_refs = []
+            if not isinstance(raw_refs, list):
+                # A lookup returning a non-list has not produced
+                # references; sealing it verbatim would emit a record
+                # that fails the chain's own structure check. Degrade
+                # to no references and note it in the record, exactly
+                # like a lookup failure.
+                if reference_error is None:
+                    reference_error = (
+                        "reference lookup returned a malformed result "
+                        "(not a list); references skipped")
+                raw_refs = []
+            # References are sealed verbatim into the record, so their
+            # shape is normalised here — the one sealing path — no
+            # matter which lookup implementation produced them: at
+            # most MAX_REFERENCES items, each exactly the adapters'
+            # {title, url, snippet, source} string shape with the
+            # per-field caps evidence's structure check mirrors.
+            refs = normalise_references(raw_refs, MAX_REFERENCES)
             if reference_error is None:
                 reference_error = getattr(references, "last_error", None)
         diagnosis = {

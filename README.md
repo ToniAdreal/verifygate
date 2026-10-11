@@ -199,6 +199,14 @@ see the degradation instead of guessing at it. Judge Mode uses a
 deterministic mock reference instead. The evidence web view renders
 the degradation note next to the diagnosis when one is present.
 
+References are also bounded and normalised before they are sealed
+(v1.26.0): at most 3 per diagnosis, each exactly
+{title, url, snippet, source} with per-field length caps — the
+runner normalises whatever any lookup implementation returns on
+the one sealing path, so malformed or flooding results can neither
+produce a record that fails its own verification nor bloat one,
+and the chain's structure check mirrors the same bounds.
+
 The diagnosis itself degrades the same way (v1.19.0). The LLM
 explanation is commentary too, so a failed explanation call — a
 network error, a malformed Token Factory response, an empty
@@ -521,6 +529,26 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.26.0 — reference bounds: the diagnosis references were the one
+unbounded, unnormalised input left on the sealing path. The real
+Tavily adapter never sliced its response to the requested
+`max_results` (a response carrying 500 results returned all 500,
+titles and URLs unbounded), and the runner sealed whatever any
+lookup implementation returned verbatim — malformed references
+(non-object items, non-string fields, extra keys) produced a
+record that failed VerifyGate's own chain verification the moment
+it was written, while 500 well-formed references sealed and
+verified INTACT. One normalisation helper
+(`tavily.normalise_references`) is now shared by the adapter and
+the runner: the adapter slices to the requested count (hard
+ceiling 10, an invalid request falls back instead of raising) and
+truncates every field; the runner — the one sealing path — seals
+at most 3 normalised references from any lookup implementation,
+and a non-list return degrades to no references with the
+malformation noted in the record; the evidence structure check
+mirrors the sealing bounds, so an over-limit record fails
+verification however it was sealed, while every committed fixture
+still verifies. 17 new tests (466 total).
 1.25.0 — patch-result bounds: the candidate size ceilings bound a
 *submitted* candidate, but a repair patch could grow one past
 them — `apply_patch` staged and wrote a diff of any size, and the
