@@ -9,12 +9,18 @@ The LLM has exactly two jobs in VerifyGate, both advisory:
 
 Neither job can influence a verdict. Verdicts come from validators.py.
 
-The two jobs differ in failure handling, deliberately: an
-``explain_failure`` failure is survivable — the runner catches it,
-seals a deterministic fallback explanation plus a ``diagnosis_error``
-note, and the record the checks decided is still delivered (v1.19.0).
-A ``generate_patch`` failure is the repair loop's own failure — there
-is no proposal to apply — so it propagates as an adapter error.
+Both jobs' failures are survivable, in different shapes — neither
+can destroy a verdict the deterministic checks already decided. An
+``explain_failure`` failure is caught by the runner, which seals a
+deterministic fallback explanation plus a ``diagnosis_error`` note,
+and the record is still delivered (v1.19.0). A ``generate_patch``
+failure ends the repair loop: there is no proposal to apply, but
+attempt 0's FAIL evidence already exists, so the loop preserves it
+in a repair report whose preserved ``failed_patch`` carries
+``error_kind: generation_failed`` and whose ``stopped_reason`` is
+``generation_failed`` — the report is delivered with final verdict
+FAIL instead of the exception propagating and the report being
+lost (v1.20.0).
 
 Adapters that talk to a real model record every call (model, purpose,
 token usage) in ``self.usage_log``. The runner drains that log into the

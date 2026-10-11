@@ -82,6 +82,17 @@ had been swapped between attempts. ``attempt_binding_problems``
 now requires every attempt to carry the same sealed ``spec_hash``;
 binding a report to an externally supplied spec (``--spec`` in
 ``verify``, and ``replay``) is unchanged and complementary.
+
+Generation resilience (v1.20.0): the repair loop's preserved
+``failed_patch`` gained an ``error_kind`` — ``patch_rejected`` for a
+diff the applier refused, ``generation_failed`` when the adapter
+produced no proposal at all (the failure that previously destroyed
+the whole report instead of ending it). ``derived_stopped_reason``
+returns ``generation_failed`` for the latter, so a report claiming
+that stop while its preserved failure says the applier rejected a
+diff — or vice versa — fails the narrative check like any other
+rewritten story. Reports sealed before v1.20.0 carry no
+``error_kind`` and derive exactly as before.
 """
 
 from __future__ import annotations
@@ -216,17 +227,24 @@ def _is_round(value) -> bool:
 def derived_stopped_reason(data) -> str | None:
     """Recompute a repair report's ``stopped_reason`` from its parts.
 
-    The loop's exit conditions leave exactly three outcomes, each
+    The loop's exit conditions leave exactly four outcomes, each
     determined by the sealed attempts plus the preserved rejection:
 
       * the final attempt PASSed -> ``passed``;
       * the loop ended on a rejected patch — the preserved
         ``failed_patch`` carries the last round used, a round no
         attempt claims -> ``patch_not_applicable``;
+      * the loop ended because patch *generation* itself failed
+        (v1.20.0) — the preserved ``failed_patch`` carries the last
+        round used and ``error_kind: generation_failed`` ->
+        ``generation_failed``;
       * anything else (the round budget ran out on applied patches,
         or no round was ever attempted) -> ``max_rounds``.
 
-    Returns None when the report's parts are too malformed to tell.
+    A preserved rejection without an ``error_kind`` (every report
+    sealed before v1.20.0) is an applier rejection, as it could
+    only have been one then. Returns None when the report's parts
+    are too malformed to tell.
     """
     if not isinstance(data, dict) or not isinstance(data.get("attempts"), list) \
             or not data["attempts"]:
@@ -243,6 +261,8 @@ def derived_stopped_reason(data) -> str | None:
         return None
     failed = data.get("failed_patch")
     if isinstance(failed, dict) and failed.get("round") == rounds:
+        if failed.get("error_kind") == "generation_failed":
+            return "generation_failed"
         return "patch_not_applicable"
     return "max_rounds"
 
@@ -293,6 +313,8 @@ def narrative_problems(data) -> list[str]:
             problems.append("patch round does not match its attempt round")
         if patch.get("applied") is not True or patch.get("error") is not None:
             problems.append("an attempt's patch is not an applied patch")
+        if patch.get("error_kind") is not None:
+            problems.append("an attempt's patch carries an error kind")
         if adapter is not None and patch.get("llm_adapter") is not None \
                 and patch.get("llm_adapter") != adapter:
             problems.append("patch adapter does not match the report adapter")
@@ -325,6 +347,14 @@ def narrative_problems(data) -> list[str]:
                 and failed.get("llm_adapter") is not None \
                 and failed.get("llm_adapter") != adapter:
             problems.append("failed_patch adapter does not match the report adapter")
+        # The failure kind, when recorded (v1.20.0+), names how the
+        # preserved patch failed: rejected by the applier, or never
+        # generated at all. Absent (legacy) means an applier
+        # rejection — the only kind the loop could preserve then.
+        if isinstance(failed, dict) \
+                and failed.get("error_kind") not in (
+                    None, "patch_rejected", "generation_failed"):
+            problems.append("failed_patch error_kind is not a known failure kind")
     # last_patch_error is exactly the preserved rejection's error:
     # the loop sets it on a rejection and never clears it.
     if "last_patch_error" in data:

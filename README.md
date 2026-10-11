@@ -52,6 +52,16 @@ full evidence record, so each intermediate verdict stays independently
 replayable. In real mode the same loop drives Nemotron via Token Factory:
 the model proposes diffs, deterministic checks still dispose.
 
+Patch *generation* itself can fail — an outage, a malformed response,
+an empty completion — and that failure is just another way the loop
+stops (v1.20.0): the report is still delivered with attempt 0's sealed
+FAIL record, the failed round counted as used, the failure preserved
+as the report's `failed_patch` with `error_kind: generation_failed`,
+and `stopped_reason: generation_failed` (the CLI exits 1 — a FAIL
+verdict with its report — not 2). Verification re-derives that stop
+from the preserved failure, so the generation/rejection distinction
+cannot be rewritten after the fact.
+
 The sample candidates' own checks use `pytest` (the sample library's test
 suite); VerifyGate itself is standard-library only.
 
@@ -486,6 +496,27 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.20.0 — generation resilience: the repair loop called
+`generate_patch` unguarded — the one advisory call v1.19.0 left
+exposed — so a real-adapter generation failure (network error,
+malformed response, empty completion after the retry) or a
+non-string return propagated out of the loop: attempt 0's
+already-decided FAIL evidence was never returned, and the CLI
+reported an adapter error (exit 2) with no report written.
+Generation failure now ends the loop and the report is delivered:
+the failed round counts as used, the failure is preserved as
+`failed_patch` with `error_kind: generation_failed`,
+`stopped_reason` is `generation_failed`, usage recorded before
+the failure is surfaced as the report's unsealed usage, and the
+CLI exits 1 with the report written. The preserved failure kind
+also distinguishes an applier rejection (`error_kind:
+patch_rejected`, deriving `patch_not_applicable`) from a
+generation failure in verification: `verify` re-derives the
+stopped reason from it, so flipping either field fails the
+narrative check; pre-v1.20.0 reports carry no `error_kind` and
+derive exactly as before. Unlike a rejected diff, a generation
+failure is not retried — there is no proposal to give feedback
+on. 15 new tests (386 total).
 1.19.0 — diagnosis resilience: the diagnosis is commentary, never a
 verdict input, but the runner called `explain_failure` unguarded —
 so a real-adapter failure (network error, malformed response, empty

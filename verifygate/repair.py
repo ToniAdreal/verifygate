@@ -24,6 +24,27 @@ original candidate plus the patches recorded in the report. Since
 chain v3 the ``replay`` field is sealed into the record hash, so the
 correction goes through ``evidence.update_replay_command`` — the one
 sanctioned post-seal edit, which re-seals the record it touches.
+
+Generation resilience (v1.20.0): ``llm.generate_patch`` is guarded
+exactly like the diagnosis call in the runner. Before this, a
+generation failure — a network error, a malformed Token Factory
+response, an empty completion after the retry (all ``RuntimeError``
+from the real adapter), or a non-string return — propagated out of
+the loop: attempt 0's already-decided FAIL evidence was never
+returned, the CLI reported an adapter error (exit 2) and wrote no
+report at all — the same loss v1.19.0 fixed for the diagnosis, one
+call later. A generation failure now ends the loop instead: the
+failed round counts as used, the failure is preserved as the
+report's ``failed_patch`` with ``error_kind: generation_failed``,
+``stopped_reason`` is ``generation_failed``, and the report —
+attempt 0's sealed record included — is delivered with final
+verdict FAIL (CLI exit 1, not 2). Unlike a rejected diff, a
+generation failure is not retried: there is no proposal to give
+feedback on, and repeating the identical prompt would only spend
+more of the caller's token budget on a failure that may be an
+outage or an auth error. Calls the adapter recorded before failing
+stay pending and are surfaced as the report's unsealed usage, so
+the token spend is not dropped either.
 """
 
 from __future__ import annotations
@@ -148,8 +169,36 @@ def run_repair(
             # form, not just its content. Each retry costs one round.
             failing_evidence["patch_error"] = patch_feedback
         calls_before = len(llm.pending_calls()) if hasattr(llm, "pending_calls") else 0
-        patch_text = llm.generate_patch(spec.brief, failing_evidence)
         rounds_used += 1
+        try:
+            patch_text = llm.generate_patch(spec.brief, failing_evidence)
+            if not isinstance(patch_text, str):
+                raise TypeError(
+                    "generate_patch returned "
+                    f"{type(patch_text).__name__}, not str")
+        except Exception as exc:  # generation must never destroy the report
+            gen_error = (
+                f"patch generation failed ({type(exc).__name__}): "
+                f"{str(exc)[:500]}")
+            patch_info = {
+                "round": rounds_used,
+                "llm_adapter": llm.name,
+                "applied": False,
+                "changed_files": [],
+                "error": gen_error,
+                "error_kind": "generation_failed",
+                # Snapshot only — the calls stay pending and are
+                # surfaced as the report's unsealed usage below.
+                "llm_usage": (
+                    llm.pending_calls()[calls_before:]
+                    if hasattr(llm, "pending_calls") else []),
+                # No proposal exists to preserve.
+                "patch_text": "",
+            }
+            patch_error = gen_error
+            failed_patch = patch_info
+            stopped_reason = "generation_failed"
+            break
         patch_calls = (
             llm.pending_calls()[calls_before:]
             if hasattr(llm, "pending_calls") else []
@@ -160,6 +209,7 @@ def run_repair(
             "applied": False,
             "changed_files": [],
             "error": None,
+            "error_kind": None,
             # Snapshot only — the calls stay pending and are sealed
             # into the next attempt's evidence record by the runner.
             "llm_usage": patch_calls,
@@ -176,6 +226,7 @@ def run_repair(
             # The rejected copy is never used again; do not leak it.
             shutil.rmtree(new_dir, ignore_errors=True)
             patch_info["error"] = str(exc)
+            patch_info["error_kind"] = "patch_rejected"
             patch_error = str(exc)
             failed_patch = patch_info
             patch_feedback = str(exc)
