@@ -35,6 +35,27 @@ errors (``TypeError`` / ``AttributeError`` / ``KeyError``) as a
 backstop, mapping any residual malformed shape to the one-line
 record error (exit 2), exactly as the ``view`` handler has since
 v1.4.0.
+
+Output-destination protection (v1.48.0): no output an invocation
+writes may destroy an artifact that same invocation reads. Before
+this, ``run`` / ``repair`` with ``--out`` naming the task spec
+overwrote the spec with the evidence record it had just read,
+``view`` with ``--out`` naming its record (including the default
+output for a record file named ``*.html``, which *is* the record
+path) replaced the evidence record with its own HTML rendering,
+and ``repair --patched-out`` naming the original candidate — the
+directory a repair exists to leave byte-unchanged — merged the
+patched tree over it via ``copytree(dirs_exist_ok=True)`` and
+reported success. Every output destination is now checked,
+resolved (symlinks included), before any check runs or any file
+is written: a file output may not be the spec file, the record
+file, or the candidate directory itself, and ``--patched-out``
+may not equal, contain, or sit inside the candidate tree, nor
+equal the spec file or the repair report's own ``--out`` path.
+A conflict is the CLI contract's one-line usage error (exit 2)
+and nothing is written. Writing a *new* file inside a candidate
+stays allowed — the documented dogfood command writes its
+self-check record at the candidate's root.
 """
 
 from __future__ import annotations
@@ -72,6 +93,39 @@ def _adapters(mode: str, model: str | None = None):
     from .tokenfactory import TokenFactoryAdapter
 
     return TokenFactoryAdapter(model=model), TavilyReferenceLookup()
+
+
+def _resolved(path) -> Path:
+    """Resolve ``path`` (symlinks included, non-strict)."""
+    return Path(path).resolve()
+
+
+def _file_out_conflict(out: Path, *, spec_path=None, record_path=None,
+                       candidate_dir=None) -> str | None:
+    """Name the input artifact a file output would destroy, or None.
+
+    Output-destination protection (v1.48.0, see the module
+    docstring): a resolved file output may not be the resolved
+    spec file, the resolved record file, or the candidate
+    directory itself. Deliberately *not* checked: a new file
+    inside the candidate tree (the documented dogfood command
+    writes its record at the candidate's root).
+    """
+    resolved_out = _resolved(out)
+    for label, candidate_path in (
+            ("the task spec", spec_path),
+            ("the evidence record", record_path),
+            ("the candidate directory", candidate_dir)):
+        if candidate_path is not None \
+                and resolved_out == _resolved(candidate_path):
+            return f"{out} would overwrite {label} ({candidate_path})"
+    return None
+
+
+def _tree_overlap(a: Path, b: Path) -> bool:
+    """True when resolved ``a`` equals, contains, or sits inside ``b``."""
+    ra, rb = _resolved(a), _resolved(b)
+    return ra == rb or ra in rb.parents or rb in ra.parents
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -261,6 +315,11 @@ def main(argv: list[str] | None = None) -> int:
             print("record error: not a VerifyGate record", file=sys.stderr)
             return 2
         out = Path(args.out or Path(args.record).with_suffix(".html"))
+        conflict = _file_out_conflict(out, record_path=args.record)
+        if conflict is not None:
+            print(f"output error: {conflict}; "
+                  f"choose a different --out path", file=sys.stderr)
+            return 2
         try:
             html = render_document(data)
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
@@ -284,6 +343,13 @@ def main(argv: list[str] | None = None) -> int:
         if not Path(args.candidate).is_dir():
             print(f"candidate error: candidate directory not found: "
                   f"{args.candidate}", file=sys.stderr)
+            return 2
+        out = Path(args.out or f"evidence-{spec.name}.json")
+        conflict = _file_out_conflict(
+            out, spec_path=args.spec, candidate_dir=args.candidate)
+        if conflict is not None:
+            print(f"output error: {conflict}; "
+                  f"choose a different --out path", file=sys.stderr)
             return 2
         try:
             llm, references = _adapters(args.mode, args.model)
@@ -309,7 +375,6 @@ def main(argv: list[str] | None = None) -> int:
             # line, never a traceback.
             print(f"candidate error: {exc}", file=sys.stderr)
             return 2
-        out = Path(args.out or f"evidence-{spec.name}.json")
         try:
             write_record(record, out)
         except OSError as exc:
@@ -332,6 +397,34 @@ def main(argv: list[str] | None = None) -> int:
         except SpecError as exc:
             print(f"spec error: {exc}", file=sys.stderr)
             return 2
+        out = Path(args.out or f"repair-{spec.name}.json")
+        conflict = _file_out_conflict(
+            out, spec_path=args.spec, candidate_dir=args.candidate)
+        if conflict is not None:
+            print(f"output error: {conflict}; "
+                  f"choose a different --out path", file=sys.stderr)
+            return 2
+        if args.patched_out:
+            patched = Path(args.patched_out)
+            if _tree_overlap(patched, Path(args.candidate)):
+                print(f"output error: --patched-out {patched} overlaps "
+                      f"the candidate directory ({args.candidate}); "
+                      f"the original candidate is never modified — "
+                      f"choose a destination outside it",
+                      file=sys.stderr)
+                return 2
+            conflict = _file_out_conflict(
+                patched, spec_path=args.spec)
+            if conflict is not None:
+                print(f"output error: {conflict}; "
+                      f"choose a different --patched-out path",
+                      file=sys.stderr)
+                return 2
+            if _resolved(patched) == _resolved(out):
+                print(f"output error: --patched-out {patched} is the "
+                      f"repair report path ({out}); choose a different "
+                      f"--patched-out path", file=sys.stderr)
+                return 2
         try:
             llm, references = _adapters(args.mode, args.model)
         except ValueError as exc:
@@ -353,7 +446,6 @@ def main(argv: list[str] | None = None) -> int:
             # rejection, raised by the loop's first verification run.
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        out = Path(args.out or f"repair-{spec.name}.json")
         copy_error: OSError | shutil.Error | None = None
         try:
             out.write_text(json.dumps(report, indent=2) + "\n",

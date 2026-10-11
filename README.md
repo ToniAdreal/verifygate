@@ -408,6 +408,18 @@ installs a `verifygate` console script (`pip install .`) that behaves
 identically to `python3 -m verifygate` from any working directory;
 the clean-tree rehearsal exercises both invocation forms.
 
+Output destinations are protected (v1.48.0): no output an invocation
+writes may destroy an artifact that same invocation reads. A `--out`
+naming the task spec (or, for `view`, the record itself — including
+the default output for a record file named `*.html`) is a usage
+error, and `repair --patched-out` may not equal, contain, or sit
+inside the original candidate tree: a repair never modifies its
+original, not even by being told to copy the patched tree over it.
+Destinations are resolved (symlinks included) and checked before
+any check runs, so a conflict writes nothing. Writing a *new* file
+inside a candidate stays allowed — the dogfood command below writes
+its self-check record at the candidate's root.
+
 ## Verifying an evidence record
 
 A record's whole point is that a *third party* can check it without
@@ -574,6 +586,31 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.48.0 — output-destination protection: no output
+an invocation writes may destroy an artifact that
+same invocation reads. Before this, `run` / `repair`
+with `--out` naming the task spec overwrote the spec
+with the record it had just read; `view` with
+`--out` naming its record (including the default
+output for a record file named `*.html`, which is
+the record path itself) replaced the evidence record
+with its own HTML rendering; and `repair
+--patched-out` naming the original candidate — the
+directory a repair exists to leave byte-unchanged —
+merged the patched tree over it via
+`copytree(dirs_exist_ok=True)` and reported success.
+Every output destination is now resolved (symlinks
+included) and checked before any check runs or any
+file is written: a file output may not be the spec
+file, the record file, or the candidate directory
+itself, and `--patched-out` may not equal, contain,
+or sit inside the candidate tree, nor equal the spec
+file or the repair report's own `--out` path. A
+conflict is a one-line usage error (exit 2) and
+nothing is written. Writing a *new* file inside a
+candidate stays allowed — the documented dogfood
+command writes its self-check record at the
+candidate's root. 16 new tests (1451 total).
 1.47.0 — malformed-document robustness: the
 judge-facing consumers of a record (verify, replay,
 the web view) assumed its `entries` were a list of
