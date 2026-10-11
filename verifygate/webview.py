@@ -148,8 +148,18 @@ def _render_diagnosis(entry: dict) -> str:
 
 def _render_llm_usage(entry: dict) -> str:
     rows = []
-    for call in entry.get("calls") or []:
-        usage = call.get("usage") or {}
+    calls = entry.get("calls")
+    if not isinstance(calls, list):
+        calls = []
+    for call in calls:
+        # A tampered record can carry a non-object call or a
+        # non-object usage; render it as an empty row next to the
+        # CHAIN INVALID banner instead of crashing the render.
+        if not isinstance(call, dict):
+            call = {}
+        usage = call.get("usage")
+        if not isinstance(usage, dict):
+            usage = {}
         rows.append(
             "<tr>"
             f"<td>{_e(call.get('purpose', ''))}</td>"

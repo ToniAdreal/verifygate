@@ -228,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         out = Path(args.out or Path(args.record).with_suffix(".html"))
         try:
             html = render_document(data)
-        except (KeyError, TypeError, ValueError) as exc:
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
             print(f"record error: cannot render this record: {exc}",
                   file=sys.stderr)
             return 2

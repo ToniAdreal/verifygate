@@ -251,7 +251,10 @@ breaking the chain; verification now also enforces the record's
 structure — kinds, their order, and the fields each kind must carry —
 for both chain versions, so a relabelled legacy record fails too,
 while every untampered legacy record (including all the committed
-real-mode evidence) still verifies exactly as before.
+real-mode evidence) still verifies exactly as before. The header
+entry is hashed over its full content and must carry exactly the
+fields the builder emits (v1.11.0 closed an injection hole there:
+an extra header field previously authenticated against nothing).
 
 ## CLI contract
 
@@ -405,6 +408,20 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.11.0 — tamper robustness: three reproduced holes closed. (1) The
+header entry was the one entry not hashed in full — verification
+recomputed it from a four-field subset, so an extra field injected
+into a header verified INTACT on both chain versions; the header is
+now hashed over its full content and must carry exactly the emitted
+field set, while every untampered committed record still verifies.
+(2) A sealed usage entry rewritten as a bare string crashed
+`verifygate verify` and the web view with an `AttributeError`
+traceback; malformed usage now totals as malformed and the record
+fails cleanly. (3) A patch targeting a binary (non-UTF-8) file
+raised a raw `UnicodeDecodeError` that escaped the repair loop's
+`PatchError` handling and crashed the run; it is now a clean
+`PatchError` rejection with the tree unchanged. 12 new tests
+(218 total).
 1.10.0 — patch-application atomicity: a multi-file diff now applies
 all-or-nothing. Every file patch is validated against an in-memory
 staged copy first, and the workspace on disk is written only after

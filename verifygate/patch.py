@@ -28,6 +28,15 @@ contract above for any caller that did not itself discard the whole
 workspace (the repair loop and replay happened to, by discipline).
 Sequential patches to the same file apply in order against the
 staged state, exactly as they would have against disk.
+
+A patch targeting a **binary (non-UTF-8) file** raises
+:class:`PatchError` like any other inapplicable diff (since
+v1.11.0): reading the target previously surfaced a raw
+``UnicodeDecodeError``, which is not a ``PatchError``, so the
+repair loop — which only catches ``PatchError`` — crashed on it
+instead of feeding the rejection back and stopping cleanly. The
+harness verifies text source files; a diff against binary content
+is a clean rejection, never a crash.
 """
 
 from __future__ import annotations
@@ -239,7 +248,15 @@ def _apply_hunks(current: list[str], fp: FilePatch) -> list[str]:
 
 
 def _read_lines(path: Path) -> list[str]:
-    return path.read_text(encoding="utf-8").splitlines()
+    try:
+        return path.read_text(encoding="utf-8").splitlines()
+    except (UnicodeDecodeError, OSError) as exc:
+        # A binary target is a diff that cannot apply, and the
+        # contract is that inapplicable diffs raise PatchError —
+        # a raw UnicodeDecodeError escaped the repair loop's
+        # PatchError handling and crashed the run.
+        raise PatchError(
+            f"cannot patch {path.name}: not a UTF-8 text file") from exc
 
 
 def _write_lines(path: Path, lines: list[str], trailing_newline: bool = True) -> None:

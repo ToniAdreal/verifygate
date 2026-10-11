@@ -23,6 +23,17 @@ enforces the record's structure (see ``_structure_ok``) for both
 versions — kinds, their order, and the fields each kind must carry —
 so a relabelled legacy record fails verification too, while every
 untampered legacy record still verifies exactly as before.
+
+Header sealing (v1.11.0): the header entry was the one exception to
+full-entry hashing — verification recomputed its hash from a fixed
+four-field subset, so an *extra* field injected into the header was
+authenticated by nothing and a tampered record still verified, for
+both chain versions (every other entry's extra fields already broke
+the chain). Verification now hashes the header's full content
+(minus ``hash``; minus ``kind`` for v1) and ``_structure_ok`` requires
+the header to carry exactly the fields ``build_record`` emits, so an
+injected header field fails two independent ways. Records emitted by
+any earlier version have exactly those fields, so they still verify.
 """
 
 from __future__ import annotations
@@ -163,6 +174,12 @@ def _structure_ok(entries) -> bool:
     header = entries[0]
     if header.get("kind") != "header":
         return False
+    # Exactly the fields build_record emits — no more, no fewer. An
+    # extra field was previously authenticated by nothing (the header
+    # hash covered a fixed subset), so it must fail structurally too.
+    if set(header) != {"kind", "hash", "spec_name", "spec_hash",
+                       "candidate_tree_hash", "mode"}:
+        return False
     if any(not isinstance(header.get(k), str) or not header[k]
            for k in ("spec_name", "spec_hash", "candidate_tree_hash", "mode")):
         return False
@@ -220,10 +237,16 @@ def verify_chain(record: dict) -> bool:
         if version not in (1, 2):
             return False
         prev = _sha(GENESIS)
-        header = {k: entries[0][k] for k in
-                  ("spec_name", "spec_hash", "candidate_tree_hash", "mode")}
+        # The header is hashed over its *full* content, like every
+        # other entry: a fixed-subset recomputation here previously
+        # left any extra header field unauthenticated. Untampered
+        # records (both versions) carry exactly the emitted fields,
+        # so their header hashes recompute identically.
         if version == 2:
-            header = {"kind": "header", **header}
+            header = {k: v for k, v in entries[0].items() if k != "hash"}
+        else:  # chain v1 hashed the content only, never the kind
+            header = {k: v for k, v in entries[0].items()
+                      if k not in ("kind", "hash")}
         prev = _sha(prev + _canonical(header))
         if entries[0]["hash"] != prev:
             return False

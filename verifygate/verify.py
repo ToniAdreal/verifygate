@@ -37,6 +37,13 @@ a 5,367-token bill restated as 1 token, 99 rounds claimed for a
 while the web view printed the rewritten figures. A report that
 *omits* one of these fields (pre-v1.8 legacy reports) is not failed
 for the omission: nothing false is displayed for a missing figure.
+
+Malformed figures (v1.11.0): a tampered record whose sealed ``usage``
+was rewritten as a bare string made the recomputation itself raise
+``AttributeError`` — ``verify`` crashed with a traceback instead of
+reporting the record as failed, and the web view crashed the same
+way. Structurally unusable usage now totals as "malformed" (None),
+which makes the cross-check mismatch and the document fail cleanly.
 """
 
 from __future__ import annotations
@@ -74,14 +81,32 @@ def header_of(record: dict) -> dict:
 
 
 def _calls_total(calls) -> tuple[int, int] | None:
-    """(call count, total tokens) for a call list, or None if malformed."""
+    """(call count, total tokens) for a call list, or None if malformed.
+
+    Malformed means structurally unusable: a call that is not an
+    object, a ``usage`` that is not an object, or a ``total_tokens``
+    that is not a number. Such input previously crashed verification
+    with an unhandled ``AttributeError``/``TypeError`` traceback (a
+    tampered record whose sealed usage was rewritten as a string) —
+    a tampered record must *fail* verification, never crash it.
+    """
     if not isinstance(calls, list):
         return None
     total = 0
     for call in calls:
         if not isinstance(call, dict):
             return None
-        total += (call.get("usage") or {}).get("total_tokens") or 0
+        usage = call.get("usage")
+        if usage is None:
+            usage = {}
+        if not isinstance(usage, dict):
+            return None
+        tokens = usage.get("total_tokens")
+        if tokens is None:
+            tokens = 0
+        if isinstance(tokens, bool) or not isinstance(tokens, (int, float)):
+            return None
+        total += tokens
     return len(calls), total
 
 
