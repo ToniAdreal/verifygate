@@ -255,6 +255,13 @@ real-mode evidence) still verifies exactly as before. The header
 entry is hashed over its full content and must carry exactly the
 fields the builder emits (v1.11.0 closed an injection hole there:
 an extra header field previously authenticated against nothing).
+Structure validation also checks *consistency* (v1.12.0): each
+check's verdict is recomputed from its exit code and timeout, the
+record's verdict from its checks, and a usage entry's total from
+its own calls — so a record sealed (or re-chained and re-signed
+with the public dev key) claiming PASS over FAIL checks, or
+quoting a token total its calls do not add up to, fails
+verification even though its chain recomputes.
 
 ## CLI contract
 
@@ -408,6 +415,16 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.12.0 — record consistency: verification now recomputes a record's
+internal consistency, not just its chain and shape. A record's
+verdict must be the one its checks imply (PASS stamped over a FAIL
+check verified INTACT before), each check's verdict must be the
+one its exit code / timeout implies, an `llm_usage` entry's stated
+total must equal the sum of its own calls (a forged token bill,
+re-chained and re-signed, verified before), and field values must
+be ones a real run can emit (negative or non-numeric durations,
+`exit_code: true`, a non-existent mode, non-hex header hashes, a
+non-string diagnosis all verified before). 51 new tests (269 total).
 1.11.0 — tamper robustness: three reproduced holes closed. (1) The
 header entry was the one entry not hashed in full — verification
 recomputed it from a four-field subset, so an extra field injected

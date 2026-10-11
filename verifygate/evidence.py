@@ -34,6 +34,25 @@ the chain). Verification now hashes the header's full content
 the header to carry exactly the fields ``build_record`` emits, so an
 injected header field fails two independent ways. Records emitted by
 any earlier version have exactly those fields, so they still verify.
+
+Record consistency (v1.12.0): structure validation previously checked
+that fields *exist* (and, since v1.7.0, that a check's name/command
+are strings), but never that a record is internally consistent — a
+record sealed (or re-chained and re-signed with the public dev key)
+with a PASS verdict over FAIL checks, a check claiming PASS with
+exit code 1, a negative or non-numeric duration, a header naming a
+mode that does not exist, or an ``llm_usage`` entry whose stated
+total disagrees with its own calls verified INTACT, because the
+hash chain faithfully authenticates whatever nonsense it was fed.
+``_structure_ok`` now mirrors the *whole* emission contract of
+``build_record`` + the runner: exact field sets and value types per
+entry kind, header hashes in SHA-256 hex form and a real mode, each
+check's verdict recomputed from its exit code / timeout exactly as
+``validators`` computes it, the record's verdict recomputed from its
+checks exactly as ``overall_verdict`` computes it, and a usage
+entry's total recomputed from its calls exactly as ``build_record``
+computes it. Every committed record satisfies these rules (they were
+all runner-emitted), so they all still verify.
 """
 
 from __future__ import annotations
@@ -152,8 +171,130 @@ def build_record(
     }
 
 
-def _structure_ok(entries) -> bool:
-    """Validate a record's entry structure: kinds, order, required fields.
+_MODES = ("judge", "real")
+_USAGE_TOKEN_KEYS = {"prompt_tokens", "completion_tokens", "total_tokens"}
+
+
+def _is_int(value) -> bool:
+    """A real JSON integer — ``bool`` is an ``int`` subclass, so a
+    sealed ``true`` must not pass as the number 1 (cf. spec timeouts)."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_sha256_hex(value) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(
+        c in "0123456789abcdef" for c in value)
+
+
+def _check_entry_ok(entry: dict) -> bool:
+    """One check entry must be exactly what ``validators`` emits."""
+    if set(entry) != {"kind", "hash", "name", "command", "exit_code",
+                      "duration_ms", "stdout_tail", "stderr_tail",
+                      "timed_out", "verdict"}:
+        return False
+    # Since v1.7.0 the spec parser only seals string fields, and
+    # structure verification mirrors that: a check whose name/command
+    # is not a non-empty string (e.g. a JSON number, which the pre-1.7
+    # parser happily sealed) is not a shape build_record can emit
+    # from a valid spec.
+    if not isinstance(entry["name"], str) or not entry["name"].strip() \
+            or not isinstance(entry["command"], str) \
+            or not entry["command"].strip():
+        return False
+    if not _is_int(entry["duration_ms"]) or entry["duration_ms"] < 0:
+        return False
+    if not isinstance(entry["stdout_tail"], str) \
+            or not isinstance(entry["stderr_tail"], str):
+        return False
+    if not isinstance(entry["timed_out"], bool):
+        return False
+    exit_code = entry["exit_code"]
+    if exit_code is not None and not _is_int(exit_code):
+        return False
+    # The verdict is not free text: validators decide it from the exit
+    # code and the timeout alone, so recompute it the same way. A
+    # check claiming PASS with exit code 1 (or on a timeout), or FAIL
+    # with exit code 0, is a shape no real run can emit.
+    expected = "PASS" if (not entry["timed_out"] and exit_code == 0) \
+        else "FAIL"
+    return entry["verdict"] == expected
+
+
+def _diagnosis_entry_ok(entry: dict) -> bool:
+    """One diagnosis entry must be exactly what the runner emits.
+
+    The field set is the runner's diagnosis dict: the five base
+    fields, plus ``reference_error`` — optional because records sealed
+    before v0.7.0 do not carry it. References are the lookup
+    adapters' normalised shape: {title, url, snippet, source},
+    all strings.
+    """
+    keys = set(entry)
+    base = {"kind", "hash", "explanation", "references", "llm_adapter",
+            "reference_source"}
+    if not base <= keys <= base | {"reference_error"}:
+        return False
+    if not isinstance(entry["explanation"], str):
+        return False
+    if not isinstance(entry["llm_adapter"], str) \
+            or not isinstance(entry["reference_source"], str):
+        return False
+    if "reference_error" in entry and not (
+            entry["reference_error"] is None
+            or isinstance(entry["reference_error"], str)):
+        return False
+    references = entry["references"]
+    if not isinstance(references, list):
+        return False
+    return all(
+        isinstance(ref, dict)
+        and set(ref) == {"title", "url", "snippet", "source"}
+        and all(isinstance(ref[k], str)
+                for k in ("title", "url", "snippet", "source"))
+        for ref in references)
+
+
+def _usage_entry_ok(entry: dict) -> bool:
+    """One llm_usage entry: typed calls, and a total that adds up.
+
+    ``build_record`` computes the entry's ``total_tokens`` as the sum
+    of its calls' usage totals; a stated total that disagrees with
+    the entry's own calls (a forged cheaper — or grander — bill,
+    re-chained and re-signed) is not a shape it can emit. Call dicts
+    themselves are adapter-defined, except for ``usage``: when
+    present it must be a token-count object whose values are
+    non-negative ints or None (the Token Factory adapter records
+    None for a count the API did not return).
+    """
+    if set(entry) != {"kind", "hash", "calls", "total_tokens"}:
+        return False
+    calls = entry["calls"]
+    if not isinstance(calls, list) or not calls:
+        return False
+    if not _is_int(entry["total_tokens"]) or entry["total_tokens"] < 0:
+        return False
+    total = 0
+    for call in calls:
+        if not isinstance(call, dict):
+            return False
+        usage = call.get("usage")
+        if usage is None:
+            continue
+        if not isinstance(usage, dict) \
+                or not set(usage) <= _USAGE_TOKEN_KEYS:
+            return False
+        if any(v is not None and not (_is_int(v) and v >= 0)
+               for v in usage.values()):
+            return False
+        total += usage.get("total_tokens") or 0
+    return entry["total_tokens"] == total
+
+
+_UNSPECIFIED = object()  # sentinel: "no verdict supplied" != verdict None
+
+
+def _structure_ok(entries, verdict=_UNSPECIFIED) -> bool:
+    """Validate a record's structure: kinds, order, fields, consistency.
 
     ``build_record`` only ever emits one shape — a header, one or more
     checks, at most one diagnosis, at most one llm_usage entry, in that
@@ -165,6 +306,12 @@ def _structure_ok(entries) -> bool:
     kind's required fields, order, and uniqueness at once, so structure
     validation closes the hole for legacy records without invalidating
     any untampered one.
+
+    Since v1.12.0 the check goes beyond shape to *consistency* (see
+    the module docstring): per-entry field sets and value types, and
+    the verdicts/totals recomputed from the record's own parts. When
+    ``verdict`` (the record's top-level verdict) is given, it too must
+    be the verdict ``overall_verdict`` computes from the checks.
     """
     if not isinstance(entries, list) or len(entries) < 2:
         return False
@@ -180,58 +327,60 @@ def _structure_ok(entries) -> bool:
     if set(header) != {"kind", "hash", "spec_name", "spec_hash",
                        "candidate_tree_hash", "mode"}:
         return False
-    if any(not isinstance(header.get(k), str) or not header[k]
-           for k in ("spec_name", "spec_hash", "candidate_tree_hash", "mode")):
+    if not isinstance(header["spec_name"], str) \
+            or not header["spec_name"]:
+        return False
+    # The header binds the record to two SHA-256 hashes and to one of
+    # the two modes the CLI can run; anything else is not a header a
+    # real run seals.
+    if not _is_sha256_hex(header["spec_hash"]) \
+            or not _is_sha256_hex(header["candidate_tree_hash"]):
+        return False
+    if header["mode"] not in _MODES:
         return False
     phase = 0  # 0 = checks, 1 = diagnosis seen, 2 = llm_usage seen
-    checks = 0
+    check_verdicts: list[str] = []
     for entry in entries[1:]:
         kind = entry.get("kind")
         if kind == "check":
             if phase != 0:
                 return False
-            checks += 1
-            # Since v1.7.0 the spec parser only seals string fields,
-            # and structure verification mirrors that: a check whose
-            # name/command is not a non-empty string (e.g. a JSON
-            # number, which the pre-1.7 parser happily sealed) is not
-            # a shape build_record can emit from a valid spec.
-            if not isinstance(entry.get("name"), str) \
-                    or not entry["name"].strip() \
-                    or not isinstance(entry.get("command"), str) \
-                    or not entry["command"].strip():
+            if not _check_entry_ok(entry):
                 return False
-            if entry.get("verdict") not in ("PASS", "FAIL"):
-                return False
-            exit_code = entry.get("exit_code")
-            if "exit_code" not in entry or not (
-                    exit_code is None or isinstance(exit_code, int)):
-                return False
-            if "duration_ms" not in entry:
-                return False
+            check_verdicts.append(entry["verdict"])
         elif kind == "diagnosis":
             if phase != 0:
                 return False  # out of order, or a second diagnosis
             phase = 1
-            if "explanation" not in entry:
+            if not _diagnosis_entry_ok(entry):
                 return False
         elif kind == "llm_usage":
             if phase == 2:
                 return False  # a second usage entry
             phase = 2
-            if not isinstance(entry.get("calls"), list) \
-                    or "total_tokens" not in entry:
+            if not _usage_entry_ok(entry):
                 return False
         else:
             return False
-    return checks >= 1
+    if not check_verdicts:
+        return False
+    if verdict is not _UNSPECIFIED:
+        # overall_verdict: PASS iff there is at least one check and
+        # every check passed. A top-level verdict that disagrees with
+        # the record's own checks — PASS stamped over a FAIL — is the
+        # one forgery every consumer of this record cares about.
+        expected = "PASS" if all(v == "PASS" for v in check_verdicts) \
+            else "FAIL"
+        if verdict != expected:
+            return False
+    return True
 
 
 def verify_chain(record: dict) -> bool:
     """Recompute the hash chain + signature; True iff the record is intact."""
     try:
         entries = record["entries"]
-        if not _structure_ok(entries):
+        if not _structure_ok(entries, record.get("verdict")):
             return False
         version = record.get("chain_version", 1)
         if version not in (1, 2):

@@ -1,33 +1,33 @@
 {
   "tool": "verifygate",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "chain_version": 2,
-  "created_at": "2026-10-11T00:44:05.144257+00:00",
+  "created_at": "2026-10-11T01:19:00.420515+00:00",
   "verdict": "PASS",
   "replay": "python3 -m verifygate run --spec dogfood_spec.json --candidate . --mode judge",
   "entries": [
     {
       "kind": "header",
-      "hash": "8831421ff126b801f055e687165187370d5ee951b379d94cac2e4ca2ac9895ca",
+      "hash": "afa105afad6fa2165344216f837b551e647c9f61f61b09f1828ba2366e15b83c",
       "spec_name": "verifygate-self-check",
       "spec_hash": "9a88c58688f6202f3362cd0b626fb652cb683148b8b756f066e63306d60fe043",
-      "candidate_tree_hash": "3fe4e7dfa1f2315ca5ac0a1315b5135f1b3698f7eb40e09da2f1cc148d2e7a18",
+      "candidate_tree_hash": "2017910e17fc78fd773ed77d79bc17e63c052cedd48f6b299e137a9fe3130fad",
       "mode": "judge"
     },
     {
       "kind": "check",
-      "hash": "774fa18907ad8d74b76b2a1199f62ff312f61f1fbe05ec47aac2d84b3c449ec0",
+      "hash": "f3382dcd93a60955a3f90c629e12a1c1746079bbb30a768bbed3c05c8a73b431",
       "name": "unit_tests",
       "command": "python3 -m pytest -q",
       "exit_code": 0,
-      "duration_ms": 199804,
-      "stdout_tail": "........................................................................ [ 33%]\n........................................................................ [ 66%]\n........................................................................ [ 99%]\n..                                                                       [100%]\n218 passed in 197.07s (0:03:17)\n",
+      "duration_ms": 71012,
+      "stdout_tail": "........................................................................ [ 26%]\n........................................................................ [ 53%]\n........................................................................ [ 80%]\n.....................................................                    [100%]\n269 passed in 69.48s (0:01:09)\n",
       "stderr_tail": "",
       "timed_out": false,
       "verdict": "PASS"
     }
   ],
-  "record_hash": "78fdcdb0e16c52516252ca0ff6763908b39ab4ef8cbc1560484667b4b7645fbf",
-  "signature": "1ffb7e0c5b797c92a5fdcde8c7233318c5923e8b2605180b8410475c0d15bb48",
+  "record_hash": "630df44c05479a5eebd108cb8ff1a996ed7cecf444163f010b097caac4814b69",
+  "signature": "a00af0be3b50406e27f15a2725370413fa6eb7d7d08de6dee1688c0fb478ec02",
   "signing_key_is_default_dev_key": true
 }

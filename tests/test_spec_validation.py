@@ -128,9 +128,14 @@ def test_cli_run_with_whitespace_command_exits_2(tmp_path):
 # -- record structure mirrors the parser -------------------------------
 
 def _record_with_check(check):
+    # The record's verdict must be the one the checks imply (structure
+    # validation recomputes it since v1.12.0); deriving it here keeps
+    # these tests about the check field under test, not the verdict.
+    verdict = check.get("verdict") if check.get("verdict") in (
+        "PASS", "FAIL") else "FAIL"
     return build_record(
         spec_name="demo", spec_hash="a" * 64, candidate_tree_hash="b" * 64,
-        mode="judge", check_results=[check], verdict="FAIL",
+        mode="judge", check_results=[check], verdict=verdict,
         diagnosis=None, replay_command="python3 -m verifygate run")
 
 
