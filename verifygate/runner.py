@@ -44,6 +44,15 @@ sealing path: at most ``MAX_EXPLANATION_CHARS`` characters, with
 the truncation marked in the sealed text itself so no reader
 mistakes a cut diagnosis for a complete one. ``evidence``'s
 structure check mirrors the cap.
+
+Error-note bound (v1.29.0): the diagnosis entry's error notes were
+still unbounded on one path — the runner's own formatted errors
+truncate their exception text to 200 characters, but a lookup's
+``last_error`` was copied into the record verbatim, so a
+third-party lookup could seal a note of any length (and produce a
+record the v1.29.0 structure mirror rejects). Both notes now pass
+through :func:`_cap_error` on this sealing path, so every sealed
+note is within ``MAX_ERROR_CHARS`` by construction.
 """
 
 from __future__ import annotations
@@ -53,6 +62,7 @@ import shutil
 from pathlib import Path
 
 from .evidence import (
+    MAX_ERROR_CHARS,
     MAX_EXPLANATION_CHARS,
     build_record,
     quote_label,
@@ -89,6 +99,20 @@ def normalise_explanation(text: str) -> str:
         f"{MAX_EXPLANATION_CHARS}-character sealing limit]"
     )
     return text[:MAX_EXPLANATION_CHARS - len(marker)] + marker
+
+
+def _cap_error(value):
+    """Bound a diagnosis error note to the sealing cap (v1.29.0).
+
+    ``None`` passes through; a string longer than
+    ``MAX_ERROR_CHARS`` is truncated to it. Applied to both error
+    notes the runner seals, so a lookup's ``last_error`` — the one
+    note the runner does not format itself — cannot seal a record
+    the structure check then rejects for its length.
+    """
+    if isinstance(value, str) and len(value) > MAX_ERROR_CHARS:
+        return value[:MAX_ERROR_CHARS]
+    return value
 
 
 def _fallback_explanation(check_dicts: list[dict], adapter_name: str,
@@ -212,8 +236,11 @@ def run_verification(
             "references": refs,
             "llm_adapter": llm.name,
             "reference_source": references.name,
-            "reference_error": reference_error,
-            "diagnosis_error": diagnosis_error,
+            # Both error notes are capped on the same path
+            # (v1.29.0): the runner's own are short by construction,
+            # but a lookup's last_error is the lookup's own text.
+            "reference_error": _cap_error(reference_error),
+            "diagnosis_error": _cap_error(diagnosis_error),
         }
 
     # Labels are quoted for the command line (evidence.quote_label):

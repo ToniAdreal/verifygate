@@ -150,6 +150,32 @@ sealed tail at ``MAX_OUTPUT_CHARS`` plus its truncation marker
 run emits either. Every committed record is far below every cap
 (longest spec name 23 characters, longest command 20, longest tail
 1,863), so they all still verify.
+
+Diagnosis/usage metadata bounds (v1.29.0): two entry kinds still
+carried unbounded text. A diagnosis entry's ``llm_adapter`` /
+``reference_source`` names and its ``reference_error`` /
+``diagnosis_error`` notes were checked only for being strings —
+and an ``llm_usage`` entry's calls were checked only for their
+``usage`` totals: the calls' *count* and their
+``adapter`` / ``model`` / ``purpose`` / ``finish_reason`` strings
+were unbounded. A record honestly sealed by ``build_record`` over
+500,000-character adapter and error strings, plus 50 calls carrying
+500,000-character model names, verified INTACT — a ~100 MB record.
+Honest values are tiny and bounded by construction: adapter and
+lookup names are code-defined identifiers (the longest committed
+one is 20 characters), the runner truncates the exception text it
+formats into an error note to 200 characters, and the calls sealed
+into one record are bounded by the repair loop's round budget
+times the real adapter's one empty-completion retry (at most 22;
+the committed maximum is 2). ``_diagnosis_entry_ok`` and
+``_usage_entry_ok`` now mirror generous caps over all of it, and
+the two construction paths that could exceed them are capped at
+the source: the runner truncates a lookup's ``last_error`` when it
+copies it into the record (``runner._cap_error``), and the Token
+Factory adapter falls back to its configured model when the API
+returns an over-long model string, exactly as it already did for a
+non-string one. Every committed fixture sits far below every cap,
+so they all still verify.
 """
 
 from __future__ import annotations
@@ -192,6 +218,20 @@ MAX_EXPLANATION_CHARS = 20_000
 # by the 14-character marker "…[truncated]…\n". A longer tail in a
 # record is therefore not a shape a real run can seal (v1.28.0).
 MAX_TAIL_CHARS = MAX_OUTPUT_CHARS + len("…[truncated]…\n")
+# Diagnosis/usage metadata ceilings (v1.29.0, see the module
+# docstring): generous over every honest value — the longest
+# committed adapter/lookup name is 20 characters, the longest model
+# id 37, the longest sealed error note 79, and the committed
+# maximum is 2 calls per usage entry against a construction-bound
+# worst case of 22.
+MAX_ADAPTER_NAME_CHARS = 100
+MAX_MODEL_CHARS = 200
+MAX_PURPOSE_CHARS = 100
+MAX_FINISH_REASON_CHARS = 100
+MAX_ERROR_CHARS = 500
+MAX_CALLS_PER_USAGE_ENTRY = 50
+MAX_CALL_KEYS = 20
+MAX_CALL_FIELD_CHARS = 500
 
 
 def _canonical(obj) -> str:
@@ -426,6 +466,11 @@ def _diagnosis_entry_ok(entry: dict) -> bool:
     all strings. The explanation itself is bounded by
     ``MAX_EXPLANATION_CHARS`` — the runner truncates on sealing
     (v1.27.0), so a longer text is not a shape a real run emits.
+    The adapter/lookup names and the two error notes are bounded
+    too (v1.29.0): names are code-defined identifiers, and the
+    runner's error notes are formatted from exception text it
+    truncates (a lookup's own note is capped on the sealing path),
+    so an over-long name or note is not a real-run shape either.
     """
     keys = set(entry)
     base = {"kind", "hash", "explanation", "references", "llm_adapter",
@@ -438,16 +483,27 @@ def _diagnosis_entry_ok(entry: dict) -> bool:
     if not isinstance(entry["explanation"], str) \
             or len(entry["explanation"]) > MAX_EXPLANATION_CHARS:
         return False
+    # The adapter / lookup names are code-defined identifiers and
+    # the error notes are formatted by the runner from exception
+    # text it truncates to 200 characters (a lookup's own note is
+    # capped on the sealing path too) — the v1.29.0 ceilings mirror
+    # those construction bounds, so a longer name or note is not a
+    # shape a real run seals.
     if not isinstance(entry["llm_adapter"], str) \
-            or not isinstance(entry["reference_source"], str):
+            or not 0 < len(entry["llm_adapter"]) <= MAX_ADAPTER_NAME_CHARS \
+            or not isinstance(entry["reference_source"], str) \
+            or not 0 < len(entry["reference_source"]) \
+            <= MAX_ADAPTER_NAME_CHARS:
         return False
     if "reference_error" in entry and not (
             entry["reference_error"] is None
-            or isinstance(entry["reference_error"], str)):
+            or (isinstance(entry["reference_error"], str)
+                and len(entry["reference_error"]) <= MAX_ERROR_CHARS)):
         return False
     if "diagnosis_error" in entry and not (
             entry["diagnosis_error"] is None
-            or isinstance(entry["diagnosis_error"], str)):
+            or (isinstance(entry["diagnosis_error"], str)
+                and len(entry["diagnosis_error"]) <= MAX_ERROR_CHARS)):
         return False
     references = entry["references"]
     if not isinstance(references, list):
@@ -480,18 +536,49 @@ def _usage_entry_ok(entry: dict) -> bool:
     present it must be a token-count object whose values are
     non-negative ints or None (the Token Factory adapter records
     None for a count the API did not return).
+
+    Since v1.29.0 the calls are also *bounded*: at most
+    ``MAX_CALLS_PER_USAGE_ENTRY`` of them (one record seals at most
+    the repair loop's round budget worth of patch calls, each at
+    most doubled by the real adapter's empty-completion retry, plus
+    one explanation), each carrying at most ``MAX_CALL_KEYS`` keys,
+    the known text fields (``adapter`` / ``model`` / ``purpose`` /
+    ``finish_reason``) strings within their ceilings when present,
+    and every other string value within ``MAX_CALL_FIELD_CHARS`` —
+    so an entry padded with calls or with enormous strings is not a
+    shape a real run seals either.
     """
     if set(entry) != {"kind", "hash", "calls", "total_tokens"}:
         return False
     calls = entry["calls"]
-    if not isinstance(calls, list) or not calls:
+    if not isinstance(calls, list) or not calls \
+            or len(calls) > MAX_CALLS_PER_USAGE_ENTRY:
         return False
     if not _is_int(entry["total_tokens"]) or entry["total_tokens"] < 0:
         return False
+    text_caps = {
+        "adapter": MAX_ADAPTER_NAME_CHARS,
+        "model": MAX_MODEL_CHARS,
+        "purpose": MAX_PURPOSE_CHARS,
+        "finish_reason": MAX_FINISH_REASON_CHARS,
+    }
     total = 0
     for call in calls:
-        if not isinstance(call, dict):
+        if not isinstance(call, dict) or len(call) > MAX_CALL_KEYS:
             return False
+        for field, value in call.items():
+            if field == "usage":
+                continue
+            cap = text_caps.get(field, MAX_CALL_FIELD_CHARS)
+            if field == "finish_reason":
+                if value is not None and not (
+                        isinstance(value, str) and len(value) <= cap):
+                    return False
+            elif field in text_caps:
+                if not (isinstance(value, str) and len(value) <= cap):
+                    return False
+            elif isinstance(value, str) and len(value) > cap:
+                return False
         usage = call.get("usage")
         if usage is None:
             continue

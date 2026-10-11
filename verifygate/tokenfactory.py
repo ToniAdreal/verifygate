@@ -29,6 +29,12 @@ Every malformed shape now raises one ``RuntimeError``; token counts
 must be non-negative ints or absent, and a non-string ``model`` falls
 back to the configured model instead of being recorded.
 
+Model-name bound (v1.29.0): the same fallback now also covers an
+over-long ``model`` string — the evidence structure check caps a
+sealed call's model at ``MAX_MODEL_CHARS``, so a response naming a
+500,000-character "model" would otherwise be recorded verbatim and
+seal a record that fails its own verification.
+
 Nothing in here can affect a verdict; it only produces advisory text.
 """
 
@@ -39,6 +45,7 @@ import os
 import sys
 import urllib.request
 
+from .evidence import MAX_MODEL_CHARS
 from .llm import LLMAdapter
 
 BASE_URL = "https://api.tokenfactory.nebius.com/v1/chat/completions"
@@ -182,7 +189,11 @@ class TokenFactoryAdapter(LLMAdapter):
             model = data.get("model")
             self.record_call({
                 "adapter": self.name,
+                # An over-long model string falls back like a
+                # non-string one (v1.29.0): the sealed call must
+                # stay within the evidence cap for a model name.
                 "model": model if isinstance(model, str) and model
+                       and len(model) <= MAX_MODEL_CHARS
                        else self.model,
                 "purpose": purpose,
                 "finish_reason": choice.get("finish_reason"),

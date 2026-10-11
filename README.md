@@ -233,6 +233,25 @@ sealing path by the sandbox's output limit plus its truncation
 marker). The bundled specs' longest fields — a 148-character
 brief, 20-character commands — sit far below every ceiling.
 
+The diagnosis and usage entries' metadata is bounded too
+(v1.29.0): a diagnosis entry's adapter/lookup names (at most 100
+characters — they are code-defined identifiers) and its error
+notes (at most 500 — the runner formats its own from exception
+text truncated to 200, and a lookup's own note is now truncated on
+the same sealing path), and an `llm_usage` entry's calls (at most
+50 per entry — one record can seal at most the repair loop's
+round budget of patch calls, each at most doubled by the real
+adapter's empty-completion retry, plus one explanation; the
+committed maximum is 2), each call's adapter/model/purpose/
+finish-reason strings within their ceilings. Before this, a
+record sealed over 500,000-character adapter and error strings
+plus 50 calls carrying 500,000-character model names verified
+intact at ~100 MB. The Token Factory adapter also falls back to
+its configured model when the API returns an over-long model
+string, exactly as it already did for a non-string one, and the
+chain's structure check mirrors every ceiling, so an over-limit
+record fails verification however it was sealed.
+
 The diagnosis itself degrades the same way (v1.19.0). The LLM
 explanation is commentary too, so a failed explanation call — a
 network error, a malformed Token Factory response, an empty
@@ -555,6 +574,19 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.29.0 — diagnosis/usage metadata bounds: a diagnosis entry's
+adapter/lookup names and error notes, and an `llm_usage` entry's
+calls (their count, and every string they carry), were the last
+unbounded text inside a record — a record sealed over
+500,000-character adapter/error strings plus 50 calls with
+500,000-character model names verified INTACT at ~100 MB. The
+structure check now mirrors generous ceilings over all of it
+(names 100 characters, error notes 500, at most 50 calls per
+entry), the runner truncates a lookup's `last_error` on the
+sealing path, and the Token Factory adapter falls back to its
+configured model for an over-long API model string, while every
+committed fixture (names peak at 20 characters, 2 calls per
+entry) still verifies. 21 new tests (519 total).
 1.28.0 — spec text bounds: every other dimension of a spec was
 capped (check count, per-check timeouts, candidate size) but the
 length of its text was not — a probe spec with a 100,000-character
