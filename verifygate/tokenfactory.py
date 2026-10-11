@@ -53,6 +53,17 @@ already accepts for an unstated finish reason — instead of being
 allowed to poison the sealed record. The completion itself, the
 part that matters, is unaffected either way.
 
+Configured-model validation (v1.35.0): the fallback above covers
+model names the *API* returns, but the *configured* model id —
+``--model`` / ``NEBIUS_MODEL`` / the constructor argument — was
+accepted at any length and recorded verbatim whenever the API
+returned no usable model name, so a 500,000-character configured
+id sealed the same self-failing record through the fallback path.
+The constructor now rejects a configured id that is not a
+non-empty string within ``MAX_MODEL_CHARS`` (``ValueError``, which
+the CLI already maps to its exit-2 adapter error): no real model
+id comes close to the cap (the longest live one is 37 characters).
+
 Nothing in here can affect a verdict; it only produces advisory text.
 """
 
@@ -108,6 +119,15 @@ class TokenFactoryAdapter(LLMAdapter):
     ):
         super().__init__()
         self.model = model or os.environ.get("NEBIUS_MODEL", DEFAULT_MODEL)
+        # The configured id is recorded as the fallback model name
+        # for every call, so it must satisfy the sealed model cap
+        # itself (v1.35.0): reject a non-string, empty, or over-long
+        # id here instead of sealing a self-failing record later.
+        if not isinstance(self.model, str) or not self.model \
+                or len(self.model) > MAX_MODEL_CHARS:
+            raise ValueError(
+                "Token Factory model id must be a non-empty string "
+                f"of at most {MAX_MODEL_CHARS} characters")
         self.timeout_s = timeout_s
         # transport(body: dict) -> decoded JSON response dict. Tests
         # inject a fake; the default performs the real surrogate call.

@@ -53,6 +53,19 @@ third-party lookup could seal a note of any length (and produce a
 record the v1.29.0 structure mirror rejects). Both notes now pass
 through :func:`_cap_error` on this sealing path, so every sealed
 note is within ``MAX_ERROR_CHARS`` by construction.
+
+Usage sealing normalisation (v1.35.0): the last verbatim inputs on
+this path were the adapter-supplied names (``llm.name`` /
+``references.name``, sealed into the diagnosis entry) and the
+usage calls drained from the adapter (sealed into the
+``llm_usage`` entry). An adapter whose name was empty or enormous,
+or which recorded a malformed call (a non-object ``usage`` crashed
+``build_record`` outright; a 500,000-character model string or an
+int ``finish_reason`` sealed a record that failed its own chain
+verification), could still break the "a record VerifyGate emits
+must verify" rule. Both now pass through the ``evidence``
+normalisation helpers on this, the one sealing path — exactly as
+the explanation, the references, and the error notes already did.
 """
 
 from __future__ import annotations
@@ -65,6 +78,8 @@ from .evidence import (
     MAX_ERROR_CHARS,
     MAX_EXPLANATION_CHARS,
     build_record,
+    normalise_adapter_name,
+    normalise_usage_calls,
     quote_label,
     tree_hash,
 )
@@ -187,7 +202,9 @@ def run_verification(
                 f"diagnosis failed ({type(exc).__name__}): "
                 f"{str(exc)[:200]}")
             explanation = _fallback_explanation(
-                check_dicts, llm.name, diagnosis_error)
+                check_dicts,
+                normalise_adapter_name(llm.name, "unknown-llm-adapter"),
+                diagnosis_error)
         query = diagnosis_query(check_dicts)
         refs: list[dict] = []
         reference_error: str | None = None
@@ -234,8 +251,13 @@ def run_verification(
             # maximum-size spec — can bloat the sealed record.
             "explanation": normalise_explanation(explanation),
             "references": refs,
-            "llm_adapter": llm.name,
-            "reference_source": references.name,
+            # Adapter/lookup names are sealed verbatim no longer
+            # (v1.35.0): they pass through the same normalisation
+            # as every other adapter-supplied value on this path.
+            "llm_adapter": normalise_adapter_name(
+                llm.name, "unknown-llm-adapter"),
+            "reference_source": normalise_adapter_name(
+                references.name, "unknown-reference-lookup"),
             # Both error notes are capped on the same path
             # (v1.29.0): the runner's own are short by construction,
             # but a lookup's last_error is the lookup's own text.
@@ -254,7 +276,12 @@ def run_verification(
     # Seal every real model call made since the previous record (in the
     # repair loop this includes the generate_patch call that produced
     # the candidate now being verified) into this record's hash chain.
-    llm_usage = llm.drain_calls() if hasattr(llm, "drain_calls") else []
+    # The drained calls are adapter-supplied, so they are normalised
+    # on this sealing path first (v1.35.0): a malformed call must
+    # never crash build_record or seal a record that fails its own
+    # verification.
+    llm_usage = normalise_usage_calls(
+        llm.drain_calls() if hasattr(llm, "drain_calls") else [])
     return build_record(
         spec_name=spec.name,
         spec_hash=spec.hash,

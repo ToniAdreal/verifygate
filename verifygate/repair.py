@@ -67,6 +67,15 @@ inflating a committed report's preserved patch, its rejection
 error, its changed-file list, or its usage snapshot to
 500,000-character strings still verified INTACT.
 
+Usage sealing normalisation (v1.35.0): the report-level copies of
+adapter-supplied metadata — the credited ``llm_adapter`` name, each
+patch linkage's ``llm_usage`` snapshot, and the
+``unsealed_llm_usage`` list — are normalised through the same
+``evidence`` helpers the runner uses for the sealed copies, so a
+report this loop emits passes its own narrative check (which caps
+all three) even when an adapter's name or recorded calls are
+malformed. See ``evidence.normalise_usage_calls``.
+
 Generation resilience (v1.20.0): ``llm.generate_patch`` is guarded
 exactly like the diagnosis call in the runner. Before this, a
 generation failure — a network error, a malformed Token Factory
@@ -95,7 +104,12 @@ import shutil
 from pathlib import Path
 
 from . import __version__
-from .evidence import quote_label, update_replay_command
+from .evidence import (
+    normalise_adapter_name,
+    normalise_usage_calls,
+    quote_label,
+    update_replay_command,
+)
 from .llm import LLMAdapter
 from .patch import PatchError, apply_patch
 from .runner import run_verification
@@ -193,6 +207,12 @@ def run_repair(
             or not 0 <= max_rounds <= MAX_ROUNDS:
         raise ValueError(
             f"max_rounds must be an int between 0 and {MAX_ROUNDS}")
+    # The adapter name and the usage snapshots this report carries
+    # are adapter-supplied: normalise them the same way the runner
+    # normalises the sealed copies (v1.35.0), so the report's own
+    # narrative check — which caps both — passes on a report this
+    # loop emits, whatever the adapter calls itself or recorded.
+    adapter_name = normalise_adapter_name(llm.name, "unknown-llm-adapter")
     attempts: list[dict] = []
     current_dir = Path(candidate_dir)
     current_label = candidate_label
@@ -246,14 +266,14 @@ def run_repair(
                 f"{str(exc)[:500]}")
             patch_info = {
                 "round": rounds_used,
-                "llm_adapter": llm.name,
+                "llm_adapter": adapter_name,
                 "applied": False,
                 "changed_files": [],
                 "error": gen_error,
                 "error_kind": "generation_failed",
                 # Snapshot only — the calls stay pending and are
                 # surfaced as the report's unsealed usage below.
-                "llm_usage": (
+                "llm_usage": normalise_usage_calls(
                     llm.pending_calls()[calls_before:]
                     if hasattr(llm, "pending_calls") else []),
                 # No proposal exists to preserve.
@@ -263,13 +283,13 @@ def run_repair(
             failed_patch = patch_info
             stopped_reason = "generation_failed"
             break
-        patch_calls = (
+        patch_calls = normalise_usage_calls(
             llm.pending_calls()[calls_before:]
             if hasattr(llm, "pending_calls") else []
         )
         patch_info = {
             "round": rounds_used,
-            "llm_adapter": llm.name,
+            "llm_adapter": adapter_name,
             "applied": False,
             "changed_files": [],
             "error": None,
@@ -347,7 +367,8 @@ def run_repair(
     # Calls still pending were never sealed into a record (e.g. a patch
     # that did not apply ended the loop): surface them at report level
     # instead of dropping the usage on the floor.
-    unsealed = llm.drain_calls() if hasattr(llm, "drain_calls") else []
+    unsealed = normalise_usage_calls(
+        llm.drain_calls() if hasattr(llm, "drain_calls") else [])
     sealed_calls = [
         c
         for a in attempts
@@ -361,7 +382,7 @@ def run_repair(
         "kind": "repair-report",
         "spec_name": spec.name,
         "mode": mode,
-        "llm_adapter": llm.name,
+        "llm_adapter": adapter_name,
         "max_rounds": max_rounds,
         "rounds_used": rounds_used,
         "final_verdict": attempts[-1]["verdict"],

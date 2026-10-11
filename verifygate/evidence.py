@@ -198,6 +198,34 @@ committed fixture sits far below the duration cap (longest
 185,237 ms) and uses exit codes 0/1, with the timeout and
 signal shapes pinned by tests the other way, so they all still
 verify.
+
+Usage sealing normalisation (v1.35.0): the v1.29.0 ceilings were
+mirrored in the structure check and capped on the two first-party
+construction paths, but the runner — the one sealing path — still
+sealed adapter-supplied metadata *verbatim*: a third-party (or
+stub) adapter whose ``name`` was empty or 500,000 characters long,
+or which recorded a usage call carrying a 500,000-character model
+string, an int ``finish_reason``, or a ``usage`` that was not an
+object at all, produced a record that failed its own verification
+the moment it was written — or, for the non-object ``usage``,
+crashed ``build_record`` with an ``AttributeError`` and lost the
+record entirely. The same hole existed one level up in the Token
+Factory adapter: a *configured* model id (``--model`` /
+``NEBIUS_MODEL``) of any length was recorded whenever the API
+response carried no usable model name. The sealing paths now
+normalise through :func:`normalise_adapter_name` and
+:func:`normalise_usage_calls` here: adapter/lookup names are
+truncated to their ceiling (a non-string or empty name falls back
+to a caller-supplied placeholder), usage calls are capped in
+count and keys, known text fields are truncated to their ceilings
+(a non-string ``finish_reason`` becomes ``None``, mirroring the
+Token Factory adapter's own normalisation), and a malformed
+``usage`` is rebuilt as an object whose token counts are valid
+ints or ``None``. The Token Factory adapter additionally rejects
+an over-long or empty configured model id at construction
+(``ValueError``, which the CLI maps to its exit-2 adapter error).
+Every first-party value is far below every cap, so honest records
+are sealed byte-identical.
 """
 
 from __future__ import annotations
@@ -266,6 +294,102 @@ MAX_CALL_FIELD_CHARS = 500
 MAX_DURATION_MS = MAX_TIMEOUT_S * 2 * 1000
 MIN_EXIT_CODE = -255
 MAX_EXIT_CODE = 255
+
+_USAGE_TEXT_CAPS = {
+    "adapter": MAX_ADAPTER_NAME_CHARS,
+    "model": MAX_MODEL_CHARS,
+    "purpose": MAX_PURPOSE_CHARS,
+    "finish_reason": MAX_FINISH_REASON_CHARS,
+}
+_USAGE_TOKEN_FIELDS = ("prompt_tokens", "completion_tokens", "total_tokens")
+
+
+def normalise_adapter_name(value, fallback: str) -> str:
+    """Bound an adapter/lookup name to the sealed ceiling (v1.35.0).
+
+    A non-empty string is truncated to ``MAX_ADAPTER_NAME_CHARS``;
+    anything else (non-string, empty) becomes ``fallback``, which
+    the caller supplies as a valid placeholder. Applied on the
+    sealing paths (the runner's diagnosis entry, the repair loop's
+    report) so a record VerifyGate emits always satisfies the
+    structure check's name rule, whatever an adapter calls itself.
+    """
+    if isinstance(value, str) and value:
+        return value[:MAX_ADAPTER_NAME_CHARS]
+    return fallback
+
+
+def _normalise_usage_value(value):
+    """Rebuild one call's ``usage`` as a valid token-count object.
+
+    ``None`` stays ``None`` (a count the API did not report). A
+    dict keeps only the three token fields, each a non-negative
+    real int or ``None`` (an invalid count becomes ``None`` — not
+    reported — rather than a value the sealed record would
+    reject). Anything else becomes an empty object.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        return {}
+    usage: dict = {}
+    for field in _USAGE_TOKEN_FIELDS:
+        count = value.get(field)
+        if count is not None and (
+                isinstance(count, bool) or not isinstance(count, int)
+                or count < 0):
+            count = None
+        usage[field] = count
+    return usage
+
+
+def normalise_usage_calls(raw) -> list[dict]:
+    """Bound recorded LLM calls to the sealed usage shape (v1.35.0).
+
+    Mirrors ``_usage_entry_ok`` on the sealing path, the way
+    ``tavily.normalise_references`` mirrors the reference caps:
+    a non-list input yields no calls; non-object calls are dropped;
+    at most ``MAX_CALLS_PER_USAGE_ENTRY`` calls and
+    ``MAX_CALL_KEYS`` keys per call are kept; the known text fields
+    are truncated to their ceilings (a non-string value drops the
+    field, except ``finish_reason``, which becomes ``None`` — the
+    neutral value the Token Factory adapter already records for an
+    unusable reason); any other string value is truncated to
+    ``MAX_CALL_FIELD_CHARS``; and each call's ``usage`` is rebuilt
+    by :func:`_normalise_usage_value`. First-party calls are far
+    below every cap and pass through unchanged in content.
+    """
+    if not isinstance(raw, list):
+        return []
+    calls: list[dict] = []
+    for item in raw:
+        if len(calls) >= MAX_CALLS_PER_USAGE_ENTRY:
+            break
+        if not isinstance(item, dict):
+            continue
+        call: dict = {}
+        for field, value in item.items():
+            if len(call) >= MAX_CALL_KEYS:
+                break
+            if field == "usage":
+                call[field] = _normalise_usage_value(value)
+            elif field == "finish_reason":
+                # Mirrors the Token Factory adapter's own rule: a
+                # string within the cap is kept, anything else —
+                # non-string or over-long — becomes None.
+                call[field] = value if isinstance(value, str) \
+                    and len(value) <= MAX_FINISH_REASON_CHARS else None
+            elif field in _USAGE_TEXT_CAPS:
+                if isinstance(value, str):
+                    call[field] = value[:_USAGE_TEXT_CAPS[field]]
+            elif isinstance(value, str):
+                call[field] = value[:MAX_CALL_FIELD_CHARS]
+            elif isinstance(value, (dict, list, tuple, set)):
+                continue  # a container has no honest scalar form here
+            else:
+                call[field] = value
+        calls.append(call)
+    return calls
 
 
 def _canonical(obj) -> str:

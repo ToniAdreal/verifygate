@@ -574,6 +574,19 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.35.0 — usage sealing normalisation: the runner sealed
+adapter-supplied metadata verbatim — an adapter whose name was
+empty or 500,000 characters long, or which recorded a usage
+call with a 500,000-character model string, an int finish
+reason, or a non-object usage (which crashed the record build
+outright) — so a record could fail its own verification the
+moment it was written, and a 500,000-character *configured*
+Token Factory model id reached the same failure through the
+fallback path. The sealing paths (the runner for records, the
+repair loop for report snapshots and unsealed usage) now
+normalise names and usage calls through shared evidence
+helpers, and the Token Factory adapter rejects an empty or
+over-long configured model id at construction.
 1.34.0 — Token Factory finish-reason normalisation: the
 real adapter recorded a response's `finish_reason` verbatim —
 the one decoded field the v1.18.0 response-shape hardening and
