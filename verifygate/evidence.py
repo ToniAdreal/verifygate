@@ -110,6 +110,27 @@ quotes it — inert to the shell, still copy-pasteable, and still
 actually runnable. The metadata templates accept both forms; an
 *unquoted* label carrying whitespace or metacharacters is still
 rejected, exactly as before.
+
+Explanation bound (v1.27.0): the diagnosis *references* were capped
+in v1.26.0, but the diagnosis *text itself* was not — the runner
+sealed whatever ``explain_failure`` returned, verbatim and at any
+length. A stub adapter returning a 500,000-character explanation
+sealed a ~500 KB record that verified INTACT, and even first-party
+text could exceed any sane bound: the bundled mock renders ~670
+characters per failing check, so a maximum-size spec (100 checks,
+all failing) produced a ~67,000-character explanation, and the
+runner's own deterministic fallback rendered ~33,000 characters on
+the same shape. The runner now truncates the explanation on the one
+sealing path (see ``runner.normalise_explanation``) to
+:data:`MAX_EXPLANATION_CHARS`, with the truncation marked in the
+text itself, and ``_structure_ok`` mirrors the cap: a record
+carrying a longer explanation than any real run can seal fails
+verification however it was sealed. The cap is generous — roughly
+ten times the longest committed real-mode diagnosis (2,022
+characters) and comfortably above what the real adapter's
+4,096-token explanation budget can produce — so no honest diagnosis
+is ever cut; it exists so one unbounded model reply cannot bloat
+every copy of a record (and every rendering of it) forever.
 """
 
 from __future__ import annotations
@@ -136,6 +157,11 @@ from .tavily import (
 DEFAULT_DEV_KEY = "verifygate-dev-key-NOT-FOR-PRODUCTION"
 GENESIS = "verifygate/genesis/v1"
 CHAIN_VERSION = 3
+# The diagnosis text sealed beside a FAIL verdict is capped at this
+# many characters on the sealing path (runner.normalise_explanation)
+# and mirrored here: generous over every real diagnosis (the longest
+# committed one is 2,022 characters), finite against a runaway one.
+MAX_EXPLANATION_CHARS = 20_000
 
 
 def _canonical(obj) -> str:
@@ -356,14 +382,20 @@ def _diagnosis_entry_ok(entry: dict) -> bool:
     when the runner began sealing a diagnosis failure instead of
     letting it destroy the record). References are the lookup
     adapters' normalised shape: {title, url, snippet, source},
-    all strings.
+    all strings. The explanation itself is bounded by
+    ``MAX_EXPLANATION_CHARS`` — the runner truncates on sealing
+    (v1.27.0), so a longer text is not a shape a real run emits.
     """
     keys = set(entry)
     base = {"kind", "hash", "explanation", "references", "llm_adapter",
             "reference_source"}
     if not base <= keys <= base | {"reference_error", "diagnosis_error"}:
         return False
-    if not isinstance(entry["explanation"], str):
+    # The sealing bound the runner enforces (v1.27.0), mirrored: the
+    # explanation is truncated to MAX_EXPLANATION_CHARS on the one
+    # sealing path, so a longer text is not a shape a real run seals.
+    if not isinstance(entry["explanation"], str) \
+            or len(entry["explanation"]) > MAX_EXPLANATION_CHARS:
         return False
     if not isinstance(entry["llm_adapter"], str) \
             or not isinstance(entry["reference_source"], str):

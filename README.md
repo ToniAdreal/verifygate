@@ -207,6 +207,17 @@ the one sealing path, so malformed or flooding results can neither
 produce a record that fails its own verification nor bloat one,
 and the chain's structure check mirrors the same bounds.
 
+The diagnosis text itself is bounded the same way (v1.27.0): at
+most 20,000 characters, truncated on the same sealing path with
+the truncation marked in the sealed text. Before this, an adapter
+returning a 500,000-character explanation sealed a ~500 KB record
+that verified intact, and even the bundled mock (which renders per
+failing check) could produce ~67,000 characters on a maximum-size
+spec. The cap is roughly ten times the longest committed real-mode
+diagnosis, so no honest diagnosis is ever cut — and the chain's
+structure check mirrors it, so an over-limit record fails
+verification however it was sealed.
+
 The diagnosis itself degrades the same way (v1.19.0). The LLM
 explanation is commentary too, so a failed explanation call — a
 network error, a malformed Token Factory response, an empty
@@ -529,6 +540,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.27.0 — explanation bounds: the diagnosis text was the last
+unbounded text on the sealing path — the runner sealed whatever
+`explain_failure` returned, verbatim and at any length (a stub
+adapter's 500,000-character explanation sealed a ~500 KB record
+that verified intact), and even first-party text could run long:
+the bundled mock renders per failing check, so a maximum-size
+all-failing spec produced a ~67,000-character explanation, and the
+runner's own fallback ~33,000. The explanation now passes through
+`runner.normalise_explanation` on the one sealing path — model,
+mock, and fallback alike — truncated to
+`MAX_EXPLANATION_CHARS` (20,000, roughly ten times the longest
+committed real-mode diagnosis) with the truncation marked in the
+sealed text; the evidence structure check mirrors the cap, so an
+over-limit record fails verification however it was sealed, while
+every committed fixture still verifies. 12 new tests (478 total).
 1.26.0 — reference bounds: the diagnosis references were the one
 unbounded, unnormalised input left on the sealing path. The real
 Tavily adapter never sliced its response to the requested

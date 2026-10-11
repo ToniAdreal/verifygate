@@ -30,6 +30,20 @@ all 500. Returned references now pass through
 most ``MAX_REFERENCES`` items in exactly the adapters' normalised
 shape, and a non-list return degrades to no references with the
 malformation noted in the record.
+
+Explanation bound (v1.27.0): the diagnosis text itself was the last
+unbounded text on this sealing path — ``explain_failure`` could
+return a string of any length and it was sealed verbatim (a
+500,000-character stub reply produced a ~500 KB record that
+verified INTACT), and even the first-party texts could run long:
+the mock renders per failing check, so a maximum-size all-failing
+spec produced ~67,000 characters, and the fallback below ~33,000.
+The explanation — model, mock, or fallback, it makes no difference
+— now passes through :func:`normalise_explanation` here, the one
+sealing path: at most ``MAX_EXPLANATION_CHARS`` characters, with
+the truncation marked in the sealed text itself so no reader
+mistakes a cut diagnosis for a complete one. ``evidence``'s
+structure check mirrors the cap.
 """
 
 from __future__ import annotations
@@ -38,7 +52,12 @@ import json
 import shutil
 from pathlib import Path
 
-from .evidence import build_record, quote_label, tree_hash
+from .evidence import (
+    MAX_EXPLANATION_CHARS,
+    build_record,
+    quote_label,
+    tree_hash,
+)
 from .llm import LLMAdapter
 from .sandbox import prepare_workspace
 from .spec import TaskSpec
@@ -49,6 +68,27 @@ from .tavily import (
     normalise_references,
 )
 from .validators import overall_verdict, run_checks
+
+
+def normalise_explanation(text: str) -> str:
+    """Bound a diagnosis text to the sealing cap (v1.27.0).
+
+    A text at or under ``MAX_EXPLANATION_CHARS`` is returned
+    unchanged — every honest diagnosis (the longest committed
+    real-mode one is 2,022 characters) passes through byte-identical.
+    A longer text is cut to exactly the cap, ending with a marker
+    that names the limit, so the sealed record states plainly that
+    its diagnosis was truncated instead of silently dropping the
+    tail. Applied to model, mock, and fallback text alike: this is
+    the one sealing path, and ``evidence`` mirrors the cap.
+    """
+    if len(text) <= MAX_EXPLANATION_CHARS:
+        return text
+    marker = (
+        f"\n\n[Diagnosis truncated by VerifyGate at the "
+        f"{MAX_EXPLANATION_CHARS}-character sealing limit]"
+    )
+    return text[:MAX_EXPLANATION_CHARS - len(marker)] + marker
 
 
 def _fallback_explanation(check_dicts: list[dict], adapter_name: str,
@@ -164,7 +204,11 @@ def run_verification(
             if reference_error is None:
                 reference_error = getattr(references, "last_error", None)
         diagnosis = {
-            "explanation": explanation,
+            # The one sealing path bounds the text (v1.27.0): model,
+            # mock, and fallback explanations are all truncated to
+            # MAX_EXPLANATION_CHARS here, so no adapter — and no
+            # maximum-size spec — can bloat the sealed record.
+            "explanation": normalise_explanation(explanation),
             "references": refs,
             "llm_adapter": llm.name,
             "reference_source": references.name,
