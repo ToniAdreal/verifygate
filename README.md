@@ -586,6 +586,32 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.54.0 — replay-command update validation:
+`update_replay_command`, the one sanctioned
+post-seal edit (the repair loop rewrites a
+patched attempt's replay field and re-seals the
+record), took both arguments on trust. A command
+that was not a string, was empty, carried a shell
+fragment, named the wrong mode, or ran to
+500,000 characters was written and dutifully
+re-sealed — a record that fails its own
+verification the moment it is written, since the
+metadata rules hold the field to the two emitted
+templates, the header's mode, and the
+16,384-character replay cap. And the record side
+crashed: a non-object raised `TypeError` on
+assignment, an empty `entries` list an
+`IndexError`, a string `chain_version` a
+`TypeError` from the `>= 3` comparison, and a
+v3-shaped record missing a sealed-payload field
+a `KeyError` — each after the field had already
+been overwritten. Both arguments are now
+validated before anything is mutated (the
+command through `validate_replay_command`
+against the header's mode; the record for the
+shape the re-seal reads): one `ValueError`, and
+the record is left byte-for-byte unchanged.
+64 new tests (1721 total).
 1.53.0 — bound-override validation: every
 ceiling can be tightened per call through an
 override argument, and those overrides were the

@@ -294,6 +294,34 @@ control characters — anything else is a ``ValueError`` (the
 CLI's exit-2 usage error) at sealing and at verification,
 never a silently downgraded signature. The error names only
 the rule and the length; it never echoes the key itself.
+
+Replay-command update validation (v1.54.0):
+:func:`update_replay_command` is the one sanctioned post-seal
+edit — the repair loop rewrites a patched attempt's ``replay``
+field (the runner's string points at the ephemeral patched
+copy) and the record is re-sealed. It took both arguments on
+trust. A ``replay_command`` that was not a string, was empty,
+carried a shell fragment, named the wrong mode, or ran to
+500,000 characters was written and (under chain v3) dutifully
+re-sealed — producing a record that fails its own
+verification the moment it is written, because
+``_metadata_ok`` holds the field to the two emitted
+templates, the header's mode, and
+:data:`MAX_REPLAY_CHARS`. And the ``record`` side crashed:
+a non-object raised ``TypeError`` on assignment, an empty
+``entries`` list an ``IndexError``, a non-list one a
+``TypeError``, a string ``chain_version`` a ``TypeError``
+from the ``>= 3`` comparison, and a v3-shaped record missing
+a sealed-payload field a ``KeyError`` — each *after* the
+``replay`` field had already been overwritten, leaving a
+half-edited record behind. Both arguments are now validated
+before anything is mutated, through
+:func:`validate_replay_command` and the record-shape checks
+in :func:`update_replay_command` itself: a malformed value
+is one ``ValueError`` and the record is left byte-for-byte
+unchanged. ``build_record`` stays a permissive assembler,
+as in earlier rounds; this is the one *mutation* of a
+sealed record, so it is judged at its own entry.
 """
 
 from __future__ import annotations
@@ -654,6 +682,44 @@ def _sealed_payload(record: dict, chain_version: int) -> dict:
     return {"verdict": record["verdict"]}
 
 
+def validate_replay_command(replay_command, header_mode=None) -> str:
+    """Return ``replay_command`` if it is an emittable replay string.
+
+    Replay-command validation (v1.54.0, see the module
+    docstring): a replay string is one of the two commands the
+    runner / repair loop emit — the exact templates
+    ``_metadata_ok`` enforces at verification time — at most
+    :data:`MAX_REPLAY_CHARS` characters, in the header's mode
+    when ``header_mode`` is given. A non-string, an empty or
+    over-long string, a string matching neither template (a
+    shell fragment, a trailing newline, a hand-written
+    command), or a template whose mode disagrees with the
+    header is a ``ValueError``; anything else would seal a
+    record that fails its own verification. The match is a
+    ``fullmatch``: the templates' own ``$`` anchor would
+    otherwise let a trailing newline slip through.
+    """
+    if not isinstance(replay_command, str) or not replay_command:
+        raise ValueError(
+            "replay_command must be a non-empty string "
+            f"(got {type(replay_command).__name__})")
+    if len(replay_command) > MAX_REPLAY_CHARS:
+        raise ValueError(
+            f"replay_command must be at most {MAX_REPLAY_CHARS} "
+            f"characters (got {len(replay_command)})")
+    for pattern in _REPLAY_RES:
+        match = pattern.fullmatch(replay_command)
+        if match is not None:
+            if header_mode is not None and match.group(1) != header_mode:
+                raise ValueError(
+                    f"replay_command mode {match.group(1)!r} does not "
+                    f"match the record header mode {header_mode!r}")
+            return replay_command
+    raise ValueError(
+        "replay_command must be a VerifyGate run or replay command "
+        "in one of the two emitted templates (see _REPLAY_RES)")
+
+
 def update_replay_command(record: dict, replay_command: str) -> None:
     """Replace a record's ``replay`` field, re-sealing if needed.
 
@@ -663,9 +729,58 @@ def update_replay_command(record: dict, replay_command: str) -> None:
     sealed payload, so the record hash and signature are recomputed
     here — the only sanctioned post-seal edit. Under v1/v2 the field
     was unsealed metadata and is simply replaced.
+
+    Both arguments are validated before anything is mutated
+    (v1.54.0, see the module docstring): the command through
+    :func:`validate_replay_command` against the record header's
+    mode, and the record for the shape the re-seal reads — an
+    object whose ``chain_version`` (when present) is a real
+    ``int`` in (1, 2, 3), whose ``entries`` is a non-empty list
+    of objects headed by a header carrying a real mode, and,
+    for chain v3, whose sealed-payload fields are present and
+    whose last entry carries its ``hash`` string. A malformed
+    record or command is one ``ValueError`` and the record is
+    left byte-for-byte unchanged — never a ``TypeError`` /
+    ``KeyError`` / ``IndexError`` after the field was already
+    overwritten, and never a re-sealed record that fails its
+    own verification.
     """
-    record["replay"] = replay_command
+    if not isinstance(record, dict):
+        raise ValueError(
+            f"record must be an evidence record object "
+            f"(got {type(record).__name__})")
     version = record.get("chain_version", 1)
+    if isinstance(version, bool) or not isinstance(version, int) \
+            or version not in (1, 2, 3):
+        raise ValueError(
+            f"record chain_version must be 1, 2, or 3 "
+            f"(got {type(version).__name__})")
+    entries = record.get("entries")
+    if not isinstance(entries, list) or not entries \
+            or not isinstance(entries[0], dict) \
+            or not isinstance(entries[-1], dict):
+        raise ValueError(
+            "record entries must be a non-empty list of entry "
+            "objects (a header first, sealed entries after)")
+    header_mode = entries[0].get("mode")
+    if header_mode not in MODES:
+        raise ValueError(
+            "record header must carry a mode of 'judge' or 'real'")
+    validate_replay_command(replay_command, header_mode)
+    if version >= 3:
+        missing = [field for field in (
+            "verdict", "version", "created_at",
+            "signing_key_is_default_dev_key") if field not in record]
+        if missing:
+            raise ValueError(
+                "chain v3 record is missing sealed-payload "
+                f"field(s): {', '.join(missing)}")
+        if not isinstance(entries[-1].get("hash"), str) \
+                or not entries[-1]["hash"]:
+            raise ValueError(
+                "record's last entry must carry its hash string "
+                "for the re-seal")
+    record["replay"] = replay_command
     if version >= 3:
         prev = record["entries"][-1]["hash"]
         record["record_hash"] = _sha(
