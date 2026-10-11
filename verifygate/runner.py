@@ -26,7 +26,7 @@ import json
 import shutil
 from pathlib import Path
 
-from .evidence import build_record, tree_hash
+from .evidence import build_record, quote_label, tree_hash
 from .llm import LLMAdapter
 from .sandbox import prepare_workspace
 from .spec import TaskSpec
@@ -134,9 +134,13 @@ def run_verification(
             "diagnosis_error": diagnosis_error,
         }
 
+    # Labels are quoted for the command line (evidence.quote_label):
+    # a raw path containing a space or a quote would produce a replay
+    # string that fails the record's own metadata template — the
+    # record would report CHAIN INVALID the moment it was sealed.
     replay = (
-        f"python3 -m verifygate run --spec {spec_label} "
-        f"--candidate {candidate_label} --mode {mode}"
+        f"python3 -m verifygate run --spec {quote_label(spec_label)} "
+        f"--candidate {quote_label(candidate_label)} --mode {mode}"
     )
     # Seal every real model call made since the previous record (in the
     # repair loop this includes the generate_patch call that produced

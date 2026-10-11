@@ -81,6 +81,24 @@ carries a deterministic fallback explanation plus the failure's
 reason, instead of the run producing no record at all. The field is
 optional here for the same reason ``reference_error`` is — records
 sealed before it existed do not carry it, and they still verify.
+
+Replay-label quoting (v1.21.0): the metadata rules above require a
+record's ``replay`` string to match the emitted templates with
+path-like labels — no whitespace, no shell metacharacters — but the
+runner interpolated the caller's spec/candidate labels *raw*. Any
+perfectly ordinary path containing a space, a quote, or a non-ASCII
+character (a checkout under ``My Projects``, a home directory with a
+Chinese name) therefore produced a record that failed its own
+verification the moment it was sealed: ``run`` exited 0 with a PASS,
+and ``verify`` on the record it had just written reported CHAIN
+INVALID. Labels are now interpolated through :func:`quote_label`:
+a label that is already a bare path token is emitted unchanged (so
+every ordinary run's replay string is byte-identical to before),
+and anything else is single-quoted exactly as ``shlex.quote``
+quotes it — inert to the shell, still copy-pasteable, and still
+actually runnable. The metadata templates accept both forms; an
+*unquoted* label carrying whitespace or metacharacters is still
+rejected, exactly as before.
 """
 
 from __future__ import annotations
@@ -90,6 +108,7 @@ import hmac
 import json
 import os
 import re
+import shlex
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -388,16 +407,49 @@ _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 # second command past a reader who copy-pastes it. ``<>`` are allowed
 # for the ``<repair-report.json>`` placeholder the repair loop uses.
 _LABEL = r"[A-Za-z0-9_./~@:+\-<>]+"
+# The quoted form of a label (see quote_label): single-quoted, so
+# every metacharacter inside is inert, with an embedded single quote
+# carried as the '"'"' sequence ``shlex.quote`` produces (close the
+# quote, a double-quoted quote, reopen the quote). Control characters
+# are excluded: a one-line command cannot carry them, quoted or not.
+_SQ = "'"
+_QUOTED_LABEL = (
+    _SQ + r"(?:[^'\r\n]|" + _SQ + '"' + _SQ + '"' + _SQ + r")*" + _SQ)
+_ANY_LABEL = rf"(?:{_LABEL}|{_QUOTED_LABEL})"
 _REPLAY_RES = (
     re.compile(
-        rf"^python3 -m verifygate run --spec {_LABEL} "
-        rf"--candidate {_LABEL} --mode (judge|real)$"),
+        rf"^python3 -m verifygate run --spec {_ANY_LABEL} "
+        rf"--candidate {_ANY_LABEL} --mode (judge|real)$"),
     re.compile(
-        rf"^python3 -m verifygate replay --record {_LABEL} "
-        rf"--spec {_LABEL} --candidate {_LABEL} --mode (judge|real)  "
+        rf"^python3 -m verifygate replay --record {_ANY_LABEL} "
+        rf"--spec {_ANY_LABEL} --candidate {_ANY_LABEL} "
+        rf"--mode (judge|real)  "
         rf"# attempt [1-9][0-9]*: patched copy, reconstructed from "
         rf"the report's recorded patch$"),
 )
+
+
+def quote_label(label: str) -> str:
+    """Interpolate a spec/candidate label into a replay command.
+
+    A label that is already a bare path token (every label in every
+    committed record) is returned unchanged, so ordinary runs emit
+    byte-identical replay strings. Anything else — a path with a
+    space, a quote, a shell metacharacter, or a non-ASCII character —
+    is single-quoted via ``shlex.quote``: the emitted command stays
+    copy-pasteable and actually runs, and the record still verifies
+    (before v1.21.0 the raw label broke the metadata template, so a
+    record VerifyGate had just sealed reported CHAIN INVALID). A
+    label containing control characters cannot be represented in a
+    one-line command at all; it degrades to the placeholder form the
+    repair loop already uses for its record argument, which a reader
+    edits before running — never to a raw, template-breaking string.
+    """
+    if re.fullmatch(_LABEL, label):
+        return label
+    if any(ord(c) < 32 or ord(c) == 127 for c in label):
+        return "<unprintable-label>"
+    return shlex.quote(label)
 
 
 def _metadata_ok(record: dict) -> bool:

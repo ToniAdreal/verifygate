@@ -389,7 +389,11 @@ consistency rules a genuine record always satisfies instead:
 exact field set, semver version, timezone-aware timestamp, the
 flag matching the key that verifies the signature, and a replay
 string matching one of the two emitted command templates in the
-header's mode, with no shell metacharacters in its labels.
+header's mode, with no shell metacharacters in its labels. Labels
+that are not bare path tokens — a path with a space, a quote, or a
+non-ASCII character — are emitted single-quoted (`shlex.quote`
+form, v1.21.0), which the templates also accept; an unquoted label
+carrying whitespace or metacharacters is still rejected.
 Tampering with a verdict, a check result, a diagnosis, or a sealed
 token-usage figure fails verification (exit 1); usage errors exit 2.
 No checks are re-run, and no keys or network are needed.
@@ -496,6 +500,22 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.21.0 — replay-label quoting: the runner interpolated the
+caller's spec/candidate paths into the record's `replay` command
+raw, while the metadata template only accepts bare path tokens —
+so any path containing a space, a quote, or a non-ASCII character
+(a checkout under `My Projects`, a Chinese home-directory name)
+sealed a record that failed its own verification instantly: `run`
+exited 0 with a PASS, `verify` on the record it had just written
+reported CHAIN INVALID. Labels now go through
+`evidence.quote_label`: bare tokens are emitted unchanged (every
+ordinary replay string is byte-identical), anything else is
+single-quoted in `shlex.quote` form — inert to the shell, still
+copy-pasteable, and the emitted command actually runs (pinned by a
+test that executes it, and by one showing a `$(touch …)` path
+cannot weaponise it). The metadata templates accept both forms;
+an *unquoted* label with whitespace or metacharacters still fails
+verification. 12 new tests (398 total).
 1.20.0 — generation resilience: the repair loop called
 `generate_patch` unguarded — the one advisory call v1.19.0 left
 exposed — so a real-adapter generation failure (network error,

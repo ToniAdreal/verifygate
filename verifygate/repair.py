@@ -53,7 +53,7 @@ import shutil
 from pathlib import Path
 
 from . import __version__
-from .evidence import update_replay_command
+from .evidence import quote_label, update_replay_command
 from .llm import LLMAdapter
 from .patch import PatchError, apply_patch
 from .runner import run_verification
@@ -260,7 +260,8 @@ def run_repair(
         # this attempt's tree from the recorded patch.
         update_replay_command(record, (
             f"python3 -m verifygate replay --record <repair-report.json> "
-            f"--spec {spec_label} --candidate {candidate_label} "
+            f"--spec {quote_label(spec_label)} "
+            f"--candidate {quote_label(candidate_label)} "
             f"--mode {mode}  # attempt {rounds_used}: patched copy, "
             f"reconstructed from the report's recorded patch"
         ))
