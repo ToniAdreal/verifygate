@@ -64,12 +64,36 @@ non-empty string within ``MAX_MODEL_CHARS`` (``ValueError``, which
 the CLI already maps to its exit-2 adapter error): no real model
 id comes close to the cap (the longest live one is 37 characters).
 
+Constructor validation (v1.44.0): the constructor's other two
+arguments were still taken on trust. ``timeout_s`` accepted
+anything — a string, ``True`` (silently one second, ``bool``
+being an ``int`` subclass), zero or a negative (socket semantics
+nobody asked for), ``None`` (block on the global default,
+potentially forever), ``inf`` / ``nan``, or 1,000,000,000
+seconds (effectively no timeout at all, on a call the caller is
+paying for) — and the malformed shapes surfaced only at call
+time, inside ``urlopen``, as a confusing ``RuntimeError`` about
+a failed call. ``transport`` was selected with ``or``, so a
+non-callable truthy value (a string, a number) constructed an
+adapter whose first call raised a bare ``TypeError`` — not the
+one-``RuntimeError`` adapter-error contract (v1.18.0) — and a
+falsy non-``None`` value (``0``, ``""``) was silently *replaced*
+by the real transport, discarding the caller's injection and
+making real, paid calls in its place. Both are now validated
+at construction, beside the model id: ``timeout_s`` must be a
+finite number (``int`` / ``float``, never ``bool``) with
+``0 < timeout_s <= MAX_TIMEOUT_S`` (3600, mirroring the spec's
+check-timeout ceiling), and ``transport`` must be ``None``
+(the real transport) or callable. The Tavily adapter's
+constructor applies the same two rules (see ``tavily.py``).
+
 Nothing in here can affect a verdict; it only produces advisory text.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 import urllib.request
@@ -92,6 +116,36 @@ _DYNAMIC_CREDENTIALS_DIR = "/opt/hatch/skills/skill-creator/bin"
 # billing follows actual usage, which is recorded per call.
 PATCH_MAX_TOKENS = 8192
 EXPLAIN_MAX_TOKENS = 4096
+
+# Ceiling for the constructor's ``timeout_s`` (v1.44.0): one hour,
+# mirroring the spec's ceiling for a single check (``spec.MAX_TIMEOUT_S``).
+# A network call that has not answered in an hour is not going to;
+# an unbounded timeout on a paid call is a hang, not patience.
+MAX_TIMEOUT_S = 3600
+
+
+def validate_timeout_s(timeout_s, name: str = "timeout_s"):
+    """Validate an adapter constructor's ``timeout_s`` (v1.44.0).
+
+    A timeout is a plain duration: a finite ``int`` / ``float``
+    (never ``bool`` — ``True`` is an ``int`` subclass and used to
+    slip through as one second) with ``0 < timeout_s <=
+    MAX_TIMEOUT_S``. Anything else — a string, ``None``, zero or
+    a negative, ``inf`` / ``nan``, an over-ceiling value, a
+    container — is a ``ValueError`` at construction, not a
+    socket error or an unbounded wait at call time. The Tavily
+    adapter applies the identical rule (``tavily.validate_timeout_s``
+    mirrors this helper).
+    """
+    if isinstance(timeout_s, bool) \
+            or not isinstance(timeout_s, (int, float)) \
+            or not math.isfinite(timeout_s) \
+            or not 0 < timeout_s <= MAX_TIMEOUT_S:
+        raise ValueError(
+            f"{name} must be a finite number of seconds with "
+            f"0 < {name} <= {MAX_TIMEOUT_S} "
+            f"(got {type(timeout_s).__name__})")
+    return timeout_s
 
 
 def _load_credential_helpers():
@@ -128,10 +182,23 @@ class TokenFactoryAdapter(LLMAdapter):
             raise ValueError(
                 "Token Factory model id must be a non-empty string "
                 f"of at most {MAX_MODEL_CHARS} characters")
-        self.timeout_s = timeout_s
+        # The remaining constructor arguments are validated the
+        # same way (v1.44.0, see the module docstring): a malformed
+        # timeout or transport is a usage error here, not a socket
+        # surprise, a bare TypeError, or a silently swapped-in real
+        # transport at call time.
+        self.timeout_s = validate_timeout_s(timeout_s)
         # transport(body: dict) -> decoded JSON response dict. Tests
-        # inject a fake; the default performs the real surrogate call.
-        self._transport = transport or self._post_chat
+        # inject a fake; None selects the real surrogate call. The
+        # selection is by identity with None, never by truthiness:
+        # a falsy non-None transport is a caller bug, not a request
+        # for the real (paid) transport.
+        if transport is not None and not callable(transport):
+            raise ValueError(
+                "Token Factory transport must be callable or None "
+                f"(got {type(transport).__name__})")
+        self._transport = transport if transport is not None \
+            else self._post_chat
 
     # -- real transport -------------------------------------------------
 

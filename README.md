@@ -574,6 +574,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.44.0 — adapter constructor validation: the two real
+adapters' constructors were the last caller-supplied
+surface taken on trust. `timeout_s` accepted a string,
+`True` (silently one second), zero / negatives, `None`
+(block on the socket default, potentially forever),
+`inf` / `nan`, or a billion seconds (no timeout in
+practice, on a paid call); `transport` was selected with
+`or`, so a non-callable truthy value built an adapter
+whose first call raised a bare `TypeError` — or whose
+every lookup degraded with an outage-indistinguishable
+`TypeError` note — and a falsy non-`None` value was
+silently replaced by the real transport; Tavily's
+`api_key` accepted any type and interpolated it into the
+Authorization header. All are now validated at
+construction, beside the model-id validation of 1.35.0:
+the timeout must be a finite non-bool number with
+0 < timeout_s ≤ 3600 in both adapters, the transport
+must be `None` (the real one) or callable — selected by
+identity with `None`, never truthiness — and the key
+must be `None` (the environment fallback) or a string
+of at most 512 characters, the empty string keeping its
+documented no-key meaning. A malformed argument is a
+`ValueError` (CLI exit 2) before any call is made.
 1.43.0 — binding-hash validation: the hashes a caller
 supplies to bind a record to its artifacts — `verify`'s
 `spec_hash`, and `check_record`'s `candidate_hash` /

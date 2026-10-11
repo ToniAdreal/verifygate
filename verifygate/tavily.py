@@ -31,11 +31,36 @@ the runner: the adapter slices its response to the requested count
 ``MAX_REFERENCES`` references per diagnosis — each exactly
 {title, url, snippet, source} with per-field length caps — and
 ``evidence``'s structure check mirrors the sealing bounds.
+
+Constructor validation (v1.44.0): the real adapter's constructor
+arguments were taken on trust, in the same shapes the Token
+Factory adapter's were. ``timeout_s`` accepted a string, ``True``
+(silently one second), zero / negatives, ``None``, ``inf`` /
+``nan``, or an effectively unbounded value. ``transport`` was
+selected with ``or``: a non-callable truthy value constructed an
+adapter whose every lookup degraded with a ``TypeError``
+``last_error`` — indistinguishable in the sealed record from a
+genuine Tavily outage — and a falsy non-``None`` value (``0``,
+``""``) was silently replaced by the real transport. ``api_key``
+accepted any type: an ``int`` was interpolated into the
+``Authorization`` header, a list produced a nonsense header, and
+neither was ever reported. All three are now validated at
+construction: ``timeout_s`` follows the identical rule as the
+Token Factory adapter's (a finite non-bool number, ``0 <
+timeout_s <= MAX_TIMEOUT_S``); ``transport`` must be ``None``
+(the real transport) or callable; ``api_key`` must be ``None``
+(the environment fallback) or a string of at most
+``MAX_API_KEY_CHARS`` characters — the empty string stays valid
+and keeps its documented meaning (no key: references skipped,
+noted on ``last_error``). A malformed argument is a
+``ValueError`` (the CLI's exit-2 usage error) at construction,
+never a degraded-looking lookup at run time.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import urllib.request
 from abc import ABC, abstractmethod
@@ -54,6 +79,35 @@ _FIELD_LIMITS = {
     "source": SOURCE_LIMIT,
 }
 _ERROR_LIMIT = 200
+
+# Ceilings for the real adapter's constructor arguments (v1.44.0):
+# the timeout ceiling mirrors the Token Factory adapter's (and,
+# behind both, the spec's ceiling for a single check); the key
+# ceiling is generous over any real Tavily key (they run to ~55
+# characters) — the value becomes an HTTP header verbatim, so an
+# unbounded one is a malformed request waiting to happen.
+MAX_TIMEOUT_S = 3600
+MAX_API_KEY_CHARS = 512
+
+
+def validate_timeout_s(timeout_s, name: str = "timeout_s"):
+    """Validate an adapter constructor's ``timeout_s`` (v1.44.0).
+
+    Identical rule to the Token Factory adapter's helper of the
+    same name (the two adapters mirror each other; see the module
+    docstring): a finite ``int`` / ``float`` (never ``bool``) with
+    ``0 < timeout_s <= MAX_TIMEOUT_S``, else a ``ValueError`` at
+    construction.
+    """
+    if isinstance(timeout_s, bool) \
+            or not isinstance(timeout_s, (int, float)) \
+            or not math.isfinite(timeout_s) \
+            or not 0 < timeout_s <= MAX_TIMEOUT_S:
+        raise ValueError(
+            f"{name} must be a finite number of seconds with "
+            f"0 < {name} <= {MAX_TIMEOUT_S} "
+            f"(got {type(timeout_s).__name__})")
+    return timeout_s
 
 
 def normalise_reference(item) -> dict | None:
@@ -191,12 +245,32 @@ class TavilyReferenceLookup(ReferenceLookup):
         transport=None,
     ):
         super().__init__()
-        self.api_key = api_key if api_key is not None else os.environ.get(
+        # The constructor arguments are validated at construction
+        # (v1.44.0, see the module docstring): a malformed key,
+        # timeout, or transport is a usage error here, not a
+        # nonsense Authorization header, a socket surprise, or a
+        # permanently degraded-looking lookup at run time.
+        resolved_key = api_key if api_key is not None else os.environ.get(
             "TAVILY_API_KEY", "")
-        self.timeout_s = timeout_s
+        if not isinstance(resolved_key, str) \
+                or len(resolved_key) > MAX_API_KEY_CHARS:
+            raise ValueError(
+                "Tavily api_key must be a string of at most "
+                f"{MAX_API_KEY_CHARS} characters or None "
+                f"(got {type(resolved_key).__name__})")
+        self.api_key = resolved_key
+        self.timeout_s = validate_timeout_s(timeout_s)
         # transport(body: dict) -> decoded JSON response dict. Tests
-        # inject a fake; the default performs the real API call.
-        self._transport = transport or self._post_search
+        # inject a fake; None selects the real API call. Selection
+        # is by identity with None, never by truthiness (v1.44.0):
+        # a falsy non-None transport is a caller bug, not a request
+        # for the real transport.
+        if transport is not None and not callable(transport):
+            raise ValueError(
+                "Tavily transport must be callable or None "
+                f"(got {type(transport).__name__})")
+        self._transport = transport if transport is not None \
+            else self._post_search
 
     # -- real transport -------------------------------------------------
 
