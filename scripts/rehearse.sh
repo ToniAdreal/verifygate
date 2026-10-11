@@ -124,6 +124,8 @@ python3 -m verifygate verify --record samples/evidence_real_repair_v3.json \
     --spec samples/spec.json --candidate samples/failing
 python3 -m verifygate verify --record samples-js/evidence_real_repair_v3.json \
     --spec samples-js/spec.json --candidate samples-js/failing
+python3 -m verifygate verify --record samples/evidence_real_fail_v2.json \
+    --spec samples/spec.json --candidate samples/failing
 
 echo "== 9/10 replay: rehearsal repair report + committed real-mode reports (Judge Mode)"
 python3 -m verifygate replay --record "$WORK/repair.json" \
@@ -138,6 +140,8 @@ python3 -m verifygate replay --record samples/evidence_real_repair_v3.json \
     --spec samples/spec.json --candidate samples/failing --mode judge
 python3 -m verifygate replay --record samples-js/evidence_real_repair_v3.json \
     --spec samples-js/spec.json --candidate samples-js/failing --mode judge
+python3 -m verifygate replay --record samples/evidence_real_fail_v2.json \
+    --spec samples/spec.json --candidate samples/failing --mode judge
 
 echo "== 10/10 installed package: pip install + console script from another directory"
 # --no-build-isolation first (uses the interpreter's own setuptools,

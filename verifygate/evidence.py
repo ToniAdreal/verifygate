@@ -73,6 +73,14 @@ checks exactly as ``overall_verdict`` computes it, and a usage
 entry's total recomputed from its calls exactly as ``build_record``
 computes it. Every committed record satisfies these rules (they were
 all runner-emitted), so they all still verify.
+
+Diagnosis resilience (v1.19.0): since that version the runner seals
+an optional ``diagnosis_error`` field in the diagnosis entry (see
+``runner.py``): when the LLM explanation call fails, the record
+carries a deterministic fallback explanation plus the failure's
+reason, instead of the run producing no record at all. The field is
+optional here for the same reason ``reference_error`` is — records
+sealed before it existed do not carry it, and they still verify.
 """
 
 from __future__ import annotations
@@ -298,14 +306,17 @@ def _diagnosis_entry_ok(entry: dict) -> bool:
 
     The field set is the runner's diagnosis dict: the five base
     fields, plus ``reference_error`` — optional because records sealed
-    before v0.7.0 do not carry it. References are the lookup
+    before v0.7.0 do not carry it — and ``diagnosis_error`` — optional
+    because records sealed before v1.19.0 do not carry it (that is
+    when the runner began sealing a diagnosis failure instead of
+    letting it destroy the record). References are the lookup
     adapters' normalised shape: {title, url, snippet, source},
     all strings.
     """
     keys = set(entry)
     base = {"kind", "hash", "explanation", "references", "llm_adapter",
             "reference_source"}
-    if not base <= keys <= base | {"reference_error"}:
+    if not base <= keys <= base | {"reference_error", "diagnosis_error"}:
         return False
     if not isinstance(entry["explanation"], str):
         return False
@@ -315,6 +326,10 @@ def _diagnosis_entry_ok(entry: dict) -> bool:
     if "reference_error" in entry and not (
             entry["reference_error"] is None
             or isinstance(entry["reference_error"], str)):
+        return False
+    if "diagnosis_error" in entry and not (
+            entry["diagnosis_error"] is None
+            or isinstance(entry["diagnosis_error"], str)):
         return False
     references = entry["references"]
     if not isinstance(references, list):

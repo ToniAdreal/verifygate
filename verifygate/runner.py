@@ -1,4 +1,24 @@
-"""End-to-end verification run: spec + candidate -> evidence record."""
+"""End-to-end verification run: spec + candidate -> evidence record.
+
+Diagnosis resilience (v1.19.0): the diagnosis is commentary, exactly
+like the Tavily references beside it — it can never be a verdict
+input, so its failure must never destroy a verdict the deterministic
+checks have already decided. Before this, ``llm.explain_failure``
+was called unguarded: a real-adapter failure (network error,
+malformed Token Factory response, empty completion after the retry —
+all ``RuntimeError``) propagated out of the run, so a candidate that
+had deterministically FAILed produced *no evidence record at all*
+(the CLI reported an adapter error, exit 2), the repair loop aborted
+on its first attempt, and replaying a FAIL record in real mode
+reported "not reproduced" even though every check reproduced — only
+the words had failed, and words are never compared. The explanation
+call is now guarded the same way the reference lookup already was:
+on failure the record seals a deterministic fallback explanation
+rendered from the real check results, plus a ``diagnosis_error``
+field documenting the degradation inside the hash chain. Calls the
+adapter recorded before raising stay in the usage log and are sealed
+as usual — the token spend is not dropped either.
+"""
 
 from __future__ import annotations
 
@@ -12,6 +32,38 @@ from .sandbox import prepare_workspace
 from .spec import TaskSpec
 from .tavily import ReferenceLookup, diagnosis_query
 from .validators import overall_verdict, run_checks
+
+
+def _fallback_explanation(check_dicts: list[dict], adapter_name: str,
+                          error: str) -> str:
+    """Deterministic stand-in when the LLM diagnosis is unavailable.
+
+    Rendered only from the real check results (never invented), and
+    explicit that no model explanation exists: the FAIL verdict was
+    decided by the checks alone and does not depend on this text.
+    """
+    lines = [
+        "## Diagnosis unavailable",
+        "",
+        f"The LLM adapter ({adapter_name}) failed to explain this "
+        f"failure: {error}",
+        "No model explanation was produced. The FAIL verdict was "
+        "decided by the deterministic checks alone and does not "
+        "depend on any explanation.",
+        "",
+        "Failing checks:",
+    ]
+    for c in check_dicts:
+        if c.get("verdict") == "FAIL":
+            if c.get("timed_out"):
+                lines.append(
+                    f"- {c.get('name')}: `{c.get('command')}` "
+                    "timed out (exit code: none)")
+            else:
+                lines.append(
+                    f"- {c.get('name')}: `{c.get('command')}` "
+                    f"exited {c.get('exit_code')}")
+    return "\n".join(lines)
 
 
 def run_verification(
@@ -38,7 +90,23 @@ def run_verification(
 
     diagnosis = None
     if verdict == "FAIL":
-        explanation = llm.explain_failure(check_dicts)
+        # The explanation is advisory commentary (see module
+        # docstring): guard it exactly like the reference lookup
+        # below, so an adapter failure degrades to a sealed fallback
+        # instead of destroying the record the checks just decided.
+        diagnosis_error: str | None = None
+        try:
+            explanation = llm.explain_failure(check_dicts)
+            if not isinstance(explanation, str):
+                raise TypeError(
+                    "explain_failure returned "
+                    f"{type(explanation).__name__}, not str")
+        except Exception as exc:  # diagnosis must never break a run
+            diagnosis_error = (
+                f"diagnosis failed ({type(exc).__name__}): "
+                f"{str(exc)[:200]}")
+            explanation = _fallback_explanation(
+                check_dicts, llm.name, diagnosis_error)
         query = diagnosis_query(check_dicts)
         refs: list[dict] = []
         reference_error: str | None = None
@@ -63,6 +131,7 @@ def run_verification(
             "llm_adapter": llm.name,
             "reference_source": references.name,
             "reference_error": reference_error,
+            "diagnosis_error": diagnosis_error,
         }
 
     replay = (

@@ -42,7 +42,7 @@ def test_demo_index_links_js_page_and_verify_command():
     html = (DEMO / "index.html").read_text(encoding="utf-8")
     assert "evidence_js_real_repair.html" in html
     assert "verifygate verify" in html
-    assert "39,341" in html
+    assert "40,449" in html
     assert "chain-v2" in html
     assert "chain-v3" in html
 

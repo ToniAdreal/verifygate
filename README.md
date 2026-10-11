@@ -123,7 +123,12 @@ is committed at `samples/evidence_real_repair.json` (Nemotron 3 Super
 FAIL record from the Nano model is committed at
 `samples/evidence_real_fail.json` (1 call, 1,133 tokens sealed) — it
 also shows the Tavily degradation note (`reference_error`) sealed into
-the diagnosis entry when no Tavily key is configured. The same real
+the diagnosis entry when no Tavily key is configured. Its successor
+`samples/evidence_real_fail_v2.json` (Nano, 1 call, 1,108 tokens
+sealed, chain v3) is the first real-mode record sealed since the
+diagnosis-resilience change (v1.19.0): its diagnosis entry carries
+`diagnosis_error: null` — a healthy model diagnosis — beside the same
+sealed Tavily degradation. The same real
 repair loop has also repaired the JavaScript sample
 (`samples-js/evidence_real_repair.json`, Super 120B, 6,390 tokens
 sealed): real mode, like Judge Mode, is language-agnostic.
@@ -160,7 +165,7 @@ tokens sealed; both records carry `chain_version: 3`, both chains
 verify, and the report replays end-to-end in Judge Mode). Real
 mode under the newest chain is therefore proven in both bundled
 languages. Total sealed real-mode usage across all committed
-records: 39,341 tokens.
+records: 40,449 tokens.
 
 ## Diagnosis references (Tavily)
 
@@ -177,6 +182,20 @@ record as the diagnosis entry's `reference_error`, so a reader can
 see the degradation instead of guessing at it. Judge Mode uses a
 deterministic mock reference instead. The evidence web view renders
 the degradation note next to the diagnosis when one is present.
+
+The diagnosis itself degrades the same way (v1.19.0). The LLM
+explanation is commentary too, so a failed explanation call — a
+network error, a malformed Token Factory response, an empty
+completion after the retry — can no longer destroy a verdict the
+checks already decided: the runner seals a deterministic fallback
+explanation rendered from the real check results, plus a
+`diagnosis_error` note in the diagnosis entry, and any usage the
+adapter recorded before failing is still sealed. Before this, that
+one unguarded call cost a FAILed candidate its entire evidence
+record (the CLI reported an adapter error and wrote nothing), aborted
+the repair loop on its first attempt, and made replaying a FAIL
+record in real mode report "not reproduced" even when every check
+reproduced exactly.
 
 ## Evidence web view
 
@@ -467,6 +486,26 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.19.0 — diagnosis resilience: the diagnosis is commentary, never a
+verdict input, but the runner called `explain_failure` unguarded —
+so a real-adapter failure (network error, malformed response, empty
+completion after the retry) destroyed the evidence record a
+deterministically FAILed candidate had already earned (no record
+written; the CLI exited 2 as an "adapter error"), aborted the repair
+loop on its first attempt, and made a real-mode replay of a FAIL
+record report "not reproduced" when only the words had failed. The
+call is now guarded exactly like the Tavily lookup beside it: the
+record seals a deterministic fallback explanation rendered from the
+real check results plus a `diagnosis_error` field (null on a healthy
+diagnosis), usage recorded before the failure is still sealed, and
+the web view renders the degradation note. A fresh real-mode record
+proves the new shape with a live model: `samples/
+evidence_real_fail_v2.json` (Nemotron 3 Nano, FAIL, 1 call, 1,108
+tokens sealed, `diagnosis_error: null` beside the sealed Tavily
+degradation). One pre-existing test corrected — the v1.18.0
+runner-propagation test pinned the old contract this change
+removes; it now pins the degradation into the record instead.
+10 new tests (371 total).
 1.18.0 — Token Factory response-shape hardening: the real adapter
 validated its decoded API response by indexing into it, so several
 plausible malformed shapes (a `message` returned as a bare string

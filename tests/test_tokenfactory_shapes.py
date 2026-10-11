@@ -104,19 +104,32 @@ def test_malformed_response_fails_patch_generation_too(payload):
     assert adapter.pending_calls() == []
 
 
-def test_runner_propagates_the_clean_error_not_a_traceback():
-    """The CLI maps RuntimeError to exit 2 ('adapter error'); any
-    other exception type would escape as a traceback (probed pre-fix
-    at the CLI level with the message-is-a-string shape)."""
+def test_runner_degrades_the_clean_error_into_the_record():
+    """Contract change (v1.19.0): this test previously asserted that
+    run_verification *propagates* the adapter's RuntimeError (the CLI
+    then mapped it to exit 2 and wrote no record). That is exactly
+    the behaviour v1.19.0 removed — the diagnosis is commentary, so
+    the runner now catches the clean RuntimeError, seals it as the
+    diagnosis entry's ``diagnosis_error`` beside a deterministic
+    fallback explanation, and still returns the FAIL record. What
+    this test still pins from the old contract: the failure surfaces
+    as the adapter's clean RuntimeError text ("response shape"),
+    never as an AttributeError traceback from the malformed payload.
+    """
     adapter = _adapter(_good(choices=[
         {"message": "hello", "finish_reason": "stop"}]))
-    with pytest.raises(RuntimeError, match="response shape"):
-        run_verification(
-            spec=SPEC, candidate_dir=APP / "samples" / "failing",
-            mode="real", llm=adapter, references=MockReferenceLookup(),
-            spec_label="samples/spec.json",
-            candidate_label="samples/failing",
-        )
+    record = run_verification(
+        spec=SPEC, candidate_dir=APP / "samples" / "failing",
+        mode="real", llm=adapter, references=MockReferenceLookup(),
+        spec_label="samples/spec.json",
+        candidate_label="samples/failing",
+    )
+    assert record["verdict"] == "FAIL"
+    diag = next(e for e in record["entries"] if e["kind"] == "diagnosis")
+    assert "RuntimeError" in diag["diagnosis_error"]
+    assert "response shape" in diag["diagnosis_error"]
+    assert "Diagnosis unavailable" in diag["explanation"]
+    assert verify_chain(record)
 
 
 def test_missing_usage_seals_none_counts_and_still_verifies():
