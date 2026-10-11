@@ -20,9 +20,9 @@
 #   8. every evidence record written during the rehearsal is verified
 #      with the standalone `verifygate verify` CLI (spec binding where
 #      the rehearsal's own spec applies), plus the committed real-mode
-#      repair reports for the JavaScript sample and the chain-v2 and
-#      chain-v3 Python reports
-#   9. replay: the rehearsal's own repair report and all four
+#      repair reports for the JavaScript sample (including its
+#      chain-v3 report) and the chain-v2 and chain-v3 Python reports
+#   9. replay: the rehearsal's own repair report and all five
 #      committed real-mode repair reports are replayed in Judge Mode
 #      with the standalone `verifygate replay` CLI (patched attempts
 #      are reconstructed from the recorded patches; zero keys)
@@ -122,6 +122,8 @@ python3 -m verifygate verify --record samples/evidence_real_repair_v2.json \
     --spec samples/spec.json --candidate samples/failing
 python3 -m verifygate verify --record samples/evidence_real_repair_v3.json \
     --spec samples/spec.json --candidate samples/failing
+python3 -m verifygate verify --record samples-js/evidence_real_repair_v3.json \
+    --spec samples-js/spec.json --candidate samples-js/failing
 
 echo "== 9/10 replay: rehearsal repair report + committed real-mode reports (Judge Mode)"
 python3 -m verifygate replay --record "$WORK/repair.json" \
@@ -134,6 +136,8 @@ python3 -m verifygate replay --record samples/evidence_real_repair_v2.json \
     --spec samples/spec.json --candidate samples/failing --mode judge
 python3 -m verifygate replay --record samples/evidence_real_repair_v3.json \
     --spec samples/spec.json --candidate samples/failing --mode judge
+python3 -m verifygate replay --record samples-js/evidence_real_repair_v3.json \
+    --spec samples-js/spec.json --candidate samples-js/failing --mode judge
 
 echo "== 10/10 installed package: pip install + console script from another directory"
 # --no-build-isolation first (uses the interpreter's own setuptools,

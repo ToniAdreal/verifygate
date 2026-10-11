@@ -144,8 +144,18 @@ report from Nemotron 3 Super 120B — attempt 0 FAIL with the model's
 own diagnosis, a first diff rejected for a context mismatch and
 fed back, a second diff applied, attempt 2 PASS (3 calls, 9,407
 tokens sealed; both records carry `chain_version: 3`, both chains
-verify, and the report replays end-to-end in Judge Mode). Total
-sealed real-mode usage across all committed records: 34,023 tokens.
+verify, and the report replays end-to-end in Judge Mode).
+
+The JavaScript sample now has the same chain-v3 real-mode proof:
+`samples-js/evidence_real_repair_v3.json` is a chain-v3 repair
+report from Nemotron 3 Super 120B — attempt 0 FAIL with the model's
+own diagnosis (tax rate ignored, no cent rounding), its first diff
+applied to a copy of `cart.js`, attempt 1 PASS (2 calls, 5,318
+tokens sealed; both records carry `chain_version: 3`, both chains
+verify, and the report replays end-to-end in Judge Mode). Real
+mode under the newest chain is therefore proven in both bundled
+languages. Total sealed real-mode usage across all committed
+records: 39,341 tokens.
 
 ## Diagnosis references (Tavily)
 
@@ -439,9 +449,10 @@ expected exit codes, the FAIL → PASS repair loop, the evidence web view
 of the committed real-mode report, a dogfood run of VerifyGate on its
 own tree, a `verifygate verify` check of every record written
 during the rehearsal plus the committed real-mode reports for the
-JavaScript sample and the chain-v2 and chain-v3 Python reports, a
+JavaScript sample (including its chain-v3 report) and the chain-v2
+and chain-v3 Python reports, a
 `verifygate replay` reproduction of the rehearsal's repair report
-and all four committed real-mode repair reports, and
+and all five committed real-mode repair reports, and
 an installed-package smoke test (`pip install` the export, then run
 the `verifygate` console script from a different directory).
 
@@ -451,6 +462,19 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.17.0 — chain-v3 real-mode proof for the JavaScript sample: the
+JS sample's only committed real-mode report was still a legacy
+chain-v1 record, so the language-agnostic claim and the newest
+chain had never been proven together with a live model —
+`samples-js/evidence_real_repair_v3.json` (Nemotron 3 Super 120B:
+FAIL → PASS in one round, 2 calls, 5,318 tokens sealed, both
+records `chain_version: 3`) is pinned by tests and verified +
+replayed in the clean-tree rehearsal; a test also pins the v3
+property on the committed JS record itself (rewriting its replay
+command or flipping its dev-key disclosure breaks its chain).
+The hosted-demo landing page states the new sealed total.
+Cumulative sealed real-mode usage across committed records: 39,341
+tokens. 2 new tests (318 total).
 1.16.0 — chain-v3 real-mode proof: the flagship repair loop is now
 proven under the newest chain with a live model, not only in Judge
 Mode — `samples/evidence_real_repair_v3.json` (Nemotron 3 Super
