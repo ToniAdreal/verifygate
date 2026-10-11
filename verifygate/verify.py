@@ -203,6 +203,30 @@ that stop while its preserved failure says the applier rejected a
 diff — or vice versa — fails the narrative check like any other
 rewritten story. Reports sealed before v1.20.0 carry no
 ``error_kind`` and derive exactly as before.
+
+Malformed-document robustness (v1.47.0): the judge-facing
+consumers of a record — this module, ``replay``, and the web
+view — assumed the document's *entries* were a list of objects,
+an assumption ``verify_chain`` itself never made (its structure
+check guards every entry's type). A record whose ``entries`` was
+rewritten as a list of strings, a bare string, or an object
+crashed ``verify`` and ``replay`` with an unhandled
+``AttributeError`` / ``KeyError`` traceback out of
+:func:`header_of` — the shared helper every consumer reads the
+sealed header through — instead of reporting the tampered record
+as failed (chain invalid, exit 1), the v1.11.0 rule one level up.
+An attempt record carrying a non-list ``entries`` likewise
+crashed :func:`derived_usage_total` (called by both the
+cross-check and the web view). ``header_of`` now returns ``{}``
+unless the record is an object whose first entry is a header
+object, ``derived_usage_total`` treats a non-list ``entries`` as
+malformed (None, so the cross-check mismatches), and
+:func:`check_record` rejects a non-object record with the same
+``ValueError`` :func:`collect_records` raises for one. The web
+view and replay apply the same guards on their side (see their
+module docstrings): a malformed record renders next to its
+CHAIN INVALID banner and replays as not reproduced — it never
+crashes the tool asked to judge it.
 """
 
 from __future__ import annotations
@@ -294,9 +318,27 @@ def collect_records(data) -> list[tuple[str, dict]]:
 
 
 def header_of(record: dict) -> dict:
-    entries = record.get("entries") or []
-    if entries and entries[0].get("kind") == "header":
-        return entries[0]
+    """The record's sealed header entry, or ``{}`` when there is none.
+
+    Malformed-document robustness (v1.47.0): the header is read
+    through this helper by every judge-facing consumer (verify,
+    replay, the web view), and a tampered record's ``entries`` may
+    be anything JSON can carry — a list of strings, a bare string,
+    an object, a number. Before this, each of those shapes crashed
+    the helper (``AttributeError`` on a non-object first entry,
+    ``KeyError`` on an object ``entries``) and the crash escaped
+    as a traceback instead of a failed verification. Anything that
+    is not an object record carrying a *list* whose first entry is
+    a header object simply has no header.
+    """
+    if not isinstance(record, dict):
+        return {}
+    entries = record.get("entries")
+    if not isinstance(entries, list) or not entries:
+        return {}
+    first = entries[0]
+    if isinstance(first, dict) and first.get("kind") == "header":
+        return first
     return {}
 
 
@@ -351,7 +393,14 @@ def derived_usage_total(data) -> dict | None:
         record = attempt.get("evidence")
         if not isinstance(record, dict):
             return None
-        for entry in record.get("entries", []):
+        entries = record.get("entries")
+        if not isinstance(entries, list):
+            # A non-list entries field is malformed (v1.47.0):
+            # total it as unusable, like a malformed usage, instead
+            # of crashing on iteration (a number) or silently
+            # totalling the wrong thing (a string's characters).
+            return None
+        for entry in entries:
             if isinstance(entry, dict) and entry.get("kind") == "llm_usage":
                 part = _calls_total(entry.get("calls"))
                 if part is None:
@@ -679,7 +728,10 @@ def narrative_problems(data) -> list[str]:
             record = attempt.get("evidence") if isinstance(attempt, dict) else None
             if not isinstance(record, dict):
                 continue
-            for entry in record.get("entries", []):
+            entries = record.get("entries")
+            if not isinstance(entries, list):
+                continue  # malformed entries name no adapter (v1.47.0)
+            for entry in entries:
                 if not isinstance(entry, dict):
                     continue
                 if entry.get("kind") == "diagnosis" \
@@ -740,7 +792,12 @@ def check_record(
     ``candidate_hash`` / ``spec_hash`` — not a SHA-256 hex
     digest — is a ``ValueError``, never a reported mismatch.
     ``None`` requests no binding for that side and is unjudged.
+    A non-object ``record`` is the same ``ValueError``
+    :func:`collect_records` raises for one (v1.47.0), never an
+    ``AttributeError`` from reading its fields.
     """
+    if not isinstance(record, dict):
+        raise ValueError("not a VerifyGate record")
     validate_binding_hash(candidate_hash, "candidate_hash")
     validate_binding_hash(spec_hash, "spec_hash")
     header = header_of(record)

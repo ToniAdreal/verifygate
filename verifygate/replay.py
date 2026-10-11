@@ -68,6 +68,19 @@ otherwise escape mid-replay as an unhandled ``AttributeError``
 on a FAIL record, or silently replay a PASS record with no
 adapter at all. A malformed adapter is now a usage error
 before any record is replayed.
+
+Malformed-document robustness (v1.47.0): the record being
+replayed is untrusted, and two of replay's own reads assumed
+its shape — ``verify.header_of`` (now guarded there) and
+:func:`_check_summary`, which read ``.get`` on every entry the
+record carried. A record whose ``entries`` was rewritten as a
+list of strings, a bare string, or a number crashed replay with
+an unhandled ``AttributeError`` / ``TypeError`` traceback —
+past the per-record path's error handling — instead of simply
+not reproducing. ``_check_summary`` now summarises only object
+entries of a list ``entries`` (anything else summarises as no
+checks, which cannot match a genuine run's summary), so a
+malformed record replays as *not reproduced*, never as a crash.
 """
 
 from __future__ import annotations
@@ -86,11 +99,23 @@ from .verify import collect_records, header_of
 
 
 def _check_summary(record: dict) -> list[tuple[str, str, int | None]]:
-    """(name, verdict, exit_code) per check entry, in record order."""
+    """(name, verdict, exit_code) per check entry, in record order.
+
+    Defensive by construction (v1.47.0): a malformed record's
+    ``entries`` may be a non-list, or a list carrying non-object
+    items — both summarise as the object check entries actually
+    present (possibly none), never a crash. A genuine record's
+    entries are all objects, so its summary is unchanged.
+    """
+    if not isinstance(record, dict):
+        return []
+    entries = record.get("entries")
+    if not isinstance(entries, list):
+        return []
     return [
         (e.get("name"), e.get("verdict"), e.get("exit_code"))
-        for e in record.get("entries", [])
-        if e.get("kind") == "check"
+        for e in entries
+        if isinstance(e, dict) and e.get("kind") == "check"
     ]
 
 

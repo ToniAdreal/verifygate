@@ -19,6 +19,23 @@ Trust properties are preserved, not just displayed:
 
 The rendering is deterministic apart from the chain-verification
 result: same record in, same HTML out.
+
+Malformed-document robustness (v1.47.0): a record is untrusted
+input, and the renderers assumed its shape — ``entries`` a list
+of objects, references a list of objects, a repair report's
+attempts a list of objects, its stated usage total an object.
+Rewriting any of those (a list of strings for ``entries``, an
+object for ``attempts``, a bare string for the stated total)
+crashed the render with an unhandled ``AttributeError`` /
+``TypeError`` / ``KeyError`` — at the library level the page was
+lost entirely, and only the CLI's backstop catch turned it into
+an exit 2. The renderers now guard every shape they read: a
+malformed record renders as a page carrying its CHAIN INVALID
+banner (the treatment a tampered record has had since v0.4.0),
+a malformed repair report renders with its derived figures and
+its SUMMARY MISMATCH banner, and a document that is not an
+object at all is a clean ``ValueError`` — the CLI's record error
+— instead of a crash. Genuine records render byte-identically.
 """
 
 from __future__ import annotations
@@ -29,7 +46,7 @@ import json
 from .evidence import verify_chain
 from .verify import (attempt_binding_problems, derived_rounds_used,
                     derived_stopped_reason, derived_usage_total,
-                    narrative_problems)
+                    header_of, narrative_problems)
 
 _CSS = """
 :root{color-scheme:light}
@@ -140,9 +157,13 @@ def _render_diagnosis(entry: dict) -> str:
             f"{_e(entry.get('reference_error'))} "
             "The verdict above does not depend on references.</p>")
     refs = entry.get("references") or []
+    if not isinstance(refs, list):
+        refs = []
     if refs:
         parts.append("<h3>References</h3>")
         for ref in refs:
+            if not isinstance(ref, dict):
+                continue  # a malformed reference renders as nothing
             parts.append(
                 '<p class="ref">'
                 f"<strong>{_e(ref.get('title', ''))}</strong> "
@@ -203,12 +224,22 @@ _RENDERERS = {
 
 
 def render_record(record: dict) -> str:
-    """Render one evidence record as an HTML fragment (no <html> shell)."""
+    """Render one evidence record as an HTML fragment (no <html> shell).
+
+    A non-object record is a ``ValueError`` (v1.47.0); an object
+    record whose ``entries`` is malformed renders with an empty
+    entry list next to its CHAIN INVALID banner — ``verify_chain``
+    already judges that shape False, and the page must be able to
+    say so instead of crashing on the entries it was asked to show.
+    """
+    if not isinstance(record, dict):
+        raise ValueError("not a VerifyGate record")
     verdict = record.get("verdict", "")
     chain_ok = verify_chain(record)
-    header = next(
-        (e for e in record.get("entries", []) if e.get("kind") == "header"),
-        {})
+    header = header_of(record)
+    entries = record.get("entries")
+    if not isinstance(entries, list):
+        entries = []
     parts = [
         f'<div class="verdict-banner '
         f'{"pass" if verdict == "PASS" else "fail"}">'
@@ -241,18 +272,38 @@ def render_record(record: dict) -> str:
             "management).</p>")
     parts.append("</div>")
 
-    for entry in record.get("entries", []):
+    for entry in entries:
+        if not isinstance(entry, dict):
+            # A malformed entry has no kind to dispatch on; show it
+            # as inert text (it is already escaped) rather than
+            # crashing the render of the record that carries it.
+            parts.append(
+                '<div class="card"><h3>malformed entry</h3>'
+                f"<pre>{_e(entry)}</pre></div>")
+            continue
         kind = entry.get("kind")
         if kind == "header":
             continue
-        renderer = _RENDERERS.get(kind, _render_generic)
+        renderer = _RENDERERS.get(kind, _render_generic) \
+            if isinstance(kind, str) else _render_generic
         parts.append(renderer(entry))
     return "\n".join(parts)
 
 
 def render_repair_report(report: dict) -> str:
-    """Render a repair report: summary card + one section per attempt."""
+    """Render a repair report: summary card + one section per attempt.
+
+    Shape-guarded like :func:`render_record` (v1.47.0): a
+    non-object report is a ``ValueError``; a non-list ``attempts``
+    renders as no attempts; a non-object attempt renders as an
+    empty attempt section; a non-object stated usage total cannot
+    crash the mismatch message that exists to flag it.
+    """
+    if not isinstance(report, dict):
+        raise ValueError("not a VerifyGate repair report")
     attempts = report.get("attempts", [])
+    if not isinstance(attempts, list):
+        attempts = []
     # The report-level summary fields are not inside any hash chain.
     # The authoritative final verdict is the last attempt's *sealed*
     # record verdict; a stated summary that disagrees with it renders
@@ -262,13 +313,17 @@ def render_repair_report(report: dict) -> str:
     # stated figure that disagrees is flagged, with the derived
     # figure shown instead of the rewritten one.
     sealed_final = None
-    if attempts and isinstance(attempts[-1].get("evidence"), dict):
-        sealed_final = attempts[-1]["evidence"].get("verdict")
+    last_attempt = attempts[-1] if attempts else None
+    if isinstance(last_attempt, dict) \
+            and isinstance(last_attempt.get("evidence"), dict):
+        sealed_final = last_attempt["evidence"].get("verdict")
     stated_final = report.get("final_verdict", "")
     final_verdict = sealed_final if sealed_final is not None else stated_final
     derived_total = derived_usage_total(report)
     stated_total = report.get("llm_usage_total")
     total = derived_total if derived_total is not None else (stated_total or {})
+    if not isinstance(total, dict):
+        total = {}
     total_mismatch = derived_total is not None \
         and stated_total is not None and stated_total != derived_total
     derived_rounds = derived_rounds_used(report)
@@ -308,9 +363,13 @@ def render_repair_report(report: dict) -> str:
             f"its stated final verdict ({_e(stated_final)}) does not "
             f"match its sealed final attempt record ({_e(sealed_final)})")
     if total_mismatch:
+        stated_calls = stated_total.get("llm_calls") \
+            if isinstance(stated_total, dict) else stated_total
+        stated_tokens = stated_total.get("total_tokens") \
+            if isinstance(stated_total, dict) else ""
         mismatches.append(
-            f"its stated LLM usage total ({_e(stated_total.get('llm_calls'))} "
-            f"call(s), {_e(stated_total.get('total_tokens'))} token(s)) does "
+            f"its stated LLM usage total ({_e(stated_calls)} "
+            f"call(s), {_e(stated_tokens)} token(s)) does "
             f"not match the sealed attempts ({_e(derived_total['llm_calls'])} "
             f"call(s), {_e(derived_total['total_tokens'])} token(s))")
     if rounds_mismatch:
@@ -344,6 +403,10 @@ def render_repair_report(report: dict) -> str:
     parts.append("</div>")
 
     for attempt in attempts:
+        if not isinstance(attempt, dict):
+            parts.append(
+                "<h2>Attempt — malformed attempt entry</h2>")
+            continue
         evidence = attempt.get("evidence")
         sealed_verdict = evidence.get("verdict") \
             if isinstance(evidence, dict) else None
@@ -360,12 +423,15 @@ def render_repair_report(report: dict) -> str:
                 f"({_e(attempt.get('verdict'))}) does not match its "
                 f"sealed record ({_e(sealed_verdict)}).</div>")
         patch = attempt.get("patch_from_previous")
-        if patch:
+        if isinstance(patch, dict) and patch:
             if patch.get("applied"):
+                changed = patch.get("changed_files")
+                changed_text = ", ".join(str(f) for f in changed) \
+                    if isinstance(changed, list) else ""
                 parts.append(
                     '<div class="card"><p>Patch from previous attempt '
                     "applied to: "
-                    f"<strong>{_e(', '.join(patch.get('changed_files') or []))}"
+                    f"<strong>{_e(changed_text)}"
                     "</strong></p></div>")
             elif patch.get("error"):
                 parts.append(
@@ -378,14 +444,20 @@ def render_repair_report(report: dict) -> str:
 
 
 def render_document(data: dict) -> str:
-    """Render a full standalone HTML page for a record or repair report."""
+    """Render a full standalone HTML page for a record or repair report.
+
+    A non-object document is a ``ValueError`` (v1.47.0) — the
+    CLI's clean record error — never an ``AttributeError`` from
+    reading a list's or a string's fields as if they were a
+    record's.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("not a VerifyGate record")
     if data.get("kind") == "repair-report":
         title = f"VerifyGate repair report — {data.get('spec_name', '')}"
         body = render_repair_report(data)
     else:
-        header = next(
-            (e for e in data.get("entries", [])
-             if e.get("kind") == "header"), {})
+        header = header_of(data)
         title = (f"VerifyGate evidence — "
                  f"{header.get('spec_name', 'record')}")
         body = render_record(data)

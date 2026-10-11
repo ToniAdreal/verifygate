@@ -21,6 +21,20 @@ Record files are loaded through the bounded JSON loader
 record is an untrusted third-party artifact, so an oversize file is
 a usage error (exit 2) rejected from its first bytes, not a memory
 exhaustion inside the verifier asked to judge it.
+
+Malformed documents (v1.47.0): the library consumers (verify /
+replay / view) now guard the document shapes they read, so a
+record whose ``entries`` was rewritten into a non-list or a list
+of non-objects fails cleanly — ``verify`` exit 1 with CHAIN
+INVALID, ``replay`` exit 1 (not reproduced), ``view`` rendering
+the page next to its CHAIN INVALID banner — instead of an
+unhandled traceback (``verify`` / ``replay`` exited 1 *with* a
+traceback before this, indistinguishable from a crash). The
+``verify`` / ``replay`` handlers additionally catch the shape
+errors (``TypeError`` / ``AttributeError`` / ``KeyError``) as a
+backstop, mapping any residual malformed shape to the one-line
+record error (exit 2), exactly as the ``view`` handler has since
+v1.4.0.
 """
 
 from __future__ import annotations
@@ -150,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from .verify import collect_records, header_of
             first = collect_records(data)[0][1]
-        except ValueError as exc:
+        except (ValueError, TypeError, AttributeError, KeyError) as exc:
             print(f"record error: {exc}", file=sys.stderr)
             return 2
         mode = args.mode or header_of(first).get("mode") or "judge"
@@ -163,7 +177,8 @@ def main(argv: list[str] | None = None) -> int:
             results = replay_document(
                 data, spec=spec, candidate_dir=args.candidate, mode=mode,
                 llm=llm, references=references, spec_label=args.spec)
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, TypeError, AttributeError,
+                KeyError) as exc:
             print(f"record error: {exc}", file=sys.stderr)
             return 2
         for r in results:
@@ -209,7 +224,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             results = verify_document(
                 data, candidate_dir=args.candidate, spec_hash=spec_hash)
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, TypeError, AttributeError,
+                KeyError) as exc:
             print(f"record error: {exc}", file=sys.stderr)
             return 2
         for label, r in results:

@@ -574,6 +574,25 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.47.0 — malformed-document robustness: the
+judge-facing consumers of a record (verify, replay,
+the web view) assumed its `entries` were a list of
+objects — an assumption `verify_chain` itself never
+made. A record rewritten with a list of strings, a
+bare string, an object, or a number for `entries`
+crashed `verify` and `replay` with an unhandled
+traceback out of the shared header helper, and an
+attempt record with a non-list `entries` crashed the
+usage-total recomputation and the narrative check's
+adapter scan; the web view crashed on those shapes
+plus a non-object repair attempt, a non-object
+stated usage total, and a non-list `changed_files`.
+Every consumer now guards the shapes it reads: a
+malformed record fails cleanly (verify exit 1 with
+CHAIN INVALID, replay exit 1 as not reproduced, the
+web view rendering the record next to its CHAIN
+INVALID banner), and a non-object document is a
+clean `ValueError`. 44 new tests (1435 total).
 1.46.0 — file-path validation: the spec and record
 loaders converted their path argument unchecked.
 `load_spec` ran `Path(...)` outside its error
