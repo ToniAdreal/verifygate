@@ -58,6 +58,16 @@ surfaced only as a per-record replay error from the tree hash's
 error before any record is replayed; the directory validation
 subsumes the derived-label check (a validated directory's string
 is a non-empty label within the same 1,000-character ceiling).
+
+Adapter validation (v1.42.0): ``llm`` and ``references`` are
+validated up front the same way, through ``llm.validate_llm``
+and ``tavily.validate_references`` — the per-record path catches
+only ``OSError`` / ``RuntimeError`` from the runner, so a
+malformed adapter (``None``, a string, a bare object) would
+otherwise escape mid-replay as an unhandled ``AttributeError``
+on a FAIL record, or silently replay a PASS record with no
+adapter at all. A malformed adapter is now a usage error
+before any record is replayed.
 """
 
 from __future__ import annotations
@@ -66,12 +76,12 @@ import shutil
 from pathlib import Path
 
 from .evidence import tree_hash, validate_label, validate_mode, verify_chain
-from .llm import LLMAdapter
+from .llm import LLMAdapter, validate_llm
 from .patch import PatchError, apply_patch
 from .runner import run_verification
 from .sandbox import prepare_workspace, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
-from .tavily import ReferenceLookup
+from .tavily import ReferenceLookup, validate_references
 from .verify import collect_records, header_of
 
 
@@ -157,6 +167,10 @@ def replay_document(
     not-a-directory candidate is a usage error up front, and its
     guarantees (a string form that is a non-empty label within the
     same ceiling) subsume the v1.40.0 derived-label check.
+    The adapters are validated the same way (v1.42.0): a malformed
+    ``llm`` / ``references`` is a usage error up front, not an
+    ``AttributeError`` escaping the per-record path mid-replay
+    (that path catches only ``OSError`` / ``RuntimeError``).
     Reconstruction copies are removed before returning; the caller's
     candidate directory is never modified.
     """
@@ -164,6 +178,8 @@ def replay_document(
     validate_spec(spec)
     validate_label(spec_label, "spec_label")
     validate_candidate_dir(candidate_dir, name="candidate_label")
+    validate_llm(llm)
+    validate_references(references)
     pairs = collect_records(data)
     is_report = isinstance(data, dict) and "attempts" in data
     results: list[dict] = []

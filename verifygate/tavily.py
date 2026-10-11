@@ -119,6 +119,33 @@ def _effective_max_results(max_results) -> int:
     return max(1, min(max_results, MAX_RESULTS_CEILING))
 
 
+def validate_references(references, name: str = "references"):
+    """Validate a reference-lookup argument (v1.42.0).
+
+    A lookup is duck-typed, exactly as the existing test stubs
+    rely on: it need not subclass :class:`ReferenceLookup`, and
+    ``name`` / ``last_error`` stay optional — the runner reads
+    them through ``getattr`` / normalisation. What is *required*
+    is a callable ``lookup``.
+
+    Before this, ``None``, a string, or a bare object was accepted
+    verbatim: a PASS run sealed its verdict with no lookup at all,
+    and a FAIL run crashed with an unhandled ``AttributeError``
+    on ``references.name`` after the guarded lookup call — losing
+    the already-decided record. A malformed lookup is now a
+    ``ValueError`` (the CLI's exit-2 usage error) raised before
+    any workspace is prepared or any check runs.
+    """
+    if references is None:
+        raise ValueError(
+            f"{name} is required (a reference lookup, got None)")
+    if not callable(getattr(references, "lookup", None)):
+        raise ValueError(
+            f"{name} must provide a callable lookup() "
+            f"(got {type(references).__name__})")
+    return references
+
+
 class ReferenceLookup(ABC):
     name: str = "base"
 

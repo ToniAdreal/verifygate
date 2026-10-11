@@ -35,6 +35,39 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 
+def validate_llm(llm, name: str = "llm"):
+    """Validate an LLM adapter argument (v1.42.0).
+
+    An adapter is duck-typed, exactly as the existing test stubs
+    rely on: it need not subclass :class:`LLMAdapter`, and the
+    optional usage-log methods (``drain_calls`` / ``pending_calls``)
+    and the ``name`` attribute stay optional — the runner already
+    guards and normalises those. What is *required* is the pair of
+    advisory jobs themselves: a callable ``explain_failure`` and a
+    callable ``generate_patch``.
+
+    Before this, an entry point accepted ``None``, a string, or a
+    bare object verbatim. On a PASS candidate the run then sealed a
+    verdict with no adapter at all (the diagnosis path is skipped
+    and the usage drain is ``hasattr``-guarded, so nothing noticed);
+    on a FAIL candidate the guarded explanation call degraded as
+    designed, but the fallback's ``llm.name`` access then raised an
+    unhandled ``AttributeError`` and the already-decided record was
+    lost — the same loss class v1.19.0 closed for adapter *runtime*
+    failures, one shape earlier. A malformed adapter is now a
+    ``ValueError`` (the CLI's exit-2 usage error) raised before any
+    workspace is prepared or any check runs.
+    """
+    if llm is None:
+        raise ValueError(f"{name} is required (an LLM adapter, got None)")
+    for method in ("explain_failure", "generate_patch"):
+        if not callable(getattr(llm, method, None)):
+            raise ValueError(
+                f"{name} must provide a callable {method}() "
+                f"(got {type(llm).__name__})")
+    return llm
+
+
 class LLMAdapter(ABC):
     name: str = "base"
 

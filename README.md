@@ -574,6 +574,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.42.0 — adapter validation: the `llm` and `references`
+arguments were the last run parameters taken on trust.
+`None`, a string, or a bare object on a PASS candidate
+sealed a verdict with no adapter at all (the diagnosis
+path is skipped and the usage drain is guarded, so nothing
+noticed), and on a FAIL candidate crashed with an
+unhandled `AttributeError` on the adapter's `name` after
+its guarded advisory call — losing the record the checks
+had already decided; in the repair loop the same crash
+happened at `llm.name` before the first run, with no
+report, and in replay it escaped mid-replay past the
+per-record `OSError`/`RuntimeError` handling. Every entry
+point — the runner, the repair loop, and replay — now
+validates both adapters before any work, through
+`llm.validate_llm` (a callable `explain_failure` and
+`generate_patch` are required) and
+`tavily.validate_references` (a callable `lookup` is
+required): a malformed adapter is a `ValueError` (CLI
+exit 2). Validation is duck-typed and about shape, not
+behaviour — subclassing is not required, `name` /
+`last_error` / the usage-log methods stay optional, and
+an adapter whose methods raise still degrades under the
+diagnosis/generation resilience rules. 114 new tests
+(1118 total).
 1.41.0 — candidate-directory validation: the candidate
 directory itself was the last run parameter converted with
 `Path(...)` unchecked. A non-path value (`None`, an `int`, a

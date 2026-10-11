@@ -109,6 +109,17 @@ caller's candidate label, and a regular file's error depended on
 which internal path noticed first. A malformed candidate is now a
 ``ValueError`` / ``FileNotFoundError`` here, before any workspace
 is prepared or any check runs.
+
+Adapter validation (v1.42.0): the ``llm`` and ``references``
+arguments are validated here too, through ``llm.validate_llm``
+and ``tavily.validate_references`` — see those helpers. They were
+the last run parameters taken on trust: ``None`` / a string / a
+bare object silently sealed a PASS with no adapter at all, and
+crashed a FAIL run with an unhandled ``AttributeError`` on the
+adapter's ``name`` after the guarded advisory call, losing the
+record the checks had already decided. Validation is about
+shape, not behaviour: an adapter whose callable methods *raise*
+still degrades exactly as v1.19.0/v1.20.0 designed.
 """
 
 from __future__ import annotations
@@ -128,7 +139,7 @@ from .evidence import (
     validate_label,
     validate_mode,
 )
-from .llm import LLMAdapter
+from .llm import LLMAdapter, validate_llm
 from .sandbox import prepare_workspace, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
 from .tavily import (
@@ -136,6 +147,7 @@ from .tavily import (
     ReferenceLookup,
     diagnosis_query,
     normalise_references,
+    validate_references,
 )
 from .validators import overall_verdict, run_checks
 
@@ -245,6 +257,12 @@ def run_verification(
     # depended on the path taken. Judged here, beside the labels,
     # before any workspace exists.
     validate_candidate_dir(candidate_dir)
+    # Fail fast on malformed adapters (v1.42.0): a PASS would
+    # otherwise seal with no adapter at all and a FAIL would crash
+    # on the adapter's name after its guarded call, losing the
+    # record. Judged here, before any workspace exists.
+    validate_llm(llm)
+    validate_references(references)
     workspace = prepare_workspace(candidate_dir)
     try:
         results = run_checks(spec, workspace)

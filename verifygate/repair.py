@@ -130,6 +130,15 @@ the *current* directory's tree, and an over-long path produced
 a report whose stored attempt directories exceed the cap
 verification enforces over them. The runner validates it too;
 this is the loop's own fail-fast, before the first run.
+
+Adapter validation (v1.42.0): ``llm`` and ``references`` are
+validated the same way, beside the candidate directory — the
+loop reads ``llm.name`` for its credited adapter before the
+first run, so ``None`` / a bare object crashed here with an
+unhandled ``AttributeError`` and no report at all, while a
+malformed lookup crashed the first FAIL attempt the same way.
+The runner validates them too; this is the loop's own
+fail-fast, before the first run or any generation call.
 """
 
 from __future__ import annotations
@@ -146,7 +155,7 @@ from .evidence import (
     validate_label,
     validate_mode,
 )
-from .llm import LLMAdapter
+from .llm import LLMAdapter, validate_llm
 from .patch import MAX_PATCH_TEXT_CHARS, PatchError, apply_patch
 from .runner import run_verification
 from .sandbox import (
@@ -155,7 +164,7 @@ from .sandbox import (
     validate_candidate_dir,
 )
 from .spec import TaskSpec, validate_spec
-from .tavily import ReferenceLookup
+from .tavily import ReferenceLookup, validate_references
 
 # A generous ceiling, not a target: the default is 3, and every round
 # costs one LLM patch call plus a full re-verification, with a full
@@ -279,6 +288,12 @@ def run_repair(
     # any generation call. The runner validates it too; this is the
     # loop's own fail-fast.
     validate_candidate_dir(candidate_dir)
+    # The adapters are validated the same way (v1.42.0): the loop
+    # reads llm.name below, before the first run — a malformed
+    # adapter must be a ValueError here, not an AttributeError
+    # with no report. The runner validates them too.
+    validate_llm(llm)
+    validate_references(references)
     # The adapter name and the usage snapshots this report carries
     # are adapter-supplied: normalise them the same way the runner
     # normalises the sealed copies (v1.35.0), so the report's own
