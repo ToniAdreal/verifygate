@@ -586,6 +586,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.55.0 — verdict-aggregation validation:
+`overall_verdict`, the one function that turns
+per-check results into the verdict sealed into
+the record, took its input on trust. An empty
+*iterator* aggregated to PASS (`results and
+all(...)`: an iterator is always truthy, and
+`all` of nothing is true) while an empty list
+aggregated to FAIL — a vacuous PASS from the
+aggregator itself. `None` silently aggregated
+to FAIL, a verdict for checks that never ran;
+a string or a list of plain dicts crashed with
+an unhandled `AttributeError`. And each
+result's `verdict` field was trusted blindly:
+a result claiming PASS with exit code 3, or
+PASS while timed out, aggregated to PASS —
+against the one derivation rule (a check
+passes iff it exits 0 before its timeout) —
+and the record sealed from it failed the
+consistency mirror, so it failed its own
+verification the moment it was written. The
+input is now materialised and every entry
+validated before aggregation: a `CheckResult`
+whose verdict-bearing fields are the shapes
+`run_checks` emits (the types and ranges the
+evidence mirror enforces) and whose `verdict`
+is exactly the verdict those fields derive.
+An inconsistent result is one `ValueError`,
+never a verdict. 42 new tests (1763 total).
 1.54.0 — replay-command update validation:
 `update_replay_command`, the one sanctioned
 post-seal edit (the repair loop rewrites a
