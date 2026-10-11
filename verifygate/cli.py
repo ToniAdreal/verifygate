@@ -15,6 +15,12 @@ FAIL, 2 on usage/spec errors (the evidence record is written either
 way — a FAIL record is a deliverable, not an error); verify/replay —
 0 when the record is intact / every verdict reproduces, 1 when not,
 2 on usage errors.
+
+Record files are loaded through the bounded JSON loader
+(``jsonio.load_json_file``, ``MAX_RECORD_FILE_BYTES``; v1.36.0): a
+record is an untrusted third-party artifact, so an oversize file is
+a usage error (exit 2) rejected from its first bytes, not a memory
+exhaustion inside the verifier asked to judge it.
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .jsonio import MAX_RECORD_FILE_BYTES, load_json_file
 from .mock_llm import MockLLMAdapter
 from .replay import replay_document, replay_ok
 from .repair import MAX_ROUNDS, run_repair
@@ -118,8 +125,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "replay":
         try:
-            data = json.loads(Path(args.record).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            data = load_json_file(
+                args.record, max_bytes=MAX_RECORD_FILE_BYTES, kind="record")
+        except (OSError, ValueError) as exc:
             print(f"record error: {exc}", file=sys.stderr)
             return 2
         try:
@@ -174,8 +182,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "verify":
         try:
-            data = json.loads(Path(args.record).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            data = load_json_file(
+                args.record, max_bytes=MAX_RECORD_FILE_BYTES, kind="record")
+        except (OSError, ValueError) as exc:
             print(f"record error: {exc}", file=sys.stderr)
             return 2
         if args.candidate and not Path(args.candidate).is_dir():
@@ -219,8 +228,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "view":
         try:
-            data = json.loads(Path(args.record).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            data = load_json_file(
+                args.record, max_bytes=MAX_RECORD_FILE_BYTES, kind="record")
+        except (OSError, ValueError) as exc:
             print(f"record error: {exc}", file=sys.stderr)
             return 2
         if not isinstance(data, dict) or data.get("tool") != "verifygate":

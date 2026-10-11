@@ -574,6 +574,18 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.36.0 — JSON input file bounds: every loader read its file
+in full with no size bound, while every field inside those
+documents was already capped — a spec file padded to 5 MiB
+ran to PASS and an evidence record padded to 70 MiB verified
+INTACT, both loaded into memory whole, so a hostile file
+could exhaust the verifier asked to judge it before any
+field check ran. Spec and record files now load through a
+bounded loader that reads at most the cap plus one byte
+(spec 4 MiB, record 64 MiB — generous over what a document
+at every field ceiling serialises to) and rejects an
+oversize file as a clean usage error (exit 2). 13 new tests
+(669 total).
 1.35.0 — usage sealing normalisation: the runner sealed
 adapter-supplied metadata verbatim — an adapter whose name was
 empty or 500,000 characters long, or which recorded a usage

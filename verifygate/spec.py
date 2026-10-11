@@ -61,6 +61,12 @@ the checks below were accepted and each broke something downstream):
   the sealed fields' caps, so a record carrying a longer spec name
   or check name/command than a valid spec can produce fails
   verification too.
+* The spec *file* itself is size-bounded on load (v1.36.0):
+  :func:`load_spec` reads it through ``jsonio.load_json_file``
+  with ``MAX_SPEC_FILE_BYTES`` (4 MiB — above what a spec at every
+  field ceiling above serialises to), so a padded or hostile file
+  is rejected as a ``SpecError`` from its first bytes instead of
+  being loaded into memory in full before the field checks run.
 """
 
 from __future__ import annotations
@@ -69,6 +75,8 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from .jsonio import MAX_SPEC_FILE_BYTES, JsonFileError, load_json_file
 
 
 MAX_TIMEOUT_S = 3600  # one hour: a sane ceiling for a single check
@@ -110,8 +118,8 @@ class TaskSpec:
 def load_spec(path: str | Path) -> TaskSpec:
     path = Path(path)
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        raw = load_json_file(path, max_bytes=MAX_SPEC_FILE_BYTES, kind="spec")
+    except (OSError, JsonFileError) as exc:
         raise SpecError(f"cannot load spec {path}: {exc}") from exc
     return parse_spec(raw)
 
