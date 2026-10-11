@@ -134,8 +134,18 @@ sealed; both chains verify, and the report replays end-to-end in
 Judge Mode). Its first attempted run that day is also why the patch
 prompt now orders the model to reason silently: Super spent the
 whole 8,192-token budget deliberating in the reply content
-(finish_reason=length) and never produced a usable diff. Total
-sealed real-mode usage across all committed records: 24,616 tokens.
+(finish_reason=length) and never produced a usable diff.
+
+Since v1.15.0 the chain is hardened once more (chain v3 also seals
+each record's top-level metadata; see *Verifying an evidence
+record*), and the flagship loop is proven under it in real mode
+too: `samples/evidence_real_repair_v3.json` is a chain-v3 repair
+report from Nemotron 3 Super 120B — attempt 0 FAIL with the model's
+own diagnosis, a first diff rejected for a context mismatch and
+fed back, a second diff applied, attempt 2 PASS (3 calls, 9,407
+tokens sealed; both records carry `chain_version: 3`, both chains
+verify, and the report replays end-to-end in Judge Mode). Total
+sealed real-mode usage across all committed records: 34,023 tokens.
 
 ## Diagnosis references (Tavily)
 
@@ -243,13 +253,16 @@ Entries are hash-chained and the record hash is HMAC-signed
 default). `verifygate.evidence.verify_chain()` detects any edit, and the
 record's `replay` field is the exact command to reproduce the verdict.
 
-Records sealed by this version carry `chain_version: 2`: every entry's
-hash covers its *kind* as well as its content. Chain v1 hashed the
-content only, so an entry could be relabelled (a FAIL check re-tagged
+Records sealed by this version carry `chain_version: 3`: every entry's
+hash covers its *kind* as well as its content (chain v2), and the
+record hash additionally seals the record's top-level metadata —
+the `replay` command, the dev-key disclosure, the emitting version,
+and the timestamp (v1.15.0; see *Verifying an evidence record*).
+Chain v1 hashed the content only, so an entry could be relabelled (a FAIL check re-tagged
 as a "diagnosis", which consumers render as commentary) without
 breaking the chain; verification now also enforces the record's
 structure — kinds, their order, and the fields each kind must carry —
-for both chain versions, so a relabelled legacy record fails too,
+for all chain versions, so a relabelled legacy record fails too,
 while every untampered legacy record (including all the committed
 real-mode evidence) still verifies exactly as before. The header
 entry is hashed over its full content and must carry exactly the
@@ -426,9 +439,9 @@ expected exit codes, the FAIL → PASS repair loop, the evidence web view
 of the committed real-mode report, a dogfood run of VerifyGate on its
 own tree, a `verifygate verify` check of every record written
 during the rehearsal plus the committed real-mode reports for the
-JavaScript sample and the chain-v2 Python report, a
+JavaScript sample and the chain-v2 and chain-v3 Python reports, a
 `verifygate replay` reproduction of the rehearsal's repair report
-and all three committed real-mode repair reports, and
+and all four committed real-mode repair reports, and
 an installed-package smoke test (`pip install` the export, then run
 the `verifygate` console script from a different directory).
 
@@ -438,6 +451,17 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.16.0 — chain-v3 real-mode proof: the flagship repair loop is now
+proven under the newest chain with a live model, not only in Judge
+Mode — `samples/evidence_real_repair_v3.json` (Nemotron 3 Super
+120B: FAIL → a rejected diff fed back → PASS, 3 calls, 9,407 tokens
+sealed, both records `chain_version: 3`) is pinned by tests and
+verified + replayed in the clean-tree rehearsal; a test also pins
+the v3 property on the committed record itself (rewriting its
+replay command or flipping its dev-key disclosure breaks its
+chain). The hosted-demo landing page states the new sealed total.
+Cumulative sealed real-mode usage across committed records: 34,023
+tokens. 2 new tests (316 total).
 1.15.0 — record metadata sealing (chain v3): a record's top-level
 fields sat outside the hash chain entirely — the `replay` command
 could be replaced with an arbitrary shell command, the
