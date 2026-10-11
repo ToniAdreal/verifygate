@@ -586,6 +586,23 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.49.0 — configured-model resolution: the Token
+Factory adapter resolved its model id with a
+truthiness chain (`model or NEBIUS_MODEL or
+default`), so a supplied-but-falsy id (`""`, `0`,
+`False`) was silently swapped for the
+environment/default value and the adapter made paid
+calls under a model the caller never named — while
+the same `""` arriving via `NEBIUS_MODEL` was
+rejected by the configured-model validation. This
+was the falsy-swap class the constructor pass had
+already closed for the transport argument, surviving
+in the one argument resolved before it. Resolution
+is now by identity with `None` (the Tavily api-key
+pattern): only `None` means "not supplied"; every
+supplied value faces the non-empty-string
+validation, and the CLI maps the rejection to its
+exit-2 adapter error. 14 new tests (1465 total).
 1.48.0 — output-destination protection: no output
 an invocation writes may destroy an artifact that
 same invocation reads. Before this, `run` / `repair`

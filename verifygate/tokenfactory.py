@@ -87,6 +87,20 @@ check-timeout ceiling), and ``transport`` must be ``None``
 (the real transport) or callable. The Tavily adapter's
 constructor applies the same two rules (see ``tavily.py``).
 
+Configured-model resolution (v1.49.0): one falsy swap survived
+the v1.44.0 constructor pass — the model id itself, resolved
+with ``model or os.environ.get(...)``. A supplied-but-falsy id
+(``""``, ``0``, ``False``) was silently replaced by the
+``NEBIUS_MODEL`` / default value and the adapter then made
+paid calls under a model the caller never named, while the
+same ``""`` arriving *via* ``NEBIUS_MODEL`` was rejected by
+the v1.35.0 validation — the identical value judged two ways
+depending on which side of the ``or`` it arrived from.
+Resolution is now by identity with ``None`` (the Tavily
+api_key pattern): only ``None`` means "not supplied"; every
+supplied value, falsy or not, faces the non-empty-string
+validation below.
+
 Nothing in here can affect a verdict; it only produces advisory text.
 """
 
@@ -172,7 +186,17 @@ class TokenFactoryAdapter(LLMAdapter):
         transport=None,
     ):
         super().__init__()
-        self.model = model or os.environ.get("NEBIUS_MODEL", DEFAULT_MODEL)
+        # Resolution is by identity with None, never truthiness
+        # (v1.49.0): only None means "not supplied" and falls back
+        # to NEBIUS_MODEL / the default. Before this, the ``or``
+        # chain silently swapped a supplied-but-falsy id ("", 0,
+        # False) for the environment/default value — the exact
+        # falsy-swap v1.44.0 closed for the transport argument —
+        # while the same "" arriving via NEBIUS_MODEL was rejected
+        # by the validation below. A supplied id now faces that
+        # validation whatever its truthiness.
+        self.model = model if model is not None else os.environ.get(
+            "NEBIUS_MODEL", DEFAULT_MODEL)
         # The configured id is recorded as the fallback model name
         # for every call, so it must satisfy the sealed model cap
         # itself (v1.35.0): reject a non-string, empty, or over-long
