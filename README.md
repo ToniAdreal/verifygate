@@ -258,7 +258,11 @@ Candidate code is untrusted, so the sandbox treats it that way:
   before any copy is made and again in the tree hash, so an
   oversized candidate (a vendored dependency tree, one huge binary)
   is a one-line usage error at every entry point, not a temp
-  filesystem filled one copy per repair round.
+  filesystem filled one copy per repair round. A repair patch is
+  held to the same ceilings: the staged result is measured before
+  anything is written, and a patch that would grow the candidate
+  past them is a clean rejection the loop feeds back — never an
+  oversize tree whose re-verification destroys the repair report.
 - **Permission fidelity** — the workspace copy preserves each file's
   permission bits, and the patch applier honours git mode lines
   (`new file mode`, `old mode`/`new mode`, including mode-only
@@ -517,6 +521,26 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.25.0 — patch-result bounds: the candidate size ceilings bound a
+*submitted* candidate, but a repair patch could grow one past
+them — `apply_patch` staged and wrote a diff of any size, and the
+patched copy then failed the workspace pre-flight on
+re-verification with a `CandidateTooLargeError` that is not a
+`PatchError`: it escaped the repair loop, destroyed the whole
+report (attempt 0's sealed FAIL evidence included), and surfaced
+at the CLI as a usage error (exit 2, nothing written) for a run
+whose verdict was already decided (reproduced with a +5,001-byte
+creation against a bound 100 bytes above the original candidate).
+The patch applier now measures its staged result — the verified
+files the containment traversal counts, with staged creations /
+modifications / deletions folded over the on-disk baseline —
+against the same ceilings (`MAX_CANDIDATE_FILES` /
+`MAX_CANDIDATE_BYTES`, overridable per call) before the commit
+loop writes anything, so an oversize patch is an atomic
+`PatchError` rejection: the repair loop preserves it as a
+rejected patch, feeds it back, and delivers its report (CLI exit
+1), and replay reports it as a patch that no longer applies. 11
+new tests (449 total).
 1.24.0 — check-count bound: every other dimension of a run was
 capped (a check's timeout, the repair loop's rounds, a candidate's
 files and bytes), but a spec could carry an unbounded number of

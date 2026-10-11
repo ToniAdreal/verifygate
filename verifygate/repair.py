@@ -41,6 +41,19 @@ re-verification, with a full evidence record embedded per attempt.
 ``verify``'s narrative check mirrors the bound: a report claiming a
 budget above ``MAX_ROUNDS`` is not one this loop can have produced.
 
+Patch-result bounds (v1.25.0): a proposal that applies cleanly as
+a diff but grows the candidate past the sandbox's candidate size
+ceilings is a rejection, exactly like a diff whose context does not
+match — ``apply_patch`` raises ``PatchError`` before writing
+anything (see ``patch.py``), so it flows through the rejection
+path below: preserved as ``failed_patch`` with
+``error_kind: patch_rejected``, fed back, and capped by
+``max_rounds``, with the report delivered. Before this, the loop
+wrote the oversize tree, and re-verifying it raised
+``CandidateTooLargeError`` out of ``run_verification`` — not a
+``PatchError``, not guarded — so the whole report, attempt 0's
+sealed FAIL evidence included, was lost to a CLI usage error.
+
 Generation resilience (v1.20.0): ``llm.generate_patch`` is guarded
 exactly like the diagnosis call in the runner. Before this, a
 generation failure — a network error, a malformed Token Factory

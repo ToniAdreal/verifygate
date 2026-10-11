@@ -37,6 +37,27 @@ repair loop — which only catches ``PatchError`` — crashed on it
 instead of feeding the rejection back and stopping cleanly. The
 harness verifies text source files; a diff against binary content
 is a clean rejection, never a crash.
+
+Patch-result bounds (since v1.25.0): the *result* of a patch is
+bounded by the sandbox's candidate ceilings
+(``MAX_CANDIDATE_FILES`` / ``MAX_CANDIDATE_BYTES``). Before this,
+:func:`apply_patch` staged and wrote a diff of any size, so a
+patch could grow the candidate past the very bounds v1.23.0 put
+on submitted candidates — and in the repair loop the patched copy
+then failed ``prepare_workspace``'s pre-flight on re-verification,
+whose ``CandidateTooLargeError`` is not a ``PatchError``: it
+escaped the loop, destroyed the report (attempt 0's already-sealed
+FAIL evidence included), and surfaced at the CLI as a usage error
+(exit 2, nothing written) for a run whose verdict was already
+decided. The staged result is now measured against the ceilings
+*before* the commit loop writes anything — counting exactly the
+files the containment traversal verifies, with staged creations /
+modifications / deletions folded over the on-disk baseline — and
+an oversize result raises :class:`PatchError` like any other
+inapplicable diff: atomicity is preserved (nothing is written),
+the repair loop feeds the rejection back and stops cleanly with
+its report delivered, and replay reports it as a patch that no
+longer applies.
 """
 
 from __future__ import annotations
@@ -44,6 +65,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from . import sandbox
 
 
 class PatchError(ValueError):
@@ -277,7 +300,79 @@ class _Staged:
     mode: int | None = None  # chmod to apply at commit; None = keep
 
 
-def apply_patch(root: str | Path, patch_text: str) -> list[str]:
+def _staged_bytes(state: _Staged) -> int:
+    """Byte size of a staged file's content as the commit writes it."""
+    text = "\n".join(state.lines)
+    if text and state.trailing_newline:
+        text += "\n"
+    return len(text.encode("utf-8"))
+
+
+def _counts_toward_bounds(rel: str) -> bool:
+    """True iff the containment traversal would verify ``rel``.
+
+    Mirrors :func:`sandbox.iter_candidate_files`: housekeeping
+    names are skipped at every level and ``*.pyc`` files are
+    ignored — exactly the set ``check_candidate_bounds`` counts.
+    """
+    parts = rel.split("/")
+    return not any(p in sandbox._IGNORED_NAMES for p in parts) \
+        and not parts[-1].endswith(".pyc")
+
+
+def _check_result_bounds(
+    root: Path,
+    staged: dict[Path, _Staged],
+    max_files: int,
+    max_bytes: int,
+) -> None:
+    """Reject a staged result that outgrows the candidate ceilings.
+
+    The on-disk baseline is the containment traversal's verified
+    set; staged entries fold over it (a creation/modification sets
+    the file's post-patch size, a deletion removes it). Raises
+    :class:`PatchError` — before anything is written — when the
+    resulting candidate would exceed either ceiling.
+    """
+    resulting: dict[str, int] = {}
+    if root.is_dir():
+        for rel, source in sandbox.iter_candidate_files(root):
+            try:
+                resulting[rel] = source.stat().st_size
+            except OSError:
+                resulting[rel] = 0
+    root_resolved = root.resolve()
+    for target, state in staged.items():
+        try:
+            rel = target.relative_to(root_resolved).as_posix()
+        except ValueError:
+            continue  # not under root: cannot be a verified file
+        if not _counts_toward_bounds(rel):
+            continue
+        if state.exists:
+            resulting[rel] = _staged_bytes(state)
+        else:
+            resulting.pop(rel, None)
+    if len(resulting) > max_files:
+        raise PatchError(
+            f"patch would grow the candidate to {len(resulting)} "
+            f"verified files, beyond the maximum of {max_files} "
+            "(the candidate size bound in sandbox.py)")
+    total = sum(resulting.values())
+    if total > max_bytes:
+        raise PatchError(
+            f"patch would grow the candidate to {total} verified "
+            f"bytes, beyond the maximum of {max_bytes} "
+            "(the candidate size bound in sandbox.py)")
+
+
+def apply_patch(
+    root: str | Path,
+    patch_text: str,
+    *,
+    max_files: int | None = None,
+    max_bytes: int | None = None,
+) -> list[str]:
     """Apply a unified diff under root; return the changed relative paths.
 
     All-or-nothing: every file patch is validated against an
@@ -285,7 +380,17 @@ def apply_patch(root: str | Path, patch_text: str) -> list[str]:
     commit loop at the end, after the whole diff has applied cleanly
     in staging. A :class:`PatchError` therefore leaves the tree
     byte-for-byte and mode-for-mode as it was.
+
+    The staged result must also stay within the candidate size
+    bounds (``max_files`` / ``max_bytes``, defaulting to the
+    sandbox ceilings at call time — see the module docstring): a
+    patch that would grow the candidate past them is a
+    :class:`PatchError`, raised before any write.
     """
+    if max_files is None:
+        max_files = sandbox.MAX_CANDIDATE_FILES
+    if max_bytes is None:
+        max_bytes = sandbox.MAX_CANDIDATE_BYTES
     root = Path(root)
     changed: list[str] = []
     staged: dict[Path, _Staged] = {}
@@ -350,6 +455,13 @@ def apply_patch(root: str | Path, patch_text: str) -> list[str]:
             if fp.new_mode is not None:
                 state.mode = fp.new_mode
             changed.append(fp.new_path)
+
+    # The staged result must stay within the candidate size bounds,
+    # checked here — after the whole diff applied cleanly in staging
+    # and before a single byte is written — so an oversize patch is
+    # a clean, atomic rejection, never a half-grown tree that the
+    # next verification's pre-flight then destroys the run over.
+    _check_result_bounds(root, staged, max_files, max_bytes)
 
     # Commit: the whole diff validated in staging, so write it out.
     for target, state in staged.items():
