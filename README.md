@@ -110,7 +110,12 @@ python3 -m verifygate repair --spec samples/spec.json \
 Every real model call (model, purpose, prompt/completion/total token
 usage) is sealed into the evidence record's hash chain as an
 `llm_usage` entry, so the token bill is as tamper-evident as the
-verdict. A diff that does not apply cleanly is rejected with the
+verdict. The adapter validates every decoded API response field by
+field before recording anything (v1.18.0): a malformed shape — a
+`message` that is not an object, a non-string `content`, a `usage`
+whose token counts are not non-negative ints — is a clean adapter
+error (CLI exit 2), never an unhandled traceback and never a nonsense
+usage entry sealed into a record. A diff that does not apply cleanly is rejected with the
 applier's exact error, which is fed back to the model for the next
 round instead of ending the loop. A real FAIL → repair → PASS report
 is committed at `samples/evidence_real_repair.json` (Nemotron 3 Super
@@ -462,6 +467,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.18.0 — Token Factory response-shape hardening: the real adapter
+validated its decoded API response by indexing into it, so several
+plausible malformed shapes (a `message` returned as a bare string
+or `None`, `usage` as a string or list, a non-string `content`)
+escaped as unhandled `AttributeError` tracebacks — crashing
+`run` / `repair` in real mode instead of the clean adapter error
+(exit 2) the CLI contract promises — and a `usage` dict carrying a
+string, negative, float, or bool token count would have been
+recorded verbatim and sealed into a record whose own consistency
+rules fail that record's chain. `_chat` now validates the response
+field by field (choice/message objects, string-or-absent content,
+token counts non-negative ints or absent, a non-string `model`
+falls back to the configured model) and raises one `RuntimeError`
+per malformed shape, before anything is recorded. 43 new tests
+(361 total).
 1.17.0 — chain-v3 real-mode proof for the JavaScript sample: the
 JS sample's only committed real-mode report was still a legacy
 chain-v1 record, so the language-agnostic claim and the newest

@@ -196,7 +196,10 @@ def test_rejected_diff_is_fed_back_and_retried():
         user = body["messages"][-1]["content"]
         if "unified diff" in user:
             return _response(bad if state["n"] <= 2 else GOOD_DIFF, total=50)
-        return _response("diagnosis", total=10)
+        # total must stay >= 40: _response derives prompt_tokens as
+        # total - 40, and a negative count is a malformed shape the
+        # adapter now (v1.18.0) rejects.
+        return _response("diagnosis", total=50)
 
     adapter = TokenFactoryAdapter(transport=flaky)
     report = run_repair(

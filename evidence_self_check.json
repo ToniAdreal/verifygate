@@ -1,33 +1,33 @@
 {
   "tool": "verifygate",
-  "version": "1.17.0",
+  "version": "1.18.0",
   "chain_version": 3,
-  "created_at": "2026-10-11T03:41:36.321029+00:00",
+  "created_at": "2026-10-11T04:19:09.158862+00:00",
   "verdict": "PASS",
   "replay": "python3 -m verifygate run --spec dogfood_spec.json --candidate . --mode judge",
   "entries": [
     {
       "kind": "header",
-      "hash": "bad8c49d34b651d4efae1b3a3f41812432f5759038f8406730d61a138a2c0706",
+      "hash": "a30e85c6dc52dd92122aa09fefcf5c33a15bd461c1d3af7e1a584a94ec84ff6f",
       "spec_name": "verifygate-self-check",
       "spec_hash": "9a88c58688f6202f3362cd0b626fb652cb683148b8b756f066e63306d60fe043",
-      "candidate_tree_hash": "1ea4c8d3fb47ad1f8d039b8a42b4941379cc896f4f147bad09164f9812b27fc6",
+      "candidate_tree_hash": "410d6a9ed15314bd6599e2dff9d02d35a0101a36977d51c523c97783769074c3",
       "mode": "judge"
     },
     {
       "kind": "check",
-      "hash": "d63c379219581b8daab7146872c50b6d7c9d99968d86bcbff5b0ede2c8a6683d",
+      "hash": "205afab92d2d53b72e29f59ec964018cffa6fcc5afcaf1c172f45b600a3a8aa4",
       "name": "unit_tests",
       "command": "python3 -m pytest -q",
       "exit_code": 0,
-      "duration_ms": 84816,
-      "stdout_tail": "........................................................................ [ 22%]\n........................................................................ [ 45%]\n........................................................................ [ 67%]\n........................................................................ [ 90%]\n..............................                                           [100%]\n318 passed in 82.75s (0:01:22)\n",
+      "duration_ms": 82588,
+      "stdout_tail": "........................................................................ [ 19%]\n........................................................................ [ 39%]\n........................................................................ [ 59%]\n........................................................................ [ 79%]\n........................................................................ [ 99%]\n.                                                                        [100%]\n361 passed in 80.61s (0:01:20)\n",
       "stderr_tail": "",
       "timed_out": false,
       "verdict": "PASS"
     }
   ],
-  "record_hash": "00fcf699cf269ece81025ebbbe42730028ad1affec158842d5b143f5bb76c23a",
-  "signature": "dd691bc2cf08e8e1946539ae696a4f37aa9ea7d54325f6999db5304c1d9ffeca",
+  "record_hash": "4fa553c80ca792c722849e9f3cbde5cc6e686b9c1012f0e05f9af3c9732580a0",
+  "signature": "5cd6a843df297519b5b06a22fb937f1262905bffa73488a4c1e8a0d5f2c09cf1",
   "signing_key_is_default_dev_key": true
 }

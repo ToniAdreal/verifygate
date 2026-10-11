@@ -14,6 +14,21 @@ instructions — with zero network. Every completed call is recorded via
 ``record_call``; the runner seals those entries into the evidence
 record's hash chain.
 
+Response-shape hardening (v1.18.0): the decoded response is validated
+field by field before anything is recorded. Before this, several
+plausible malformed shapes — ``message`` as a bare string or ``None``,
+``usage`` as a string or list, a non-string ``content`` — escaped the
+shape guard as unhandled ``AttributeError`` tracebacks, crashing
+``verifygate run`` / ``repair`` in real mode instead of failing as the
+clean adapter error (CLI exit 2) the exit-code contract promises.
+Worse, a malformed ``usage`` that *was* a dict (a string, negative, or
+float token count) would have been recorded verbatim and sealed into
+a record whose own consistency rules (token counts are non-negative
+ints or ``None``) then fail that honestly-emitted record's chain.
+Every malformed shape now raises one ``RuntimeError``; token counts
+must be non-negative ints or absent, and a non-string ``model`` falls
+back to the configured model instead of being recorded.
+
 Nothing in here can affect a verdict; it only produces advisory text.
 """
 
@@ -96,6 +111,53 @@ class TokenFactoryAdapter(LLMAdapter):
 
     # -- chat plumbing ----------------------------------------------------
 
+    @staticmethod
+    def _response_parts(data) -> tuple[dict, dict, dict]:
+        """Validate one decoded chat response; return its usable parts.
+
+        Returns ``(choice, message, usage)`` where ``usage`` is a
+        fresh dict carrying exactly the three token counts, each a
+        non-negative int or ``None`` when the API did not return it —
+        the only shape the evidence chain's consistency rules accept
+        for a sealed call. Any other shape raises ``RuntimeError``:
+        a malformed response is a clean adapter error, never an
+        unhandled ``AttributeError`` traceback and never a nonsense
+        usage entry sealed into a record (see module docstring).
+        """
+        def malformed() -> RuntimeError:
+            return RuntimeError(
+                f"unexpected Token Factory response shape: {str(data)[:300]}")
+
+        if not isinstance(data, dict):
+            raise malformed()
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise malformed()
+        choice = choices[0]
+        if not isinstance(choice, dict):
+            raise malformed()
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            raise malformed()
+        for field in ("content", "reasoning_content"):
+            value = message.get(field)
+            if value is not None and not isinstance(value, str):
+                raise malformed()
+        raw_usage = data.get("usage")
+        if raw_usage is None:
+            raw_usage = {}
+        if not isinstance(raw_usage, dict):
+            raise malformed()
+        usage: dict = {}
+        for field in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            value = raw_usage.get(field)
+            if value is not None and (
+                    isinstance(value, bool) or not isinstance(value, int)
+                    or value < 0):
+                raise malformed()
+            usage[field] = value
+        return choice, message, usage
+
     def _chat(self, system: str, user: str, *, purpose: str, max_tokens: int) -> str:
         body = {
             "model": self.model,
@@ -112,27 +174,19 @@ class TokenFactoryAdapter(LLMAdapter):
         last_finish = None
         for _attempt in range(2):
             data = self._transport(body)
-            try:
-                choice = data["choices"][0]
-                message = choice["message"]
-            except (KeyError, IndexError, TypeError) as exc:
-                raise RuntimeError(
-                    f"unexpected Token Factory response shape: {str(data)[:300]}"
-                ) from exc
+            choice, message, usage = self._response_parts(data)
             # Reasoning models may place the answer in
             # reasoning_content when content is empty; accept either.
+            # Both were validated as strings (or absent) above.
             content = message.get("content") or message.get("reasoning_content") or ""
-            usage = data.get("usage") or {}
+            model = data.get("model")
             self.record_call({
                 "adapter": self.name,
-                "model": data.get("model") or self.model,
+                "model": model if isinstance(model, str) and model
+                       else self.model,
                 "purpose": purpose,
                 "finish_reason": choice.get("finish_reason"),
-                "usage": {
-                    "prompt_tokens": usage.get("prompt_tokens"),
-                    "completion_tokens": usage.get("completion_tokens"),
-                    "total_tokens": usage.get("total_tokens"),
-                },
+                "usage": usage,
             })
             if content.strip():
                 return content
