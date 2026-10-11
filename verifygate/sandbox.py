@@ -52,6 +52,31 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   directory: a malformed value is a ``ValueError`` and a missing /
   not-a-directory value the one ``FileNotFoundError`` every path
   already produced, both before any work happens (CLI exit 2).
+* **Check-execution argument validation** — :func:`run_command`,
+  the one execution primitive, validates its own arguments
+  (v1.51.0): the ``command`` must be a non-empty string (whitespace
+  only rejected) within the spec's command ceiling, ``cwd`` must
+  name an existing directory (through
+  :func:`validate_candidate_dir`), and ``timeout_s`` must be a real
+  ``int`` (never ``bool``) between 1 and the spec's timeout ceiling
+  — exactly the rules ``spec.parse_spec`` / ``validate_spec``
+  enforce on the JSON and object paths. Before this, those rules
+  bound a check only transitively, through a validated spec: a
+  direct caller of the execution layer (the layer the test suite
+  itself drives) got a ``TypeError`` traceback for a non-string
+  command, a vacuous exit-0 result for an empty/whitespace command
+  (the v1.7.0 vacuous-PASS shape, one layer down), a ``TypeError``
+  for a string timeout, a silently-one-second ``True``, an
+  unbounded ``None`` wait, an instant timeout verdict for ``0``,
+  a float timeout the spec rules forbid, and stringified-path
+  nonsense (``cwd=123`` looked for a directory literally named
+  ``"123"``; a file raised ``NotADirectoryError`` instead of the
+  one ``FileNotFoundError`` the candidate-directory rule promises).
+  A malformed argument is now a ``ValueError`` before any process
+  is spawned. ``validators.run_checks`` validates its ``spec``
+  (``validate_spec``) and ``workspace`` arguments the same way, at
+  its own entry, instead of trusting that the runner validated
+  them first.
 * **Candidate size bounds** — a candidate may carry at most
   :data:`MAX_CANDIDATE_FILES` verified files totalling at most
   :data:`MAX_CANDIDATE_BYTES` bytes (v1.23.0). Before this, the copy,
@@ -84,6 +109,8 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+from .spec import MAX_CHECK_COMMAND_CHARS, MAX_TIMEOUT_S
 
 MAX_OUTPUT_CHARS = 4000
 _READ_BYTES = 16_384  # > MAX_OUTPUT_CHARS even for multibyte text
@@ -318,7 +345,56 @@ def _read_tail(f) -> str:
     return _tail(f.read().decode("utf-8", "replace"))
 
 
+def validate_check_command(command, name: str = "command") -> str:
+    """Return a check ``command`` that is safe to execute (v1.51.0).
+
+    Mirrors the spec rules for a check command exactly (see the
+    module docstring): a string, non-empty once stripped
+    (whitespace-only rejected — the shell exits 0 on empty input,
+    so an empty command is a vacuous PASS, not a check), and at
+    most ``MAX_CHECK_COMMAND_CHARS`` characters. Anything else is
+    a ``ValueError`` before any process is spawned.
+    """
+    if not isinstance(command, str) or not command.strip():
+        raise ValueError(
+            f"{name} must be a non-empty string "
+            f"(got {type(command).__name__})")
+    if len(command) > MAX_CHECK_COMMAND_CHARS:
+        raise ValueError(
+            f"{name} must be at most {MAX_CHECK_COMMAND_CHARS} "
+            f"characters (got {len(command)})")
+    return command
+
+
+def validate_check_timeout(timeout_s, name: str = "timeout_s") -> int:
+    """Return a check ``timeout_s`` that is safe to wait on (v1.51.0).
+
+    Mirrors the spec rule for a check timeout exactly: a real
+    ``int`` — never ``bool`` (``True`` used to slip through as a
+    one-second wait) and never a float (the spec forbids float
+    timeouts; the execution layer no longer accepts what the spec
+    layer rejects) — between 1 and ``MAX_TIMEOUT_S``. ``None``
+    (an unbounded wait), ``0`` / negatives (an instant timeout
+    verdict for a check that never ran), strings, and containers
+    are a ``ValueError`` before any process is spawned.
+    """
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, int) \
+            or not 1 <= timeout_s <= MAX_TIMEOUT_S:
+        raise ValueError(
+            f"{name} must be an int with 1 <= {name} <= "
+            f"{MAX_TIMEOUT_S} (got {type(timeout_s).__name__})")
+    return timeout_s
+
+
 def run_command(command: str, cwd: Path, timeout_s: int) -> CommandResult:
+    # The execution primitive validates its own arguments
+    # (v1.51.0, see the module docstring): until now they were
+    # bounded only transitively, through a validated spec, and a
+    # direct caller met TypeErrors, vacuous exit-0 results, and
+    # unbounded waits instead of one ValueError before any work.
+    command = validate_check_command(command)
+    cwd = validate_candidate_dir(cwd, name="cwd")
+    timeout_s = validate_check_timeout(timeout_s)
     start = time.monotonic()
     timed_out = False
     exit_code: int | None = None

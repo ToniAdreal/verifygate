@@ -586,6 +586,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.51.0 — check-execution argument validation:
+`sandbox.run_command`, the one execution primitive
+every verdict passes through, validated its
+arguments only transitively, through a validated
+spec — a direct caller got a `TypeError` for a
+non-string command, a vacuous exit-0 result for an
+empty/whitespace command (the shell exits 0 on
+empty input: nothing checked, everything
+"passed"), a string/bool/`None`/zero/float timeout
+crashing, silently shrinking to one second,
+waiting unboundedly, timing out instantly, or
+running against the spec's int-only rule, and a
+`cwd` of `123` stringified into a lookup for a
+directory literally named "123" (a file raised
+`NotADirectoryError` instead of the one
+`FileNotFoundError`). The primitive now enforces
+exactly the spec's rules — non-empty command
+within the command ceiling, a real `int` timeout
+in `1..3600`, an existing directory for `cwd` —
+as a `ValueError` before any process spawns, and
+`validators.run_checks` validates its `spec` and
+`workspace` at its own entry. 40 new tests (1516
+total).
 1.50.0 — supplied-but-empty CLI arguments: the
 CLI told "not supplied" apart from "supplied" by
 truthiness, so an explicitly empty value was
