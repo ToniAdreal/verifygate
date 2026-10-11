@@ -27,8 +27,9 @@ import html
 import json
 
 from .evidence import verify_chain
-from .verify import (derived_rounds_used, derived_stopped_reason,
-                    derived_usage_total, narrative_problems)
+from .verify import (attempt_binding_problems, derived_rounds_used,
+                    derived_stopped_reason, derived_usage_total,
+                    narrative_problems)
 
 _CSS = """
 :root{color-scheme:light}
@@ -280,6 +281,11 @@ def render_repair_report(report: dict) -> str:
     stated_stop = report.get("stopped_reason", "")
     stop_shown = derived_stop if derived_stop is not None else stated_stop
     narrative = narrative_problems(report)
+    # Cross-attempt spec binding (v1.14.0): every attempt must have
+    # been sealed under the same spec hash — the loop never changes
+    # the task, so a report whose attempts name different tasks joins
+    # the mismatch banner instead of presenting as one repair.
+    binding = attempt_binding_problems(report)
     parts = [
         '<div class="card"><h3>Repair report</h3>'
         f"<p>spec: {_e(report.get('spec_name', ''))}"
@@ -312,6 +318,10 @@ def render_repair_report(report: dict) -> str:
             "preserved rejection, round budget, or credited adapter) "
             "does not match its sealed attempts: "
             + "; ".join(_e(p) for p in narrative))
+    if binding:
+        mismatches.append(
+            "its attempts were not all sealed under the same spec: "
+            + "; ".join(_e(p) for p in binding))
     if mismatches:
         parts.append(
             '<div class="chain-bad">⚠ REPORT SUMMARY MISMATCH — this '

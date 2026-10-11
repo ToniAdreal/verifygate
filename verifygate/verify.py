@@ -63,6 +63,25 @@ is exactly the preserved rejection's error, ``stopped_reason`` is
 the one the loop's exit conditions produce, rounds never exceed
 ``max_rounds``, and the report's ``llm_adapter`` is the adapter the
 sealed diagnoses, sealed usage calls, and patch linkages all name.
+
+Cross-attempt spec binding (v1.14.0): the report cross-checks above
+compare every attempt's header ``spec_name`` and ``mode`` against the
+report's stated summary, but never compared the attempts' sealed
+``spec_hash`` values *with each other*. The repair loop verifies
+every attempt against the one spec it was given — it never changes
+the spec — so all attempts of a genuine report are sealed under a
+single spec hash. Before this, an attempt record sealed under a
+*different* spec (same name and mode, different brief or checks —
+re-sealed with the labelled public dev key, the forgery route the
+v1.12.0 consistency checks already assume) could be spliced into a
+report in place of the real attempt, and ``verify`` reported the
+report INTACT, as long as the wrapper verdict/record-hash, the
+figures, and the narrative were patched up to match. ``verify``
+without a ``--spec`` argument had no way to notice the task itself
+had been swapped between attempts. ``attempt_binding_problems``
+now requires every attempt to carry the same sealed ``spec_hash``;
+binding a report to an externally supplied spec (``--spec`` in
+``verify``, and ``replay``) is unchanged and complementary.
 """
 
 from __future__ import annotations
@@ -353,6 +372,36 @@ def narrative_problems(data) -> list[str]:
     return problems
 
 
+def attempt_binding_problems(data) -> list[str]:
+    """Ways a repair report's attempts disagree about the task they
+    were verified against (empty list = every attempt was sealed
+    under one spec). See the module docstring. The repair loop never
+    changes the spec, so a genuine report's attempts all carry the
+    header ``spec_hash`` of the attempt-0 spec; mode and spec *name*
+    equality are checked separately in ``verify_document`` (they are
+    also compared against the report's stated summary), but two
+    different specs can share a name and a mode while demanding
+    different checks — only the hash distinguishes them."""
+    problems: list[str] = []
+    if not isinstance(data, dict) or not isinstance(data.get("attempts"), list) \
+            or not data["attempts"]:
+        return ["attempts missing or malformed"]
+    hashes: list[str] = []
+    for attempt in data["attempts"]:
+        record = attempt.get("evidence") if isinstance(attempt, dict) else None
+        if not isinstance(record, dict):
+            problems.append("attempt evidence missing or malformed")
+            continue
+        spec_hash = header_of(record).get("spec_hash")
+        if not isinstance(spec_hash, str) or not spec_hash:
+            problems.append("attempt header carries no spec hash")
+            continue
+        hashes.append(spec_hash)
+    if len(set(hashes)) > 1:
+        problems.append("attempts were not all sealed under the same spec")
+    return problems
+
+
 def check_record(
     record: dict,
     *,
@@ -433,6 +482,9 @@ def verify_document(
             # patch linkage, preserved rejection, credited adapter)
             # must be the ones the sealed attempts imply.
             and not narrative_problems(data)
+            # Every attempt must have been sealed under the same
+            # spec — the loop never changes the task mid-repair.
+            and not attempt_binding_problems(data)
         )
         for _, result in results:
             result["report_match"] = report_match

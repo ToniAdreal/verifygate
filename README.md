@@ -316,6 +316,11 @@ preserved rejection, and the credited adapter are all re-derived
 from the sealed attempts — a PASS report claiming it stopped at
 max rounds, an invented rejection, or a renumbered attempt fails
 verification, and the web view shows the derived stopped reason.
+And every attempt must have been sealed under the same spec
+(v1.14.0): the loop never changes the task, so an attempt record
+sealed under a different spec — same name and mode, different
+brief or checks — spliced into a report fails verification and
+joins the web view's mismatch banner.
 Tampering with a verdict, a check result, a diagnosis, or a sealed
 token-usage figure fails verification (exit 1); usage errors exit 2.
 No checks are re-run, and no keys or network are needed.
@@ -421,6 +426,16 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.14.0 — cross-attempt spec binding: a repair report's attempts
+were cross-checked on spec name and mode, but their sealed
+`spec_hash` values were never compared with each other, so an
+attempt sealed under a different spec (same name and mode,
+different brief or checks — re-sealed with the public dev key)
+could be spliced into a report and still verify INTACT.
+Verification now requires every attempt to share one spec hash
+(the loop never changes the task), and the web view flags a
+divergent report in its SUMMARY MISMATCH banner. 9 new tests
+(299 total).
 1.13.0 — repair-report narrative consistency: a repair report's
 unchained narrative was taken at face value — a PASS report could
 claim it stopped at max rounds, a clean report could grow an
