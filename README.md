@@ -586,6 +586,25 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.50.0 — supplied-but-empty CLI arguments: the
+CLI told "not supplied" apart from "supplied" by
+truthiness, so an explicitly empty value was
+silently swapped for the default — the falsy-swap
+class closed for the adapters' transport (1.44.0)
+and model id (1.49.0), surviving at the argument
+layer. `run` / `repair` / `view` with `--out ""`
+wrote the *default* output path instead of the one
+the caller named, `repair --patched-out ""` was
+silently ignored, and `verify --spec ""` verified
+with no spec binding at all and reported RECORD
+INTACT — a caller who believed they had bound the
+record to a spec had bound it to nothing. An empty
+string is now a usage error (exit 2) for every one
+of these, exactly like the empty values the loaders
+and library entry points already rejected for
+`--spec` / `--candidate` / `--record` / `--model`:
+only an omitted argument (`None`) means "use the
+default / no binding". 11 new tests (1476 total).
 1.49.0 — configured-model resolution: the Token
 Factory adapter resolved its model id with a
 truthiness chain (`model or NEBIUS_MODEL or

@@ -56,6 +56,23 @@ A conflict is the CLI contract's one-line usage error (exit 2)
 and nothing is written. Writing a *new* file inside a candidate
 stays allowed — the documented dogfood command writes its
 self-check record at the candidate's root.
+
+Supplied-but-empty optional arguments (v1.50.0): the CLI told
+"not supplied" apart from "supplied" by truthiness, so an
+explicitly empty value was silently swapped for the default —
+the falsy-swap class closed for the adapters' transport
+(v1.44.0) and model id (v1.49.0), surviving at the argument
+layer. ``run`` / ``repair`` / ``view`` with ``--out ""`` wrote
+the *default* output path instead of the one the caller named,
+``repair --patched-out ""`` was silently ignored, and
+``verify --spec ""`` verified with no spec binding at all and
+reported RECORD INTACT — a caller who believed they had bound
+the record to a spec had bound it to nothing. An empty string
+is now a usage error (exit 2) for every one of these, exactly
+like the empty values the loaders and the library entry points
+already rejected for ``--spec`` / ``--candidate`` /
+``--record`` / ``--model``: only an omitted argument (``None``)
+means "use the default / no binding".
 """
 
 from __future__ import annotations
@@ -126,6 +143,20 @@ def _tree_overlap(a: Path, b: Path) -> bool:
     """True when resolved ``a`` equals, contains, or sits inside ``b``."""
     ra, rb = _resolved(a), _resolved(b)
     return ra == rb or ra in rb.parents or rb in ra.parents
+
+
+def _empty_supplied(value, flag: str) -> str | None:
+    """Usage-error text when an optional argument was supplied empty.
+
+    Supplied-but-empty arguments (v1.50.0, see the module
+    docstring): ``None`` is the parser's "not supplied" value and
+    passes unjudged; an explicit empty string is a usage error,
+    never a silent request for the default.
+    """
+    if value == "":
+        return (f"{flag} must not be an empty string; omit it to use "
+                f"the default / no binding")
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -269,7 +300,11 @@ def main(argv: list[str] | None = None) -> int:
                   f"{args.candidate}", file=sys.stderr)
             return 2
         spec_hash = None
-        if args.spec:
+        if args.spec is not None:
+            # ``is not None``, not truthiness (v1.50.0): an explicit
+            # ``--spec ""`` reaches load_spec, whose path validation
+            # rejects it as a spec error (exit 2) — it is not a
+            # request to verify without a spec binding.
             try:
                 spec_hash = load_spec(args.spec).hash
             except SpecError as exc:
@@ -305,6 +340,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.command == "view":
+        empty = _empty_supplied(args.out, "--out")
+        if empty is not None:
+            print(f"usage error: {empty}", file=sys.stderr)
+            return 2
         try:
             data = load_json_file(
                 args.record, max_bytes=MAX_RECORD_FILE_BYTES, kind="record")
@@ -335,6 +374,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "run":
+        empty = _empty_supplied(args.out, "--out")
+        if empty is not None:
+            print(f"usage error: {empty}", file=sys.stderr)
+            return 2
         try:
             spec = load_spec(args.spec)
         except SpecError as exc:
@@ -392,6 +435,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"usage error: --max-rounds must be between 0 and "
                   f"{MAX_ROUNDS}", file=sys.stderr)
             return 2
+        for flag, value in (("--out", args.out),
+                            ("--patched-out", args.patched_out)):
+            empty = _empty_supplied(value, flag)
+            if empty is not None:
+                print(f"usage error: {empty}", file=sys.stderr)
+                return 2
         try:
             spec = load_spec(args.spec)
         except SpecError as exc:
