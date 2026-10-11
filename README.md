@@ -574,6 +574,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.40.0 — label validation: the spec/candidate labels were
+the last caller-supplied run parameters with no validation
+at all. They are interpolated through `quote_label` into
+the record's sealed `replay` string, and `quote_label`
+assumed a string: an `int`, `None`, or list label crashed
+with an unhandled `TypeError` — in the runner and the
+repair loop after every check had already run (no record
+delivered), and in replay mid-replay, where the per-record
+path catches only `OSError`/`RuntimeError`. An empty label
+sealed the quoted empty string as if it were a path, and a
+label's length was unbounded: a 500,000-character label
+sealed a 500,000-character `replay` field that verified
+INTACT, because the metadata rules judged the replay
+string only against templates that cap no length. Every
+entry point now validates both labels through
+`evidence.validate_label` before any workspace is
+prepared, any check runs, or any record is replayed (a
+non-string, empty, or over-1,000-character label is a
+`ValueError`); `quote_label` applies the same validation
+as a backstop, and `_metadata_ok` mirrors the bound with
+`MAX_REPLAY_CHARS` (16,384 — the largest replay string
+validated labels can produce), so a record carrying a
+longer replay string fails verification however it was
+sealed. 77 new tests (888 total).
 1.39.0 — spec-object validation: every spec rule was
 enforced only by `parse_spec`, i.e. only on the JSON path —
 but `TaskSpec`/`Check` are plain dataclasses, so a library

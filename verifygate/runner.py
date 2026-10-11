@@ -87,6 +87,17 @@ verification), could still break the "a record VerifyGate emits
 must verify" rule. Both now pass through the ``evidence``
 normalisation helpers on this, the one sealing path — exactly as
 the explanation, the references, and the error notes already did.
+
+Label validation (v1.40.0): the ``spec_label`` / ``candidate_label``
+parameters are validated here too, through
+``evidence.validate_label`` — see that helper's docstring. Between
+them, every caller-supplied run parameter that is sealed into the
+record (mode, spec, and now the two labels that form its replay
+string) is validated at this one sealing path's entry, whatever
+route the caller took to supply it: a non-string label no longer
+crashes ``quote_label`` after the checks have run, an empty label
+no longer seals as a quoted empty path, and an over-long label no
+longer seals a replay field of any length.
 """
 
 from __future__ import annotations
@@ -103,6 +114,7 @@ from .evidence import (
     normalise_usage_calls,
     quote_label,
     tree_hash,
+    validate_label,
     validate_mode,
 )
 from .llm import LLMAdapter
@@ -206,6 +218,15 @@ def run_verification(
     # hash binds none of the fields that ran) must be a usage
     # error here, before any workspace exists, never a run.
     validate_spec(spec)
+    # Fail fast on invalid labels (v1.40.0): the labels form the
+    # record's replay string, interpolated only after the checks
+    # have run — a non-string label crashed there with a TypeError
+    # and delivered no record, an empty or over-long one sealed a
+    # replay field the metadata rules then had no length bound
+    # for. Both labels are usage errors here, before any
+    # workspace exists, never a run.
+    validate_label(spec_label, "spec_label")
+    validate_label(candidate_label, "candidate_label")
     workspace = prepare_workspace(candidate_dir)
     try:
         results = run_checks(spec, workspace)

@@ -33,6 +33,16 @@ Two properties are deliberate:
     compared.
   * Nothing about the new run is sealed or written back. Replay is a
     comparison, printed for the caller; the original records stand.
+
+Label validation (v1.40.0): the ``spec_label`` and the candidate
+label derived from ``candidate_dir`` are validated up front,
+through ``evidence.validate_label`` — the per-record path catches
+only ``OSError`` / ``RuntimeError`` from the runner, so an invalid
+label (a non-string crashing ``quote_label`` with a ``TypeError``,
+an empty or over-long one sealing a replay field) would otherwise
+escape mid-replay instead of failing before any record is
+replayed, exactly the escape the spec-object validation (v1.39.0)
+closed for the spec itself.
 """
 
 from __future__ import annotations
@@ -40,7 +50,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from .evidence import tree_hash, validate_mode, verify_chain
+from .evidence import tree_hash, validate_label, validate_mode, verify_chain
 from .llm import LLMAdapter
 from .patch import PatchError, apply_patch
 from .runner import run_verification
@@ -122,11 +132,17 @@ def replay_document(
     per-record path catches only OSError/RuntimeError from the
     runner, so an invalid spec must fail here, up front, not escape
     as an unhandled error mid-replay).
+    The labels are validated the same way (v1.40.0): the caller's
+    ``spec_label``, and the candidate label the per-record path
+    derives as ``str(candidate_dir)`` for the runner, must both be
+    usable replay labels before any record is replayed.
     Reconstruction copies are removed before returning; the caller's
     candidate directory is never modified.
     """
     validate_mode(mode)
     validate_spec(spec)
+    validate_label(spec_label, "spec_label")
+    validate_label(str(candidate_dir), "candidate_label")
     pairs = collect_records(data)
     is_report = isinstance(data, dict) and "attempts" in data
     results: list[dict] = []

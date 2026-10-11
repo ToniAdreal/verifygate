@@ -110,6 +110,16 @@ more of the caller's token budget on a failure that may be an
 outage or an auth error. Calls the adapter recorded before failing
 stay pending and are surfaced as the report's unsealed usage, so
 the token spend is not dropped either.
+
+Label validation (v1.40.0): the loop's ``spec_label`` /
+``candidate_label`` are validated the same way, beside the mode,
+spec, and budget validation — they form every attempt's replay
+string (the original candidate's directly, and a patched
+attempt's through the ``update_replay_command`` rewrite), so an
+invalid label must fail here, before the first verification run
+or any generation call, not crash ``quote_label`` after attempt
+0's checks have run and lose the whole report. The runner
+validates them too; this is the loop's own fail-fast.
 """
 
 from __future__ import annotations
@@ -123,6 +133,7 @@ from .evidence import (
     normalise_usage_calls,
     quote_label,
     update_replay_command,
+    validate_label,
     validate_mode,
 )
 from .llm import LLMAdapter
@@ -240,6 +251,14 @@ def run_repair(
             or not 0 <= max_rounds <= MAX_ROUNDS:
         raise ValueError(
             f"max_rounds must be an int between 0 and {MAX_ROUNDS}")
+    # The labels are validated the same way (v1.40.0): they form
+    # every attempt's replay string, so an invalid one — non-string,
+    # empty, or over the ceiling — must fail here, beside the budget
+    # validation, before the first verification run or any
+    # generation call. The runner validates them too; this is the
+    # loop's own fail-fast.
+    validate_label(spec_label, "spec_label")
+    validate_label(candidate_label, "candidate_label")
     # The adapter name and the usage snapshots this report carries
     # are adapter-supplied: normalise them the same way the runner
     # normalises the sealed copies (v1.35.0), so the report's own

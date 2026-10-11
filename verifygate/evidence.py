@@ -237,6 +237,34 @@ validate through :func:`validate_mode` before any work happens,
 so an invalid mode — including a shell fragment interpolated into
 the replay string — is a usage error, never a sealed record. See
 :func:`validate_mode`.
+
+Label validation (v1.40.0): the spec/candidate *labels* were the
+last caller-supplied run parameters with no validation at all.
+They are interpolated through :func:`quote_label` into the
+record's sealed ``replay`` string, and ``quote_label`` assumed a
+string: a library caller passing an ``int``, ``None``, or a list
+label crashed with an unhandled ``TypeError`` from the regex
+engine — in the runner and the repair loop *after* every check
+had already run (no record delivered), and in replay mid-replay,
+where the per-record path catches only ``OSError`` /
+``RuntimeError``. An empty label sealed the quoted empty string
+as if it were a path. And a label's length was unbounded: a
+500,000-character label sealed a 500,000-character ``replay``
+field that verified INTACT, because ``_metadata_ok`` judged the
+replay string only against its templates, which cap no length.
+Every entry point now validates both labels through
+:func:`validate_label` before any workspace is prepared, any
+check runs, or any record is replayed — a non-string, empty, or
+over-:data:`MAX_LABEL_CHARS` label is a ``ValueError`` (CLI exit
+2), never a crash and never a run — :func:`quote_label` applies
+the same validation as a backstop, and ``_metadata_ok`` mirrors
+the bound at verification time with :data:`MAX_REPLAY_CHARS`, a
+ceiling derived from the largest replay string validated labels
+can produce (two, or three for a repair attempt, worst-case
+``shlex``-quoted labels plus the templates' fixed text), so a
+record carrying a longer replay string fails verification
+however it was sealed. Every committed replay string is at most
+220 characters, far below both ceilings.
 """
 
 from __future__ import annotations
@@ -305,6 +333,22 @@ MAX_CALL_FIELD_CHARS = 500
 MAX_DURATION_MS = MAX_TIMEOUT_S * 2 * 1000
 MIN_EXIT_CODE = -255
 MAX_EXIT_CODE = 255
+# Label / replay ceilings (v1.40.0, see the module docstring): a
+# spec/candidate label is a filesystem path as the caller names it
+# — the longest committed one is a few dozen characters, and the
+# repair report's candidate directories are already capped at
+# 1,000 in verify.py — so 1,000 is a generous ceiling, not a
+# target. MAX_REPLAY_CHARS is derived from it: a replay string
+# carries at most three labels (record + spec + candidate for a
+# repaired attempt), each at most MAX_LABEL_CHARS raw, and a raw
+# label of single quotes expands the most under shlex quoting
+# (each ' becomes the 5-character '"'"' sequence, plus the two
+# surrounding quotes) — 3 * (5 * 1000 + 2) = 15,006, plus the
+# templates' fixed text, rounded up to 16,384. A record whose
+# replay string is longer than that is not a shape validated
+# labels can produce.
+MAX_LABEL_CHARS = 1000
+MAX_REPLAY_CHARS = 16_384
 
 _USAGE_TEXT_CAPS = {
     "adapter": MAX_ADAPTER_NAME_CHARS,
@@ -598,6 +642,37 @@ def validate_mode(mode) -> str:
     return mode
 
 
+def validate_label(label, name: str = "label") -> str:
+    """Return ``label`` if it is a usable replay label, else raise.
+
+    Label validation (v1.40.0): the spec/candidate labels are
+    interpolated into the sealed ``replay`` string through
+    :func:`quote_label`, which assumed a string — a non-string
+    label raised an unhandled ``TypeError`` from the regex engine
+    after the checks had already run, an empty label sealed the
+    quoted empty string as if it were a path, and an over-long
+    label sealed a replay field of any length, which the metadata
+    templates then accepted at verification time. A label must now
+    be a non-empty string of at most :data:`MAX_LABEL_CHARS`
+    characters; anything else is a ``ValueError`` (CLI exit 2)
+    before any work happens, with the offending value's repr
+    truncated exactly as :func:`validate_mode` truncates it, so a
+    huge label cannot bloat the error line either. Control
+    characters are *not* rejected here: :func:`quote_label`
+    already degrades such a label to the ``<unprintable-label>``
+    placeholder, the v1.21.0 contract.
+    """
+    if not isinstance(label, str) or not label \
+            or len(label) > MAX_LABEL_CHARS:
+        desc = repr(label)
+        if len(desc) > 80:
+            desc = desc[:77] + "..."
+        raise ValueError(
+            f"{name} must be a non-empty string of at most "
+            f"{MAX_LABEL_CHARS} characters, got {desc}")
+    return label
+
+
 def _is_int(value) -> bool:
     """A real JSON integer — ``bool`` is an ``int`` subclass, so a
     sealed ``true`` must not pass as the number 1 (cf. spec timeouts)."""
@@ -852,7 +927,13 @@ def quote_label(label: str) -> str:
     one-line command at all; it degrades to the placeholder form the
     repair loop already uses for its record argument, which a reader
     edits before running — never to a raw, template-breaking string.
+
+    The label is validated first (:func:`validate_label`, v1.40.0)
+    as a backstop: the entry points validate before any work, so
+    this guard only fires for a direct caller — as a clean
+    ``ValueError``, not the regex engine's ``TypeError``.
     """
+    validate_label(label)
     if re.fullmatch(_LABEL, label):
         return label
     if any(ord(c) < 32 or ord(c) == 127 for c in label):
@@ -904,6 +985,13 @@ def _metadata_ok(record: dict) -> bool:
     # runner / repair loop emit, in the mode the header seals.
     replay = record.get("replay")
     if not isinstance(replay, str):
+        return False
+    # The replay length bound (v1.40.0), mirrored: the templates
+    # below cap no length, so before this a record sealed over a
+    # 500,000-character label carried a replay field of that length
+    # and verified. Validated labels cannot produce a replay string
+    # longer than MAX_REPLAY_CHARS (see its derivation).
+    if len(replay) > MAX_REPLAY_CHARS:
         return False
     entries = record.get("entries") or []
     header_mode = entries[0].get("mode") if entries \
