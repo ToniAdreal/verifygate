@@ -574,6 +574,26 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.43.0 — binding-hash validation: the hashes a caller
+supplies to bind a record to its artifacts — `verify`'s
+`spec_hash`, and `check_record`'s `candidate_hash` /
+`spec_hash` — were compared verbatim against the sealed
+header. The header side is held to the SHA-256 hex form,
+but a supplied int, bool, empty string, truncated or
+upper-case hex string, or 500,000-character string was
+reported as a binding *mismatch*, as if a genuine hash
+had been compared and the record had failed it, instead
+of the usage error the malformed value is (the
+candidate-directory side of the same binding was given
+this fail-fast treatment in 1.41.0; the hash side was
+left). Both arguments are now validated up front through
+`evidence.validate_binding_hash` — in `verify_document`,
+before the candidate directory is judged or any tree is
+hashed: a malformed hash is a `ValueError` (CLI exit 2),
+`None` remains the unjudged no-binding sentinel, and a
+well-formed hash that differs remains a genuine
+mismatch, reported exactly as before. 67 new tests
+(1185 total).
 1.42.0 — adapter validation: the `llm` and `references`
 arguments were the last run parameters taken on trust.
 `None`, a string, or a bare object on a PASS candidate

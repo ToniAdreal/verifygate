@@ -265,6 +265,16 @@ can produce (two, or three for a repair attempt, worst-case
 record carrying a longer replay string fails verification
 however it was sealed. Every committed replay string is at most
 220 characters, far below both ceilings.
+
+Binding-hash validation (v1.43.0): the hashes a caller supplies
+to bind a record to its artifacts (``verify``'s ``spec_hash``
+and ``candidate_hash``) are validated through
+:func:`validate_binding_hash` — see that helper. The sealed
+header side has always been held to the SHA-256 hex form; the
+supplied side was compared verbatim, so a malformed value was
+reported as a binding mismatch instead of the usage error it
+is. A well-formed hash that differs remains a genuine
+mismatch; ``None`` remains the unjudged no-binding sentinel.
 """
 
 from __future__ import annotations
@@ -689,6 +699,46 @@ def _is_int(value) -> bool:
 def _is_sha256_hex(value) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(
         c in "0123456789abcdef" for c in value)
+
+
+def validate_binding_hash(value, name: str = "spec_hash"):
+    """Return a binding hash if it is well-formed, else raise.
+
+    Binding-hash validation (v1.43.0): ``verify`` binds a record
+    to the artifacts on disk by comparing hashes the caller
+    supplies — the spec hash and the candidate tree hash —
+    against the record's sealed header. Those header fields are
+    held to the SHA-256 hex form (64 lowercase hex characters,
+    the form ``hashlib`` hexdigests and this module's header
+    check require), but the *supplied* side of the comparison
+    was taken on trust: a library caller passing an ``int``, a
+    ``bool``, an empty string, an upper-case or truncated hex
+    string, or a 500,000-character string got a ``spec_match``
+    / ``candidate_match`` of False — reported as a binding
+    *mismatch*, as if a genuine hash had been compared and the
+    record had failed it — instead of the usage error the
+    malformed value actually is. (The candidate-*directory*
+    side of the same binding was given exactly this fail-fast
+    treatment in v1.41.0; the hash side was left.) A well-formed
+    hash that simply differs is a genuine mismatch and still
+    returns False, unchanged. ``None`` is the caller's "no
+    binding requested" sentinel and passes through unjudged,
+    exactly as ``verify``'s candidate directory sentinel does.
+    Anything else malformed is a ``ValueError`` (CLI exit 2)
+    before any record is checked, with the offending value's
+    repr truncated exactly as :func:`validate_mode` truncates
+    it, so a huge hash cannot bloat the error line either.
+    """
+    if value is None:
+        return None
+    if not _is_sha256_hex(value):
+        desc = repr(value)
+        if len(desc) > 80:
+            desc = desc[:77] + "..."
+        raise ValueError(
+            f"{name} must be a SHA-256 hex digest (64 lowercase "
+            f"hex characters) or None, got {desc}")
+    return value
 
 
 def _check_entry_ok(entry: dict) -> bool:

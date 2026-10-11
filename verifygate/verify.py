@@ -175,6 +175,24 @@ is a usage error before any record is checked. The attempt
 ``sandbox`` — the same 1,000 characters the directory validation
 enforces at run time, one definition for both sides.
 
+Binding-hash validation (v1.43.0): the other side of the same
+binding — the ``spec_hash`` a caller supplies to
+``verify_document`` (and the ``candidate_hash`` / ``spec_hash``
+a caller supplies to ``check_record``) — was taken on trust.
+The sealed header fields it is compared against are held to
+the SHA-256 hex form, but a supplied int, bool, empty string,
+truncated or upper-case hex string, or 500,000-character
+string was simply compared and reported as a binding
+*mismatch* — as if a genuine hash had been compared and the
+record had failed it — instead of the usage error the
+malformed value is. Both binding arguments are now validated
+up front through ``evidence.validate_binding_hash`` (in
+``verify_document``, before the candidate directory is judged
+or any tree is hashed): a malformed hash is a ``ValueError``
+(CLI exit 2), ``None`` remains the unjudged "no binding"
+sentinel, and a well-formed hash that differs is still a
+genuine mismatch, reported exactly as before.
+
 Generation resilience (v1.20.0): the repair loop's preserved
 ``failed_patch`` gained an ``error_kind`` — ``patch_rejected`` for a
 diff the applier refused, ``generation_failed`` when the adapter
@@ -201,6 +219,7 @@ from .evidence import (
     MAX_MODEL_CHARS,
     MAX_PURPOSE_CHARS,
     tree_hash,
+    validate_binding_hash,
     verify_chain,
 )
 from .repair import MAX_PATCH_ERROR_CHARS, MAX_PATCH_TEXT_CHARS, MAX_ROUNDS
@@ -714,7 +733,16 @@ def check_record(
     spec_hash: str | None = None,
     bind_candidate: bool = True,
 ) -> dict:
-    """Verify one record's chain and (optionally) its header bindings."""
+    """Verify one record's chain and (optionally) its header bindings.
+
+    Binding hashes are validated first (v1.43.0, through
+    ``evidence.validate_binding_hash``): a malformed
+    ``candidate_hash`` / ``spec_hash`` — not a SHA-256 hex
+    digest — is a ``ValueError``, never a reported mismatch.
+    ``None`` requests no binding for that side and is unjudged.
+    """
+    validate_binding_hash(candidate_hash, "candidate_hash")
+    validate_binding_hash(spec_hash, "spec_hash")
     header = header_of(record)
     result = {
         "verdict": record.get("verdict"),
@@ -747,8 +775,17 @@ def verify_document(
     FileNotFoundError, the run path's one message for that fault.
     ``candidate_dir=None`` requests no candidate binding and is
     not judged.
+    The ``spec_hash`` binding is validated the same way
+    (v1.43.0, through ``evidence.validate_binding_hash``,
+    before the candidate directory is judged or any tree is
+    hashed): a malformed hash — an int, a bool, an empty,
+    truncated, upper-case, or over-long string — is a usage
+    error, not a binding mismatch. ``spec_hash=None`` requests
+    no spec binding and is not judged; a well-formed hash that
+    differs is a genuine mismatch and is reported as one.
     """
     pairs = collect_records(data)
+    validate_binding_hash(spec_hash, "spec_hash")
     if candidate_dir is not None:
         validate_candidate_dir(candidate_dir)
     candidate_hash = tree_hash(candidate_dir) if candidate_dir is not None else None
