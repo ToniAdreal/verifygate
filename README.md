@@ -586,6 +586,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.68.0 — symlink-loop traversal:
+the single candidate traversal behind
+the workspace copy, the tree hash,
+and the repair loop's prompt snapshot
+resolved every symlink with a bare
+`Path.resolve()`. A symlink loop — a
+link pointing at itself, or two links
+pointing at each other, at the top
+level or inside a subdirectory —
+makes `resolve()` raise RuntimeError,
+which escaped the traversal: the copy,
+the hash, and the snapshot all
+crashed, and at the CLI the run died
+as an adapter error (exit 2) with no
+evidence record, even though the
+candidate's real files were fine.
+An unresolvable link is now dropped
+exactly like the links the traversal
+already drops (dangling, pointing
+outside, directory links), so a
+looping candidate still gets its
+verdict. 11 new tests (2068 total).
+
 1.67.0 — prompt-embedding bounds:
 the real adapter embedded two parts
 of failing_evidence into the patch

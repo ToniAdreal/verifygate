@@ -12,7 +12,14 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
 * **Symlink containment** — the workspace copy never follows a symlink
   out of the candidate tree. A file symlink pointing *inside* the
   candidate is copied as a regular file; a symlink pointing outside is
-  dropped entirely, and directory symlinks are never followed. The
+  dropped entirely, and directory symlinks are never followed. A
+  symlink whose target cannot be resolved at all — a symlink loop
+  (a link pointing at itself, or two links pointing at each other) —
+  is dropped the same way (v1.68.0): before this, ``Path.resolve()``
+  raised ``RuntimeError`` out of the traversal, so one looping link
+  destroyed the whole run (the CLI surfaced it as an adapter error,
+  exit 2, with no record) even though the candidate's real files were
+  fine. The
   same rule drives ``evidence.tree_hash`` and the repair loop's
   candidate snapshot, so what is hashed and what is shown to the LLM
   is exactly what was verified — never a host file reached through a
@@ -302,7 +309,9 @@ def iter_candidate_files(root: str | Path):
     hash, and the repair loop's prompt snapshot: real directories are
     descended into (housekeeping names skipped); a file symlink is
     followed only when its resolved target stays inside ``root``;
-    directory symlinks and links pointing outside are never followed.
+    directory symlinks and links pointing outside are never followed,
+    and a link whose target cannot be resolved (a symlink loop) is
+    dropped rather than raising out of the traversal (v1.68.0).
 
     Traversal-root validation (v1.58.0): ``root`` is validated
     through :func:`validate_candidate_dir` *eagerly*, at call time —
@@ -334,7 +343,15 @@ def _iter_candidate_files(root: Path):
                 continue
             rel = f"{prefix}{entry.name}"
             if entry.is_symlink():
-                target = Path(entry.path).resolve()
+                try:
+                    target = Path(entry.path).resolve()
+                except (OSError, RuntimeError):
+                    # Unresolvable link (a symlink loop raises
+                    # RuntimeError, an unstatable target OSError):
+                    # dropped like an outside or directory link
+                    # (v1.68.0) — one bad link must not destroy the
+                    # traversal the copy, hash, and snapshot share.
+                    continue
                 if _within(target, root_resolved) and target.is_file():
                     yield rel, target
                 continue  # outside link or dir link: dropped
