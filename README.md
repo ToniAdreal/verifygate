@@ -586,6 +586,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.64.0 — environment-scrubber validation:
+sanitized_env, the one function that
+builds the environment every check
+command runs with, iterated its base
+on trust: a non-mapping base or a
+non-string key crashed with a raw
+AttributeError (bytes keys with a
+TypeError), and an allowlisted entry
+with a non-string value ({"PATH": 123})
+passed through verbatim, so
+subprocess.Popen raised its own raw
+TypeError on the scrubbed environment —
+the scrubber produced an environment
+that broke the run it was meant to
+make safe. A non-mapping base is now
+one ValueError naming only the type,
+and entries whose key or value is not
+a string are dropped exactly the way
+non-allowlisted names already are, so
+the result is always a dict[str, str]
+and the sandbox marker cannot be
+overridden by the base.
+27 new tests (1987 total).
 1.63.0 — unhashable report adapter:
 the narrative check's sealed-adapter
 cross-check built a set out of the

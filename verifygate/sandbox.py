@@ -104,6 +104,25 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   containment traversal would verify (ignored names and escaping
   symlinks excluded), and they are generous ceilings, not targets:
   the bundled samples are three orders of magnitude below them.
+* **Environment-scrubber validation** — :func:`sanitized_env`,
+  the one function that builds the environment every check
+  command runs with, validates its ``base`` (v1.64.0). Before
+  this, the scrubber iterated ``base.items()`` and tested each
+  key with ``str.startswith`` on trust: a non-mapping base (an
+  ``int``, a string, a list) crashed with a raw ``AttributeError``,
+  a mapping with a non-string key crashed the same way (``bytes``
+  keys with a ``TypeError``), and — worse — an allowlisted entry
+  with a non-string *value* (``{"PATH": 123}``, ``{"PATH": None}``)
+  passed through verbatim, so the scrubbed environment itself
+  carried a value no subprocess can spawn with and
+  ``subprocess.Popen`` raised its own raw ``TypeError`` inside
+  the execution primitive — the scrubber produced an environment
+  that broke the run it was meant to make safe. A non-mapping
+  base is now one ``ValueError`` naming only the offending type,
+  and entries whose key or value is not a string are dropped
+  exactly the way non-allowlisted names already are, so the
+  result is always a ``dict[str, str]``; the ``os.environ``
+  default and every genuine mapping are unchanged.
 * **Bound-override validation** — the per-call ``max_files`` /
   ``max_bytes`` overrides of :func:`check_candidate_bounds` (and,
   through the shared :func:`validate_candidate_bound` helper, of
@@ -136,6 +155,7 @@ not a multi-tenant security boundary — see CONCEPT.md risks.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 import shutil
 import signal
 import subprocess
@@ -238,12 +258,29 @@ class CommandResult:
 
 
 def sanitized_env(base: dict | None = None) -> dict:
-    """Return the allowlisted environment check commands may see."""
+    """Return the allowlisted environment check commands may see.
+
+    Environment-scrubber validation (v1.64.0, see the module
+    docstring): ``base`` must be a mapping (``os.environ`` when
+    omitted) — anything else is one ``ValueError`` naming only the
+    offending type. Entries are filtered the way the allowlist
+    already filters names: an entry whose key or value is not a
+    string is dropped, never passed through, so the returned
+    mapping is always a ``dict[str, str]`` a subprocess can be
+    spawned with. The ``VERIFYGATE_SANDBOX`` marker is set after
+    filtering, so a base cannot override it.
+    """
     source = os.environ if base is None else base
-    env = {
-        k: v for k, v in source.items()
-        if k in _ENV_ALLOWLIST or k.startswith(_ENV_ALLOW_PREFIXES)
-    }
+    if not isinstance(source, Mapping):
+        raise ValueError(
+            f"base must be a mapping of environment variables "
+            f"(got {type(source).__name__})")
+    env = {}
+    for key, value in source.items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            continue
+        if key in _ENV_ALLOWLIST or key.startswith(_ENV_ALLOW_PREFIXES):
+            env[key] = value
     env["VERIFYGATE_SANDBOX"] = "1"
     return env
 
