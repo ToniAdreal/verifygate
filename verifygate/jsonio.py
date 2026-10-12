@@ -115,6 +115,27 @@ same rule in the CLI *before* any check runs or any model
 call is made: an existing destination that is not a
 directory is an output error, instead of a repair that runs
 to completion and only then fails at the copy.
+
+Nesting-depth bound (v1.75.0): the decoder itself was the
+last unbounded recursion on the input path. ``json.loads``
+decodes nested arrays/objects recursively, so a document
+nested ~10,000 levels deep — a few tens of kilobytes, far
+under the byte ceilings — died with an unhandled
+``RecursionError`` traceback (exit 1) out of
+:func:`load_json_file`, on every consumer at once:
+``verify`` / ``view`` / ``replay`` on a record and ``run`` /
+``repair`` on a spec. A document nested just under the
+interpreter's limit was no better in principle: it parsed,
+and every later recursive pass over it (canonical encoding,
+rendering) ran one level from the same cliff. The loader now
+converts a decoder ``RecursionError`` into the same
+:class:`JsonFileError` as malformed JSON, and — defence in
+depth, so no parsed document can take a later pass near the
+cliff — rejects any document nested deeper than
+:data:`MAX_JSON_DEPTH`, measured iteratively after decoding.
+The ceiling is generous: the deepest genuine document (a
+repair report: report → attempt → record → entry → usage →
+call → usage) nests about ten levels.
 """
 
 from __future__ import annotations
@@ -126,6 +147,7 @@ from pathlib import Path
 
 MAX_SPEC_FILE_BYTES = 4 * 1024 * 1024  # 4 MiB
 MAX_RECORD_FILE_BYTES = 64 * 1024 * 1024  # 64 MiB
+MAX_JSON_DEPTH = 100  # containers; genuine documents nest ~10
 
 
 class JsonFileError(ValueError):
@@ -188,9 +210,12 @@ def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
     (v1.46.0 — validated before ``open()`` is ever reached, so an
     ``int`` is never mistaken for a file descriptor), an invalid
     ``max_bytes`` (v1.53.0 — validated before the path), an
-    oversize file, non-UTF-8 content, or malformed JSON;
-    ``OSError`` propagates for a missing/unreadable file, so
-    callers keep their existing handling for both.
+    oversize file, non-UTF-8 content, malformed JSON, or a
+    document nested deeper than :data:`MAX_JSON_DEPTH`
+    (v1.75.0 — a decoder ``RecursionError`` is the same
+    rejection, never a traceback); ``OSError`` propagates for
+    a missing/unreadable file, so callers keep their existing
+    handling for both.
     """
     max_bytes = validate_max_bytes(max_bytes)
     path = validate_file_path(path, f"{kind} path")
@@ -214,9 +239,45 @@ def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
     except UnicodeDecodeError as exc:
         raise JsonFileError(f"{kind} file is not UTF-8: {path}: {exc}") from exc
     try:
-        return json.loads(text)
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
         raise JsonFileError(str(exc)) from exc
+    except RecursionError:
+        # Nesting-depth bound (v1.75.0, see the module docstring):
+        # the decoder recursed past the interpreter limit. The
+        # stack has unwound by the time this handler runs, and
+        # the rejection names only the ceiling — never the text.
+        raise JsonFileError(
+            f"{kind} file exceeds the maximum nesting depth of "
+            f"{MAX_JSON_DEPTH}: {path}") from None
+    if _json_depth(data) > MAX_JSON_DEPTH:
+        raise JsonFileError(
+            f"{kind} file exceeds the maximum nesting depth of "
+            f"{MAX_JSON_DEPTH}: {path}")
+    return data
+
+
+def _json_depth(data) -> int:
+    """Return the container nesting depth of decoded JSON.
+
+    Scalars nest 0; a container nests one more than its deepest
+    child (an empty container nests 1). Measured iteratively —
+    measuring a hostile document must not itself recurse
+    (v1.75.0).
+    """
+    depth = 0
+    stack = [(data, 0)]
+    while stack:
+        node, level = stack.pop()
+        if isinstance(node, dict):
+            level += 1
+            depth = max(depth, level)
+            stack.extend((child, level) for child in node.values())
+        elif isinstance(node, list):
+            level += 1
+            depth = max(depth, level)
+            stack.extend((child, level) for child in node)
+    return depth
 
 
 def validate_output_path(path, name: str = "out_path") -> Path:

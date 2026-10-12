@@ -592,6 +592,22 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.75.0 — JSON nesting-depth bound:
+the bounded loader handed its text to
+`json.loads`, whose decoder recurses, so
+a document nested ~10,000 levels deep —
+tens of kilobytes, far under the byte
+ceilings — crashed `verify` / `view` /
+`replay` and `run` / `repair` with an
+unhandled `RecursionError` traceback.
+The loader now converts a decoder
+`RecursionError` into the same clean
+usage error as malformed JSON, and
+rejects any document nested deeper than
+100 levels (genuine documents nest
+about ten), measured iteratively after
+decoding. 11 new tests (2143 total).
+
 1.74.0 — special-file outputs rejected:
 every file VerifyGate writes — the
 evidence record, the repair report, the
