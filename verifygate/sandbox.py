@@ -56,6 +56,18 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
 * **Timeout kills the process group** — checks start in a new session
   and a timeout SIGKILLs the whole group, so a check cannot leave a
   detached child running after it has been failed.
+* **No process outlives its check** — the process-group SIGKILL is
+  no longer a timeout-only path (v1.72.0): it runs after *every*
+  check, pass or fail. Before this, a check that exited normally
+  while leaving a background child behind — ``(sleep 2; echo
+  leaked > marker) & echo done`` — leaked that child onto the
+  host: it outlived the run, could write into the workspace the
+  runner was deleting (or anywhere the allowlisted ``HOME``
+  reaches), and could still be alive when replay re-ran the same
+  checks, so the two runs did not execute in the same world. A
+  child that detaches into its own session (``setsid``) escapes
+  the group exactly as it already did on the timeout path; that
+  is the documented limit of a local/CI-grade sandbox.
 * **Permission fidelity** — the workspace copy preserves each file's
   permission bits (``shutil.copymode`` after the content copy). Before
   v1.9.0 the copy was content-only, so an executable script arrived
@@ -615,6 +627,23 @@ def validate_check_timeout(timeout_s, name: str = "timeout_s") -> int:
     return timeout_s
 
 
+def _kill_process_group(proc: subprocess.Popen) -> None:
+    """SIGKILL ``proc``'s whole process group, tolerating its absence.
+
+    The group may already be gone (the command and every child
+    exited on their own), in which case there is nothing to sweep;
+    a group that cannot be signalled falls back to killing the
+    leader alone, the pre-v1.72.0 timeout behaviour.
+    """
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except OSError:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
 def run_command(command: str, cwd: Path, timeout_s: int) -> CommandResult:
     # The execution primitive validates its own arguments
     # (v1.51.0, see the module docstring): until now they were
@@ -642,12 +671,17 @@ def run_command(command: str, cwd: Path, timeout_s: int) -> CommandResult:
             exit_code = proc.wait(timeout=timeout_s)
         except subprocess.TimeoutExpired:
             timed_out = True
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                proc.kill()
-            proc.wait()
             exit_code = None
+        # No member of the check's process group may outlive the
+        # check (v1.72.0): on a timeout this is the kill that has
+        # always happened; on a normal exit — pass or fail — it
+        # sweeps any background child the command left behind,
+        # which previously leaked onto the host (see the module
+        # docstring). The leader itself has already exited on the
+        # normal path, so this can only reach leftover children.
+        _kill_process_group(proc)
+        if timed_out:
+            proc.wait()
         duration = int((time.monotonic() - start) * 1000)
         return CommandResult(
             command=command,

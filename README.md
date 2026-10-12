@@ -592,6 +592,23 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.72.0 — no process outlives its check:
+the process-group SIGKILL that reaps a
+check's children ran only on the timeout
+path, so a check that exited normally
+while leaving a background child behind
+— `(sleep 2; echo leaked > marker) &
+echo done` — leaked that child onto the
+host: it outlived the run, could write
+into the workspace being deleted, and
+could still be alive when replay re-ran
+the same checks. The group kill now
+runs after every check, pass or fail;
+a child that detaches into its own
+session escapes it exactly as it
+already did on the timeout path.
+6 new tests (2097 total).
+
 1.71.0 — tree-hash line escaping:
 the candidate tree hash joined
 `<relpath>:<file-hash>` lines with
