@@ -101,6 +101,25 @@ api_key pattern): only ``None`` means "not supplied"; every
 supplied value, falsy or not, faces the non-empty-string
 validation below.
 
+Bounded response read (v1.81.0): the real transport delegated
+reading its response to the connector helper's
+``read_json_response``, whose body reader chunks the response
+(64 KiB at a time) and joins *all* of it in memory with no size
+ceiling — the whole body materialised before parsing, however
+large the endpoint (or anything able to answer for it) chose to
+make it. The v1.80.0 Tavily fix called its own bare ``resp.read()``
+"the last unbounded reader in the project"; this one escaped
+that audit because the unbounded read hides behind the helper
+instead of appearing in this file. ``_post_chat`` now applies
+the credential surrogate itself and reads at most
+:data:`MAX_RESPONSE_BYTES` + 1 bytes directly, raising past the
+ceiling, which the transport's existing wrapper turns into the
+one ``RuntimeError`` adapter error (CLI exit 2) — never a
+silently truncated completion, since a body cut at the ceiling
+is rejected whole, not parsed. The ceiling is generous over a
+genuine reply (a completion is capped by ``max_tokens``; even
+the 8,192-token patch call with reasoning is tens of kilobytes).
+
 Prompt-embedding bounds (v1.67.0): two parts of the patch prompt
 were embedded verbatim, at any size, from ``failing_evidence`` —
 the ``candidate_files`` snapshot and the ``patch_error``
@@ -174,6 +193,11 @@ MAX_EMBED_FILE_CHARS = 4000
 MAX_EMBED_TOTAL_CHARS = 12000
 MAX_EMBED_PATCH_ERROR_CHARS = 2000
 
+# Ceiling for the real transport's response body (v1.81.0, see the
+# module docstring): the same 4 MiB the Tavily transport enforces,
+# generous over any genuine completion this adapter can request.
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+
 
 def validate_timeout_s(timeout_s, name: str = "timeout_s"):
     """Validate an adapter constructor's ``timeout_s`` (v1.44.0).
@@ -200,17 +224,22 @@ def validate_timeout_s(timeout_s, name: str = "timeout_s"):
 
 
 def _load_credential_helpers():
-    """Import the dynamic-credential helpers, or explain what's missing."""
+    """Import the dynamic-credential helper, or explain what's missing.
+
+    Only the surrogate helper is imported (v1.81.0): the body is
+    read bounded in ``_post_chat`` itself, so the helper's
+    unbounded ``read_json_response`` is no longer used here.
+    """
     if _DYNAMIC_CREDENTIALS_DIR not in sys.path:
         sys.path.insert(0, _DYNAMIC_CREDENTIALS_DIR)
     try:
-        from dynamic_credentials import add_surrogate_to_request, read_json_response
+        from dynamic_credentials import add_surrogate_to_request
     except ImportError as exc:
         raise ValueError(
             "Nebius connector helpers are unavailable on this machine; "
             "use --mode judge for a zero-key run"
         ) from exc
-    return add_surrogate_to_request, read_json_response
+    return add_surrogate_to_request
 
 
 class TokenFactoryAdapter(LLMAdapter):
@@ -264,7 +293,7 @@ class TokenFactoryAdapter(LLMAdapter):
     # -- real transport -------------------------------------------------
 
     def _post_chat(self, body: dict) -> dict:
-        add_surrogate_to_request, read_json_response = _load_credential_helpers()
+        add_surrogate_to_request = _load_credential_helpers()
         req = urllib.request.Request(
             BASE_URL,
             data=json.dumps(body).encode("utf-8"),
@@ -276,7 +305,17 @@ class TokenFactoryAdapter(LLMAdapter):
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
-                return read_json_response(resp)
+                # Bounded while reading (v1.81.0): at most the
+                # ceiling + 1 bytes are ever materialised; an
+                # oversize body is rejected whole below, never
+                # parsed truncated. (The connector helper's own
+                # reader joins every chunk with no ceiling.)
+                raw = resp.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw) > MAX_RESPONSE_BYTES:
+                raise ValueError(
+                    f"Token Factory response exceeds "
+                    f"{MAX_RESPONSE_BYTES} bytes")
+            return json.loads(raw.decode("utf-8"))
         except Exception as exc:  # network / auth / connector failures
             raise RuntimeError(
                 f"Nebius Token Factory call failed ({type(exc).__name__}): {exc}"

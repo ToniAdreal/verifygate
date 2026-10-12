@@ -592,6 +592,20 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.81.0 — The Token Factory transport
+reads its response bounded: it
+delegated the read to the connector
+helper, whose body reader joined
+every chunk in memory with no ceiling
+— the unbounded reader the 1.80.0
+audit missed, because it hides behind
+the helper. ``_post_chat`` now reads
+at most 4 MiB + 1 itself and rejects
+an oversize body whole as the clean
+adapter error, never parsing it
+truncated. 7 new
+tests (2214 total).
+
 1.80.0 — The Tavily transport reads
 its response bounded: a bare
 ``resp.read()`` materialised the whole
