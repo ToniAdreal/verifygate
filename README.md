@@ -592,6 +592,24 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.73.0 — special-file inputs rejected:
+every JSON document VerifyGate reads —
+a task spec, an evidence record, a repair
+report — goes through one bounded loader,
+which opened whatever path it was given.
+A path naming a FIFO blocked the loader
+indefinitely (no writer, no timeout, no
+output), so `verify` / `view` / `replay`
+hung on the very artifact they exist to
+judge; a device or directory was likewise
+opened rather than judged. The loader now
+stats the path first, following symlinks
+(a symlink to a regular file still loads),
+and rejects any existing path that is not
+a regular file as a clean usage error.
+A missing file still raises `OSError`.
+14 new tests (2111 total).
+
 1.72.0 — no process outlives its check:
 the process-group SIGKILL that reaps a
 check's children ran only on the timeout

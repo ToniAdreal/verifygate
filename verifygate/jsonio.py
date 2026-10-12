@@ -70,12 +70,31 @@ for that call. ``max_bytes`` must now be a real ``int`` (never
 ``bool``) between 1 and :data:`MAX_RECORD_FILE_BYTES` — the
 largest ceiling any caller legitimately passes — validated
 before the path is even opened, as a :class:`JsonFileError`.
+
+Special-file rejection (v1.73.0): the loader opened whatever
+path it was given, so a path naming a *special file* — a FIFO,
+a device, a socket, or a directory — was not rejected before
+``open()``. A directory at least failed promptly with
+``IsADirectoryError``, but a FIFO blocks ``open()`` / ``read()``
+until a writer appears: ``verifygate verify --record <fifo>``
+hung indefinitely, with no timeout and no output, on an artifact
+the command exists to judge (the same indefinite-block shape a
+check command reading stdin had before v1.69.0, and the same
+special-file shape the candidate traversal has dropped since its
+start — a candidate FIFO is skipped, never opened). The loader
+now stats the path *before* opening it (following symlinks, so a
+symlink to a regular file still loads) and rejects any existing
+path that is not a regular file as a :class:`JsonFileError` —
+the CLI's one-line record/spec error, exit 2. A missing path
+keeps its established shape: the ``OSError`` from the stat
+propagates, exactly as the ``OSError`` from ``open()`` did.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import stat
 from pathlib import Path
 
 MAX_SPEC_FILE_BYTES = 4 * 1024 * 1024  # 4 MiB
@@ -148,6 +167,16 @@ def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
     """
     max_bytes = validate_max_bytes(max_bytes)
     path = validate_file_path(path, f"{kind} path")
+    # Special-file rejection (v1.73.0, see the module docstring):
+    # stat before open, following symlinks. An existing path that
+    # is not a regular file (FIFO, device, socket, directory) is
+    # a JsonFileError, never an open() that can block indefinitely
+    # on a FIFO. A missing path raises OSError from the stat,
+    # exactly the shape open() produced for it before.
+    st = path.stat()
+    if not stat.S_ISREG(st.st_mode):
+        raise JsonFileError(
+            f"{kind} file is not a regular file: {path}")
     with open(path, "rb") as fh:
         raw = fh.read(max_bytes + 1)
     if len(raw) > max_bytes:
