@@ -592,6 +592,25 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.77.0 — Duplicate JSON object keys
+rejected in the bounded loader: the
+decoder silently kept the last value
+for a repeated key, so a record whose
+text states `"verdict": "FAIL",
+"verdict": "PASS"` verified INTACT —
+this loader read PASS (last wins) while
+a first-wins parser, or a human reading
+the raw text, reads FAIL. A spec could
+likewise hide a first command behind a
+second. Repeated keys are now the same
+one-line `JsonFileError` usage error
+(exit 2) as malformed JSON, at any
+nesting level, including keys that only
+collide after `\uXXXX` decoding. Every
+document VerifyGate writes is built
+from a dict and can never contain a
+duplicate. 15 new tests (2180 total).
+
 1.76.0 — Strict JSON decoding in the
 bounded loader: an integer literal
 longer than the interpreter's conversion

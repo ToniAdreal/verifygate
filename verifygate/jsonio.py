@@ -137,6 +137,25 @@ The ceiling is generous: the deepest genuine document (a
 repair report: report → attempt → record → entry → usage →
 call → usage) nests about ten levels.
 
+Duplicate object keys (v1.77.0): the decoder silently kept
+the *last* value for a repeated object key, so a document's
+text could state two contradictory values for one field. A
+record carrying ``"verdict": "FAIL", "verdict": "PASS"``
+verified INTACT — this loader, like Python's ``json``, read
+PASS, while a first-wins parser (or a human reading the raw
+text top-down) reads FAIL: the same artifact judged two
+different ways depending on the consumer, on the very field
+the record exists to seal. A spec could likewise hide a
+first ``command`` behind a second one. RFC 8259 already warns
+that duplicate names make parser behaviour unpredictable;
+every document VerifyGate writes is built from a dict, so it
+can never contain a duplicate, and no genuine document is
+affected. The decoder now rejects a repeated key — at any
+nesting level, including keys that only collide after
+``\\uXXXX`` decoding — through ``object_pairs_hook``, as the
+same :class:`JsonFileError` as malformed JSON, naming only
+the rule, never the key (a key is caller-controlled text).
+
 Strict JSON decoding (v1.76.0): the loader's contract — every
 malformed input is one :class:`JsonFileError` — had two holes
 left in the decoder itself. (1) An integer literal longer than
@@ -236,7 +255,8 @@ def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
     ``max_bytes`` (v1.53.0 — validated before the path), an
     oversize file, non-UTF-8 content, malformed JSON (strictly
     decoded since v1.76.0: non-standard constants and oversize
-    integer literals are the same rejection), or a
+    integer literals are the same rejection; duplicate object
+    keys are rejected since v1.77.0), or a
     document nested deeper than :data:`MAX_JSON_DEPTH`
     (v1.75.0 — a decoder ``RecursionError`` is the same
     rejection, never a traceback); ``OSError`` propagates for
@@ -272,8 +292,27 @@ def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
             f"{kind} file is not valid JSON: non-standard constant "
             f"{name}: {path}")
 
+    def _reject_duplicate_keys(pairs):
+        # Duplicate object keys (v1.77.0, see the module
+        # docstring): json's default keeps the last value, so a
+        # text stating two contradictory values for one field
+        # was judged differently by different consumers. The
+        # hook receives keys already decoded, so a key written
+        # with a \uXXXX escape collides with its plain form
+        # here, exactly as it should. The rejection names only
+        # the rule — never the key, which is caller text.
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise JsonFileError(
+                    f"{kind} file is not valid JSON: duplicate "
+                    f"object key: {path}")
+            obj[key] = value
+        return obj
+
     try:
-        data = json.loads(text, parse_constant=_reject_constant)
+        data = json.loads(text, parse_constant=_reject_constant,
+                          object_pairs_hook=_reject_duplicate_keys)
     except JsonFileError:
         raise
     except json.JSONDecodeError as exc:
