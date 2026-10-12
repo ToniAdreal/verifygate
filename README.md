@@ -592,6 +592,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.87.0 — The patch commit never
+writes a shared inode in place: a
+patch target hardlinked to a file
+outside the workspace (or to a second
+name inside it) was rewritten through
+the link, modifying a file the patch
+never named, although the path itself
+resolved inside the workspace. The
+commit now unlinks a multiply-linked
+target before writing — the patched
+path gets its own inode, the other
+names keep their content and the
+pre-break permission bits are
+preserved. 7 new tests (2273 total).
+
 1.86.0 — Output-destination protection
 is judged by file identity, not just
 by path: a `--out` given as a hardlink

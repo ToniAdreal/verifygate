@@ -64,6 +64,18 @@ boundary whose two sides name the same file); decoding happens
 ``_safe_target`` judges the path, so a quoted escape that
 decodes to ``..`` is rejected exactly like a literal one.
 
+Hardlink fidelity (since v1.87.0): the commit never writes a
+shared inode in place. ``_safe_target`` judges a patch path by
+its resolved location, but a target file can share its inode
+with a file outside the workspace (or with a second name inside
+it) through a hardlink, and ``write_text`` truncates that shared
+inode — patching the target rewrote the outside file too. The
+commit unlinks a multiply-linked target before writing, so the
+patched path gets its own inode, the other names keep their
+content, and the pre-break permission bits are preserved. This
+matches the workspace copy's semantics, which materialises
+every verified file as its own inode.
+
 Application is **atomic across files** (since v1.10.0): every file
 patch is validated and applied to an in-memory staged copy first,
 and the workspace on disk is written only after the *whole* diff has
@@ -182,6 +194,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -854,8 +867,31 @@ def apply_patch(
         if not state.exists:
             target.unlink(missing_ok=True)
             continue
+        # Hardlink break (v1.87.0): a target whose inode is shared
+        # (st_nlink > 1) must not be written in place — write_text
+        # truncates the shared inode, so a file outside the root
+        # hardlinked to the target (or a second name for it inside
+        # the root) would be rewritten too, although _safe_target
+        # judged only this path. Unlinking first gives the target
+        # its own inode; the other names keep the old content,
+        # exactly as the workspace copy — which always materialises
+        # each verified file as its own inode — behaves. The
+        # pre-break permission bits are the fallback mode, since a
+        # fresh file would otherwise take the umask default instead
+        # of the mode in-place writing preserves.
+        fallback_mode: int | None = None
+        try:
+            info = target.lstat()
+        except OSError:
+            info = None
+        if info is not None and stat.S_ISREG(info.st_mode) \
+                and info.st_nlink > 1:
+            fallback_mode = stat.S_IMODE(info.st_mode)
+            target.unlink()
         _write_lines(
             target, state.lines, state.trailing_newline, state.line_ending)
         if state.mode is not None:
             target.chmod(state.mode & 0o777)
+        elif fallback_mode is not None:
+            target.chmod(fallback_mode)
     return changed
