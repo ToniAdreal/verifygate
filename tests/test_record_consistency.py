@@ -255,8 +255,6 @@ def test_usage_total_as_string_no_longer_verifies():
 
 
 @pytest.mark.parametrize("call", [
-    {"usage": {"total_tokens": -1}},
-    {"usage": {"total_tokens": True}},
     {"usage": {"total_tokens": 2, "mystery_tokens": 5}},
 ])
 def test_unemittable_usage_calls_no_longer_verify(call):
@@ -265,10 +263,19 @@ def test_unemittable_usage_calls_no_longer_verify(call):
     assert verify_chain(record) is False
 
 
-@pytest.mark.parametrize("call", [{"usage": "lots"}, "not-a-call"])
+@pytest.mark.parametrize("call", [
+    {"usage": "lots"}, "not-a-call",
+    # Since v1.65.0 build_record validates the shapes its own sum
+    # computes over, a negative or bool token count can no longer
+    # be sealed through it either; like the shapes above, these
+    # now arrive only as a mutation + re-chain.
+    {"usage": {"total_tokens": -1}},
+    {"usage": {"total_tokens": True}},
+])
 def test_usage_shapes_build_record_cannot_seal_no_longer_verify(call):
-    # build_record's own sum crashes on these shapes, so they can
-    # only arrive as a mutation + re-chain; structure must catch them.
+    # build_record raises on these shapes (it crashed on the first
+    # two before v1.65.0), so they can only arrive as a mutation +
+    # re-chain; structure must catch them.
     record = _usage_record()
     usage = next(e for e in record["entries"] if e["kind"] == "llm_usage")
     usage["calls"] = [call]

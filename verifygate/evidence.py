@@ -322,6 +322,31 @@ is one ``ValueError`` and the record is left byte-for-byte
 unchanged. ``build_record`` stays a permissive assembler,
 as in earlier rounds; this is the one *mutation* of a
 sealed record, so it is judged at its own entry.
+
+Sealing-argument validation (v1.65.0): the permissive-assembler
+note above is superseded for the shapes ``build_record`` itself
+computes over. The runner normalises everything it seals
+(v1.35.0), but that protects the runner's callers, not this
+function's (the v1.51.0 doctrine): a direct caller handing the
+assembler a malformed ``llm_usage`` crashed inside its own sum
+— a non-object call or a non-object ``usage`` with an
+``AttributeError``, a string token count with a ``TypeError`` —
+and a negative token count sealed a usage entry whose total
+the consistency mirror then rejects, so the record failed its
+own verification the moment it was written. A non-object check
+entry or diagnosis crashed the same way, on the mapping spread.
+``build_record`` now validates exactly the shapes it touches:
+``check_results`` a list of objects, ``diagnosis`` an object
+or ``None``, and ``llm_usage`` a list of objects whose
+``usage`` is an object or ``None`` carrying only non-negative
+real-int (never bool) token counts or ``None`` — anything else
+is one ``ValueError`` before anything is sealed. Field-*value*
+consistency (a verdict against its checks, the caps, the
+header's mode and hashes) deliberately stays the verification
+mirror's job, not the assembler's: the mirror's tests seal
+value-level nonsense through this function to prove the mirror
+catches it, and the runner derives those values from validated
+inputs long before it seals.
 """
 
 from __future__ import annotations
@@ -605,7 +630,49 @@ def build_record(
     breaks verification exactly the way editing a verdict does. The
     deterministic mock records no calls, so Judge Mode never emits
     this entry.
+
+    The shapes this function itself computes over are validated
+    before anything is sealed (v1.65.0, see the module docstring):
+    ``check_results`` must be a list of objects, ``diagnosis`` an
+    object or ``None``, and ``llm_usage`` a list of objects whose
+    ``usage`` is an object or ``None`` whose token counts are
+    non-negative real ints (never bool) or ``None``. Anything else
+    is a ``ValueError``, never an ``AttributeError`` / ``TypeError``
+    from the mapping spread or the usage sum, and never a sealed
+    usage total the consistency mirror would reject.
     """
+    if not isinstance(check_results, (list, tuple)) or any(
+            not isinstance(result, dict) for result in check_results):
+        raise ValueError(
+            "check_results must be a list of check-result objects")
+    if diagnosis is not None and not isinstance(diagnosis, dict):
+        raise ValueError("diagnosis must be an object or None")
+    if llm_usage is not None:
+        if not isinstance(llm_usage, (list, tuple)) or any(
+                not isinstance(call, dict) for call in llm_usage):
+            raise ValueError("llm_usage must be a list of call objects")
+        for call in llm_usage:
+            usage = call.get("usage")
+            if usage is None:
+                continue
+            if not isinstance(usage, dict):
+                raise ValueError(
+                    "each llm_usage call's usage must be an object or None")
+            for field in _USAGE_TOKEN_FIELDS:
+                count = usage.get(field)
+                if count is not None and (
+                        isinstance(count, bool)
+                        or not isinstance(count, int) or count < 0):
+                    raise ValueError(
+                        f"llm_usage token count {field!r} must be a "
+                        "non-negative int or None")
+    # Tuples are accepted above but sealed as lists: the entries
+    # carry the objects themselves, and the structure mirror
+    # requires a list (notably the usage entry's ``calls``), so
+    # sealing the tuple itself would fail its own verification.
+    check_results = list(check_results)
+    if llm_usage is not None:
+        llm_usage = list(llm_usage)
     entries: list[dict] = []
     prev = _sha(GENESIS)
     header = {

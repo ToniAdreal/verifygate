@@ -586,6 +586,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.65.0 — sealing-argument validation:
+build_record, the one function that
+assembles and seals an evidence
+record, computed over its arguments
+on trust: a malformed llm_usage
+crashed inside its own usage sum (a
+non-object call or usage with an
+AttributeError, a string token count
+with a TypeError), a negative token
+count sealed a usage entry the
+consistency mirror then rejects, and
+a non-object check entry or
+diagnosis crashed on the mapping
+spread. The shapes it touches are
+now validated before anything is
+sealed — check_results a list of
+objects, diagnosis an object or
+None, llm_usage a list of objects
+whose usage carries only
+non-negative real-int token counts
+or None — anything else is one
+ValueError. Field-value consistency
+stays the verification mirror's job.
+
 1.64.0 — environment-scrubber validation:
 sanitized_env, the one function that
 builds the environment every check
