@@ -231,6 +231,20 @@ def _candidate_files(root: str | Path) -> dict[str, str]:
     the diff will be applied to — brief + check output alone cannot
     produce a diff whose context lines match. Binary, oversized, and
     housekeeping files are skipped; the snapshot is capped overall.
+
+    Bounded read (v1.79.0): a file is read through a text stream
+    capped at ``_MAX_FILE_CHARS + 1`` *characters*, never whole.
+    Before this, ``read_text`` materialised the entire file — bytes
+    and decoded string both — before the length check below could
+    skip it, so a single snapshot-eligible file could allocate
+    roughly twice its size (a 20 MiB probe file peaked at 40 MiB)
+    on its way to being skipped, and the candidate bounds allow a
+    file of ~256 MiB. Reading one character past the cap decides
+    the same skip, and a file the read returns in full is exactly
+    the file ``read_text`` would have returned: a file over the
+    cap, a file whose undecodable bytes sit inside the cap, and a
+    file whose undecodable bytes sit past the cap (the capped read
+    already proves it oversize) all skip exactly as before.
     """
     files: dict[str, str] = {}
     total = 0
@@ -240,7 +254,8 @@ def _candidate_files(root: str | Path) -> dict[str, str]:
         if Path(rel).suffix.lower() not in _TEXT_SUFFIXES:
             continue
         try:
-            text = source.read_text(encoding="utf-8")
+            with source.open(encoding="utf-8") as handle:
+                text = handle.read(_MAX_FILE_CHARS + 1)
         except (UnicodeDecodeError, OSError):
             continue
         if len(text) > _MAX_FILE_CHARS or total + len(text) > _MAX_TOTAL_CHARS:

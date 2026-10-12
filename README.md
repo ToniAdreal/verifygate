@@ -592,6 +592,24 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.79.0 — Candidate files are read
+streamed or not at all: the tree hash
+fed each file to SHA-256 whole
+(`read_bytes`), and the repair loop's
+prompt snapshot read each file whole
+(`read_text`) before its
+4,000-character cap could skip it — a
+20 MB probe file peaked at 40 MB of
+allocations on its way to being
+skipped, and the candidate bounds
+allow a single file of ~256 MB. The
+hash now streams in chunks (tree
+hashes byte-identical, committed
+candidate bindings unchanged) and the
+snapshot reads at most cap+1
+characters per file, deciding the
+same skip. 11 new tests (2202 total).
+
 1.78.0 — Check output is streamed,
 not spooled: stdout/stderr used to go
 to temp files, and only the read-back

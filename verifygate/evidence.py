@@ -597,10 +597,31 @@ def tree_hash(root: str | Path) -> str:
     check_candidate_bounds(root)
 
     lines = [
-        f"{_escape_tree_rel(rel)}:{_sha_bytes(source.read_bytes())}"
+        f"{_escape_tree_rel(rel)}:{_hash_file(source)}"
         for rel, source in iter_candidate_files(root)
     ]
     return _sha("\n".join(lines))
+
+
+def _hash_file(source: Path) -> str:
+    """SHA-256 of one file's bytes, streamed in chunks (v1.79.0).
+
+    Before this, :func:`tree_hash` hashed ``source.read_bytes()``:
+    the whole file materialised in memory first. The candidate
+    bounds (v1.23.0) cap a candidate at 256 MiB in total, so a
+    single verified file could legitimately be ~256 MiB — and its
+    hash, a value that never needs more than one chunk of the
+    file at a time, allocated all of it. The digest is fed chunk
+    by chunk instead, so the hash of a tree costs the same memory
+    however large its largest file is; the resulting line (and
+    therefore every tree hash and candidate binding) is identical
+    to the whole-file computation.
+    """
+    digest = hashlib.sha256()
+    with open(source, "rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _sha_bytes(data: bytes) -> str:
