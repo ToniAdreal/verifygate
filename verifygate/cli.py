@@ -420,7 +420,10 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         try:
             write_record(record, out)
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
+            # ValueError is the writer's own validation judgement
+            # (v1.59.0): a one-line output error, exit 2, never a
+            # traceback — the same contract as every other write.
             print(f"output error: {exc}", file=sys.stderr)
             return 2
         checks = [e for e in record["entries"] if e["kind"] == "check"]

@@ -586,6 +586,32 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.59.0 — record-writer validation:
+`write_record`, the one function that
+materialises a sealed record to disk (and
+the CLI `run` handler's only write path),
+converted its `out_path` with a bare
+`Path(...)` and took its `record` on trust —
+the loaders got path validation in v1.46.0,
+the writer was left. A non-path destination
+crashed with a raw `TypeError`, an empty
+string surfaced as an `IsADirectoryError`
+for the current directory, a non-object
+record was silently written as a JSON file
+no VerifyGate consumer accepts (overwriting
+whatever already sat at the destination),
+and a non-serializable record escaped as a
+raw `TypeError` from `json.dumps`, past the
+CLI handler's `OSError`-only write handling.
+The path is now validated through
+`jsonio.validate_file_path`, the record must
+be a dict, and it is serialised before the
+file is touched — a rejected record leaves a
+pre-existing destination byte-for-byte
+unchanged, and the CLI maps the writer's
+`ValueError` to its one-line output error
+(exit 2). Genuine filesystem faults stay
+`OSError`. 38 new tests (1886 total).
 1.58.0 — traversal-root validation:
 `iter_candidate_files`, the single traversal
 behind the workspace copy, the tree hash, and

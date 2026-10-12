@@ -130,6 +130,30 @@ applies only when the variable is unset) silently became an
 empty HMAC key whose record disclosed a custom, non-dev key.
 A malformed key is now a ``ValueError`` here, before any
 workspace exists, exactly like the other run parameters.
+
+Record-writer validation (v1.59.0): :func:`write_record` — the
+one function that materialises a sealed record to disk, and the
+CLI ``run`` handler's only write path — converted its
+``out_path`` with a bare ``Path(...)`` and took its ``record``
+on trust. The loaders got path validation in v1.46.0
+(``jsonio.validate_file_path``); the writer was left: a
+non-path ``out_path`` (``None``, an ``int``, a list, ``bytes``)
+crashed with a raw ``TypeError``, an empty string resolved to
+the current directory and surfaced as an ``IsADirectoryError``
+instead of the one usage error, a non-object ``record`` (a
+string, a list) was silently written as a JSON file no
+VerifyGate consumer will ever accept as a record — overwriting
+whatever file already sat at the destination — and a
+non-serializable record escaped as a raw ``TypeError`` from
+``json.dumps``, past the CLI handler's ``OSError``-only write
+handling. Both arguments are now judged before anything is
+written: the path through ``jsonio.validate_file_path`` (a
+``JsonFileError``, a ``ValueError``), the record as a JSON
+object that must serialise — serialised *first*, so a rejected
+record leaves a pre-existing destination byte-for-byte
+unchanged. Genuine filesystem faults (a missing parent, a
+directory as the destination) stay ``OSError``, exactly as
+every other write path reports them.
 """
 
 from __future__ import annotations
@@ -150,6 +174,7 @@ from .evidence import (
     validate_label,
     validate_mode,
 )
+from .jsonio import validate_file_path
 from .llm import LLMAdapter, validate_llm
 from .sandbox import prepare_workspace, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
@@ -407,6 +432,35 @@ def run_verification(
 
 
 def write_record(record: dict, out_path: str | Path) -> Path:
-    out_path = Path(out_path)
-    out_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    """Write ``record`` as JSON to ``out_path``; return the path.
+
+    Record-writer validation (v1.59.0, see the module docstring):
+    ``out_path`` is validated through
+    :func:`jsonio.validate_file_path` — the same helper the
+    loaders use (v1.46.0) — so a non-path or empty value is a
+    ``JsonFileError`` (a ``ValueError``), never a raw
+    ``TypeError`` from ``Path(...)`` and never an empty string
+    silently meaning the current directory. ``record`` must be a
+    dict: anything else was previously written verbatim as a
+    JSON file no consumer accepts as a record. The record is
+    serialised *before* the file is touched, and a
+    non-serializable value (or a circular reference) is one
+    ``ValueError`` — so a rejected record leaves a pre-existing
+    destination byte-for-byte unchanged. Genuine filesystem
+    faults (a missing parent directory, the destination being a
+    directory) propagate as ``OSError``, as on every other write
+    path.
+    """
+    out_path = validate_file_path(out_path, "out_path")
+    if not isinstance(record, dict):
+        raise ValueError(
+            "record must be a JSON object (dict), got "
+            f"{type(record).__name__}")
+    try:
+        text = json.dumps(record, indent=2) + "\n"
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "record is not JSON-serializable: "
+            f"{str(exc)[:200]}") from exc
+    out_path.write_text(text, encoding="utf-8")
     return out_path
