@@ -217,7 +217,7 @@ from .evidence import (
     validate_label,
     validate_mode,
 )
-from .jsonio import validate_file_path
+from .jsonio import validate_file_path, write_text_file
 from .llm import LLMAdapter, drain_calls_safely, validate_llm
 from .sandbox import prepare_workspace, remove_tree, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
@@ -522,6 +522,14 @@ def write_record(record: dict, out_path: str | Path) -> Path:
     faults (a missing parent directory, the destination being a
     directory) propagate as ``OSError``, as on every other write
     path.
+
+    Special-file outputs (v1.74.0): the write itself goes
+    through :func:`jsonio.write_text_file`, so an existing
+    destination that is not a regular file (a FIFO, which
+    blocked the write indefinitely; a device such as
+    ``/dev/null``, which silently discarded the record while
+    the CLI reported it written) is a ``JsonFileError``
+    before anything is opened.
     """
     out_path = validate_file_path(out_path, "out_path")
     if not isinstance(record, dict):
@@ -534,5 +542,5 @@ def write_record(record: dict, out_path: str | Path) -> Path:
         raise ValueError(
             "record is not JSON-serializable: "
             f"{str(exc)[:200]}") from exc
-    out_path.write_text(text, encoding="utf-8")
+    write_text_file(out_path, text)
     return out_path

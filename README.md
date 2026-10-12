@@ -592,6 +592,27 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.74.0 — special-file outputs rejected:
+every file VerifyGate writes — the
+evidence record, the repair report, the
+rendered HTML view — went through a bare
+`Path.write_text`, which opens whatever
+path it is given. A FIFO destination
+blocked the write indefinitely after the
+verdict was already decided, and a device
+destination such as `/dev/null` silently
+discarded the document while the CLI
+reported it written. All three writes now
+go through one write path that stats the
+destination first (following symlinks)
+and rejects any existing destination that
+is not a regular file as a clean output
+error; `repair --patched-out` likewise
+judges an existing non-directory copy
+destination before any work runs, instead
+of after the repair completes.
+21 new tests (2132 total).
+
 1.73.0 — special-file inputs rejected:
 every JSON document VerifyGate reads —
 a task spec, an evidence record, a repair

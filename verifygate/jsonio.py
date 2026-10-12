@@ -88,6 +88,33 @@ path that is not a regular file as a :class:`JsonFileError` —
 the CLI's one-line record/spec error, exit 2. A missing path
 keeps its established shape: the ``OSError`` from the stat
 propagates, exactly as the ``OSError`` from ``open()`` did.
+
+Special-file outputs (v1.74.0): the mirror image on the *write*
+side was left. Every destination VerifyGate writes — an
+evidence record (``runner.write_record``), a repair report,
+a rendered HTML view — was written with a bare
+``Path.write_text``, which opens whatever path it is given.
+A FIFO destination blocked the write indefinitely, exactly
+like the FIFO input did before v1.73.0: the run had finished,
+its verdict was decided, and the CLI hung with no output at
+all. A device destination was worse in the other direction:
+writing a record to ``/dev/null`` *succeeded*, so the CLI
+reported ``VERDICT: PASS -> /dev/null`` for a record that
+exists nowhere. :func:`write_text_file` is now the one write
+path for those destinations: it validates the path through
+:func:`validate_file_path`, stats it before opening
+(following symlinks, so a symlink to a regular file still
+writes), and rejects any existing destination that is not a
+regular file as a :class:`JsonFileError` — the CLI's one-line
+output error, exit 2. A destination that does not exist yet
+is created as a regular file, as before; a directory keeps
+its established shape (the write attempt raises
+``IsADirectoryError``, an ``OSError``, promptly). The repair
+loop's ``--patched-out`` copy destination is judged by the
+same rule in the CLI *before* any check runs or any model
+call is made: an existing destination that is not a
+directory is an output error, instead of a repair that runs
+to completion and only then fails at the copy.
 """
 
 from __future__ import annotations
@@ -190,3 +217,52 @@ def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
         return json.loads(text)
     except json.JSONDecodeError as exc:
         raise JsonFileError(str(exc)) from exc
+
+
+def validate_output_path(path, name: str = "out_path") -> Path:
+    """Return ``path`` as a writable destination, or raise.
+
+    Special-file outputs (v1.74.0, see the module docstring):
+    the path itself is validated through
+    :func:`validate_file_path`; an *existing* destination is
+    then statted, following symlinks. A regular file may be
+    overwritten; a missing destination (including a broken
+    symlink, whose target the write will create) is accepted
+    and will be created as a regular file; a directory is
+    accepted here so the write itself raises the established
+    ``IsADirectoryError``. Anything else that already exists
+    — a FIFO, a device, a socket — is a
+    :class:`JsonFileError`: a FIFO write can block
+    indefinitely and a device write can silently discard the
+    document while reporting success. Other ``OSError``
+    exceptions from the stat (a symlink loop, an unstatable component)
+    propagate, exactly as they would from the write itself.
+    """
+    path = validate_file_path(path, name)
+    try:
+        st = path.stat()
+    except FileNotFoundError:
+        return path
+    if stat.S_ISDIR(st.st_mode):
+        return path
+    if not stat.S_ISREG(st.st_mode):
+        raise JsonFileError(
+            f"{name} is not a regular file: {path}")
+    return path
+
+
+def write_text_file(path, text: str, *, name: str = "out_path") -> Path:
+    """Write ``text`` (UTF-8) to ``path``; return the path.
+
+    The one write path for VerifyGate's file destinations
+    (v1.74.0): the destination is judged by
+    :func:`validate_output_path` *before* anything is opened,
+    so a special-file destination is a clean
+    :class:`JsonFileError` (a ``ValueError``), never a blocked
+    or silently-discarding write. Genuine filesystem faults
+    (a missing parent directory, a directory destination)
+    propagate as ``OSError``, as on every other write path.
+    """
+    path = validate_output_path(path, name)
+    path.write_text(text, encoding="utf-8")
+    return path

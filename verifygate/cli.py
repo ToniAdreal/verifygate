@@ -73,6 +73,23 @@ like the empty values the loaders and the library entry points
 already rejected for ``--spec`` / ``--candidate`` /
 ``--record`` / ``--model``: only an omitted argument (``None``)
 means "use the default / no binding".
+
+Special-file outputs (v1.74.0): every file this CLI writes —
+the evidence record, the repair report, the rendered HTML
+view — now goes through ``jsonio.write_text_file``, the one
+write path that stats its destination before opening it: an
+existing destination that is not a regular file (a FIFO,
+which blocked the write indefinitely after the verdict was
+already decided; a device such as ``/dev/null``, which
+silently discarded the document while the CLI reported it
+written) is a one-line output error (exit 2), the mirror of
+the v1.73.0 special-file rejection on the input side. And
+``repair --patched-out`` judges its copy destination before
+any check runs or any model call is made: an existing
+destination that is not a directory is an output error,
+instead of a repair that runs to completion — in real mode,
+spending Token Factory calls — and only then fails at the
+copy.
 """
 
 from __future__ import annotations
@@ -84,7 +101,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .jsonio import MAX_RECORD_FILE_BYTES, load_json_file
+from .jsonio import MAX_RECORD_FILE_BYTES, load_json_file, write_text_file
 from .mock_llm import MockLLMAdapter
 from .replay import replay_document, replay_ok
 from .repair import MAX_ROUNDS, run_repair
@@ -366,8 +383,8 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
             return 2
         try:
-            out.write_text(html, encoding="utf-8")
-        except OSError as exc:
+            write_text_file(out, html)
+        except (OSError, ValueError) as exc:
             print(f"output error: {exc}", file=sys.stderr)
             return 2
         print(f"Rendered -> {out}")
@@ -477,6 +494,15 @@ def main(argv: list[str] | None = None) -> int:
                       f"repair report path ({out}); choose a different "
                       f"--patched-out path", file=sys.stderr)
                 return 2
+            if patched.exists() and not patched.is_dir():
+                # Judged before any work (v1.74.0): the copy
+                # destination must be a directory or not exist
+                # yet — an existing regular file, FIFO, or device
+                # can only fail after the repair has run.
+                print(f"output error: --patched-out {patched} already "
+                      f"exists and is not a directory; choose a "
+                      f"different --patched-out path", file=sys.stderr)
+                return 2
         try:
             llm, references = _adapters(args.mode, args.model)
         except ValueError as exc:
@@ -498,11 +524,10 @@ def main(argv: list[str] | None = None) -> int:
             # rejection, raised by the loop's first verification run.
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        copy_error: OSError | shutil.Error | None = None
+        copy_error: OSError | shutil.Error | ValueError | None = None
         try:
-            out.write_text(json.dumps(report, indent=2) + "\n",
-                           encoding="utf-8")
-        except OSError as exc:
+            write_text_file(out, json.dumps(report, indent=2) + "\n")
+        except (OSError, ValueError) as exc:
             print(f"output error: {exc}", file=sys.stderr)
             copy_error = exc
         if copy_error is None:
