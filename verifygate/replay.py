@@ -82,6 +82,21 @@ entries of a list ``entries`` (anything else summarises as no
 checks, which cannot match a genuine run's summary), so a
 malformed record replays as *not reproduced*, never as a crash.
 
+Non-object patch linkage (v1.62.0): the reconstruction path read
+each later attempt's ``patch_from_previous`` with ``.get`` on the
+assumption it is an object — true of every report the repair loop
+emits, but a report is an untrusted artifact, and v1.61.0's
+narrative check already *fails* such a report rather than
+trusting the field. A linkage rewritten as a bare string, a
+number, a list, or ``true`` crashed :func:`replay_document` with
+an unhandled ``AttributeError`` — past the per-record path, whose
+doctrine since v1.47.0 is that a malformed record replays as *not
+reproduced*, never as a crash (at the CLI the backstop caught it
+as a usage error, exit 2, instead of the not-reproduced answer,
+exit 1). The linkage is now judged with ``isinstance`` first: a
+non-object linkage is simply no applied patch recorded, so the
+attempt cannot be reconstructed and replay reports exactly that.
+
 Result-aggregation validation (v1.56.0): :func:`replay_ok` —
 the one function that turns per-record replay results into the
 reproduced / not-reproduced answer — took its input on trust,
@@ -215,6 +230,10 @@ def replay_document(
     ``llm`` / ``references`` is a usage error up front, not an
     ``AttributeError`` escaping the per-record path mid-replay
     (that path catches only ``OSError`` / ``RuntimeError``).
+    A later attempt's patch linkage is judged by shape before it
+    is read (v1.62.0): a non-object ``patch_from_previous`` is no
+    applied patch recorded — the attempt cannot be reconstructed
+    and its result says so — never an ``AttributeError``.
     Reconstruction copies are removed before returning; the caller's
     candidate directory is never modified.
     """
@@ -234,9 +253,14 @@ def replay_document(
             if idx > 0:
                 # Reconstruct this attempt's candidate: fresh copy of
                 # the previous tree + the patch the report recorded.
-                patch_info = data["attempts"][idx].get("patch_from_previous") \
-                    if is_report else None
-                if not patch_info or not patch_info.get("applied") \
+                # The linkage is untrusted report data: a non-object
+                # linkage (v1.62.0) is no applied patch recorded, not
+                # an AttributeError past the per-record path.
+                attempt = data["attempts"][idx] if is_report else None
+                patch_info = attempt.get("patch_from_previous") \
+                    if isinstance(attempt, dict) else None
+                if not isinstance(patch_info, dict) \
+                        or not patch_info.get("applied") \
                         or not patch_info.get("patch_text"):
                     results.append({
                         "label": label,

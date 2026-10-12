@@ -586,6 +586,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.62.0 — non-object patch linkage in
+replay: the reconstruction path read
+each later attempt's
+`patch_from_previous` with `.get` on the
+assumption it is an object — true of
+every report the repair loop emits, but
+a report is an untrusted artifact. A
+linkage rewritten as a bare string, a
+number, a list, or `true` crashed
+`replay_document` with an unhandled
+`AttributeError`, past the per-record
+path whose doctrine since 1.47.0 is
+that a malformed record replays as *not
+reproduced*, never as a crash (at the
+CLI the backstop caught it as a usage
+error, exit 2, instead of the
+not-reproduced answer, exit 1). The
+linkage is now judged with `isinstance`
+first: a non-object linkage is simply
+no applied patch recorded, so the
+attempt cannot be reconstructed and
+replay reports exactly that.
+11 new tests (1944 total).
 1.61.0 — present-but-null report fields:
 the narrative check's legacy policy —
 only fields that are present are judged,
