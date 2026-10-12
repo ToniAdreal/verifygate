@@ -543,6 +543,20 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _escape_tree_rel(rel: str) -> str:
+    """Escape a relative path for one tree-hash line (v1.71.0).
+
+    Backslash is escaped first, then newline and carriage return, so
+    the escaped form never contains a literal line break and a literal
+    backslash sequence in a filename can never be confused with an
+    escaped control character. A path carrying none of those three
+    characters escapes to itself, byte for byte — which is what keeps
+    every tree hash computed before v1.71.0 unchanged for ordinary
+    filenames.
+    """
+    return rel.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
+
+
 def tree_hash(root: str | Path) -> str:
     """Content hash of a directory tree: sorted (relpath, file-hash) lines.
 
@@ -550,6 +564,21 @@ def tree_hash(root: str | Path) -> str:
     the candidate (and directory symlinks) are excluded, so the hash
     describes exactly the tree that was copied into the workspace and
     verified — never a host file reached through a link.
+
+    Each line is ``<relpath>:<file-hash>`` and the lines are joined
+    with newlines before hashing. Until v1.71.0 the relpath was
+    interpolated raw, so a filename carrying a newline (and a colon
+    plus a plausible-looking hash) could forge an extra line: two
+    different trees — one file named ``a:<hash-of-X>\\nc`` holding Y,
+    versus the two files ``a`` holding X and ``c`` holding Y — hashed
+    identically, and a candidate binding (``verify --candidate``,
+    replay's tree comparison, a sealed header) could not tell them
+    apart. Relpaths are now escaped (see ``_escape_tree_rel``) before
+    they enter a line, which makes the encoding injective: each line
+    decodes uniquely (the file hash is the fixed-width suffix) and no
+    filename can manufacture an extra line. Filenames without a
+    backslash, newline, or carriage return hash exactly as before, so
+    every committed record's candidate binding is unchanged.
 
     The sandbox's candidate size bounds are enforced first (v1.23.0):
     binding a record to an oversized candidate directory (``verify
@@ -568,7 +597,7 @@ def tree_hash(root: str | Path) -> str:
     check_candidate_bounds(root)
 
     lines = [
-        f"{rel}:{_sha_bytes(source.read_bytes())}"
+        f"{_escape_tree_rel(rel)}:{_sha_bytes(source.read_bytes())}"
         for rel, source in iter_candidate_files(root)
     ]
     return _sha("\n".join(lines))

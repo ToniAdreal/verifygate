@@ -592,6 +592,27 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.71.0 — tree-hash line escaping:
+the candidate tree hash joined
+`<relpath>:<file-hash>` lines with
+newlines and interpolated the relpath
+raw, so a filename carrying a newline
+(plus a colon and a plausible-looking
+hash) could forge an extra line — a
+one-file tree holding Y in a file named
+`a:<sha256(X)>` + newline + `c` hashed
+identically to the two-file tree `a`
+holding X plus `c` holding Y, and no
+candidate binding could tell them
+apart. Relpaths are now escaped
+(backslash, newline, carriage return)
+before they enter a line, making the
+encoding injective. Filenames without
+those characters hash exactly as
+before, so every committed record's
+candidate binding is unchanged.
+8 new tests (2091 total).
+
 1.70.0 — deep-nesting traversal:
 the candidate traversal and the
 workspace directory skeleton walked
