@@ -592,6 +592,27 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.82.0 — The patch applier is faithful
+down to the trailing newline: the
+``\ No newline at end of file`` marker
+that follows a hunk's final line was
+dropped by the parser (it arrives only
+once the hunk's line counts are
+exhausted), and every modification
+rewrote the file's trailing-newline
+state from the surviving markers
+alone — a patch whose new side must
+end without a newline silently gained
+one, and a patch that touched only
+the first lines of such a file added
+one at its end too. The marker is now
+consumed after the hunk body and
+attributed per side, and the trailing
+state changes only when a hunk
+actually reaches the end of the file.
+14 new
+tests (2228 total).
+
 1.81.0 — The Token Factory transport
 reads its response bounded: it
 delegated the read to the connector

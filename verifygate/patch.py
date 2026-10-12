@@ -17,6 +17,18 @@ were silently dropped, so a repair that created a script could never
 make it runnable — the patched candidate failed its ``./script``
 check for a reason that had nothing to do with the model's fix.
 
+Trailing-newline fidelity (since v1.82.0): the ``\\ No newline at
+end of file`` marker is honoured on both sides of a diff and the
+file's trailing-newline state changes only when a hunk actually
+reaches the end of the file. Before this, the parser dropped the
+marker that follows a hunk's *final* line (it arrives only once
+the hunk's line counts are exhausted), and application rewrote
+the trailing state from the surviving markers alone — so a patch
+whose new side must end without a newline silently gained one,
+and a patch that touched only the first lines of a file without
+a trailing newline added one at its end too: the patched tree
+was not the tree the diff specified.
+
 Application is **atomic across files** (since v1.10.0): every file
 patch is validated and applied to an in-memory staged copy first,
 and the workspace on disk is written only after the *whole* diff has
@@ -167,6 +179,7 @@ class Hunk:
     new_count: int
     lines: list[tuple[str, str]] = field(default_factory=list)  # (kind, text)
     new_no_trailing_newline: bool = False
+    old_no_trailing_newline: bool = False
 
 
 @dataclass
@@ -200,6 +213,22 @@ def _mode_value(line: str) -> int | None:
         return int(line.split()[-1], 8)
     except ValueError:
         return None
+
+
+def _note_no_newline_marker(hunk: Hunk) -> None:
+    """Attribute a ``\\ No newline at end of file`` marker (v1.82.0).
+
+    The marker describes the line it follows: a context line is on
+    both sides of the diff, a ``+`` line only on the new side, a
+    ``-`` line only on the old side.
+    """
+    if not hunk.lines:
+        return
+    kind = hunk.lines[-1][0]
+    if kind in (" ", "+"):
+        hunk.new_no_trailing_newline = True
+    if kind in (" ", "-"):
+        hunk.old_no_trailing_newline = True
 
 
 def parse_patch(text: str) -> list[FilePatch]:
@@ -286,8 +315,7 @@ def parse_patch(text: str) -> list[FilePatch]:
                 while i < len(lines) and (bare or need_old > 0 or need_new > 0):
                     line = lines[i]
                     if line.startswith("\\"):  # "\ No newline at end of file"
-                        if hunk.lines and hunk.lines[-1][0] in (" ", "+"):
-                            hunk.new_no_trailing_newline = True
+                        _note_no_newline_marker(hunk)
                         i += 1
                         continue
                     if bare and (
@@ -304,6 +332,14 @@ def parse_patch(text: str) -> list[FilePatch]:
                         need_old -= 1
                     if kind in (" ", "+"):
                         need_new -= 1
+                    i += 1
+                if i < len(lines) and lines[i].startswith("\\"):
+                    # The marker after a hunk's *final* line arrives
+                    # only once the line counts are exhausted, so the
+                    # loop above never sees it (v1.82.0): consume it
+                    # here, or a patch that must leave the file with
+                    # no trailing newline silently gains one.
+                    _note_no_newline_marker(hunk)
                     i += 1
                 if bare:
                     hunk.old_count = sum(
@@ -341,9 +377,27 @@ def _safe_target(root: Path, rel: str) -> Path:
     return target
 
 
-def _apply_hunks(current: list[str], fp: FilePatch) -> list[str]:
+def _apply_hunks(
+    current: list[str], fp: FilePatch
+) -> tuple[list[str], bool | None]:
+    """Apply one file patch's hunks to ``current``.
+
+    Returns the new lines and the hunk-determined trailing-newline
+    state of the file's end (v1.82.0): ``True`` when the last hunk
+    that reaches the end of the file leaves it *without* a trailing
+    newline (its final new-side line carries the ``\\ No newline``
+    marker), ``False`` when such a hunk leaves it *with* one, and
+    ``None`` when no hunk reaches the end of the file — the end is
+    then untouched and the caller preserves the state it already
+    had. Before this, the marker after a hunk's final line was
+    dropped by the parser and every modification rewrote the
+    trailing state from the markers alone, so a file without a
+    trailing newline gained one whether or not the patch touched
+    its end.
+    """
     lines = list(current)
     offset = 0
+    eof_no_newline: bool | None = None
     for hunk in fp.hunks:
         old_seq = [text for kind, text in hunk.lines if kind in (" ", "-")]
         new_seq = [text for kind, text in hunk.lines if kind in (" ", "+")]
@@ -362,9 +416,16 @@ def _apply_hunks(current: list[str], fp: FilePatch) -> list[str]:
                 f"{fp.new_path}: hunk @@ -{hunk.old_start} @@ does not match "
                 "the file on disk (context/removed lines differ)"
             )
+        if pos + len(old_seq) == len(lines):
+            # This hunk reaches the (current) end of the file, so
+            # its new side decides the trailing-newline state: a
+            # marker on the new side means no trailing newline; a
+            # marker only on the old side (a deleted final line)
+            # means the surviving last line was newline-terminated.
+            eof_no_newline = hunk.new_no_trailing_newline
         lines[pos:pos + len(old_seq)] = new_seq
         offset += len(new_seq) - len(old_seq)
-    return lines
+    return lines, eof_no_newline
 
 
 def _read_lines(path: Path) -> list[str]:
@@ -568,19 +629,19 @@ def apply_patch(
                         f"cannot create {fp.new_path}: already exists")
             elif _exists(target, fp.new_path):
                 raise PatchError(f"cannot create {fp.new_path}: already exists")
-            new_lines = _apply_hunks([], fp)
+            new_lines, eof_no_newline = _apply_hunks([], fp)
             staged[target] = _Staged(
                 exists=True,
                 lines=new_lines,
-                trailing_newline=not any(
-                    h.new_no_trailing_newline for h in fp.hunks),
+                trailing_newline=not eof_no_newline
+                if eof_no_newline is not None else True,
                 mode=fp.new_mode,
             )
             changed.append(fp.new_path)
         elif fp.new_path == "/dev/null":  # file deletion
             target = _safe_target(root, fp.old_path)
             state = load(target, fp.old_path, "delete")
-            remaining = _apply_hunks(state.lines, fp)
+            remaining, _eof = _apply_hunks(state.lines, fp)
             if remaining:
                 raise PatchError(f"deletion patch for {fp.old_path} leaves content")
             state.exists = False
@@ -591,9 +652,11 @@ def apply_patch(
             target = _safe_target(root, fp.new_path)
             state = load(target, fp.new_path, "modify")
             if fp.hunks:
-                state.lines = _apply_hunks(state.lines, fp)
-                state.trailing_newline = not any(
-                    h.new_no_trailing_newline for h in fp.hunks)
+                state.lines, eof_no_newline = _apply_hunks(state.lines, fp)
+                if eof_no_newline is not None:
+                    state.trailing_newline = not eof_no_newline
+                # No hunk reached the end of the file: its trailing
+                # state stays whatever load() read from disk (v1.82.0).
             # Rewriting an existing file in place preserves its mode;
             # an explicit git mode line overrides it.
             if fp.new_mode is not None:
