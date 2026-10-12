@@ -52,6 +52,16 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   directory: a malformed value is a ``ValueError`` and a missing /
   not-a-directory value the one ``FileNotFoundError`` every path
   already produced, both before any work happens (CLI exit 2).
+* **Traversal-root validation** — :func:`iter_candidate_files`,
+  the single traversal behind the workspace copy, the tree hash,
+  and the repair loop's prompt snapshot, validates its own
+  ``root`` through :func:`validate_candidate_dir`, eagerly at
+  call time (v1.58.0). Before this it coerced the root with a
+  bare ``Path(...)``: every production caller happened to
+  validate first, but a direct caller got a raw ``TypeError``
+  for a non-path root, an empty string silently traversing the
+  current directory, and a ``NotADirectoryError`` for a regular
+  file instead of the one ``FileNotFoundError``.
 * **Check-execution argument validation** — :func:`run_command`,
   the one execution primitive, validates its own arguments
   (v1.51.0): the ``command`` must be a non-empty string (whitespace
@@ -256,8 +266,29 @@ def iter_candidate_files(root: str | Path):
     descended into (housekeeping names skipped); a file symlink is
     followed only when its resolved target stays inside ``root``;
     directory symlinks and links pointing outside are never followed.
+
+    Traversal-root validation (v1.58.0): ``root`` is validated
+    through :func:`validate_candidate_dir` *eagerly*, at call time —
+    this function returns an iterator, but a malformed root is a
+    ``ValueError`` from the call itself, not a surprise deferred to
+    the first iteration, and a root naming no existing directory is
+    the one ``FileNotFoundError``. Before this, the traversal — the
+    one primitive every consumer of a candidate tree passes
+    through — coerced its root with a bare ``Path(...)``: a non-path
+    root crashed with a raw ``TypeError`` from ``Path``, an empty
+    string silently traversed the *current directory* (``Path("")``
+    is ``"."``), and a regular file raised ``NotADirectoryError``
+    out of ``os.scandir`` instead of the ``FileNotFoundError`` every
+    other path raises. Every production caller happened to validate
+    first; the primitive now judges its own root, exactly as
+    ``run_command`` judges its ``cwd`` (v1.51.0) and
+    ``apply_patch`` its root (v1.57.0).
     """
-    root = Path(root)
+    root = validate_candidate_dir(root, name="root")
+    return _iter_candidate_files(root)
+
+
+def _iter_candidate_files(root: Path):
     root_resolved = root.resolve()
 
     def walk(directory: Path, prefix: str):

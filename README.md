@@ -586,6 +586,31 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.58.0 — traversal-root validation:
+`iter_candidate_files`, the single traversal
+behind the workspace copy, the tree hash, and
+the repair loop's prompt snapshot, coerced
+its root with a bare `Path(...)` — every
+production caller happened to validate
+first, but the primitive itself took its
+root on trust. A non-path root crashed with
+a raw `TypeError` from `Path`; an empty
+string silently traversed the *current
+directory* (`Path("")` is `"."`); a regular
+file raised `NotADirectoryError` out of
+`os.scandir` instead of the one
+`FileNotFoundError` every other path
+raises; and because the traversal is a
+generator, none of it surfaced until the
+first iteration. The root is now validated
+through `sandbox.validate_candidate_dir`
+eagerly at call time — the function returns
+an iterator, but a malformed root is a
+`ValueError` from the call itself — exactly
+as `run_command` judges its `cwd` (v1.51.0)
+and `apply_patch` its root (v1.57.0). The
+traversal's containment semantics are
+unchanged. 18 new tests (1848 total).
 1.57.0 — patch-applier root validation:
 the `root` a patch applies under was the
 one workspace argument `apply_patch` still
