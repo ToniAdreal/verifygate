@@ -101,6 +101,27 @@ api_key pattern): only ``None`` means "not supplied"; every
 supplied value, falsy or not, faces the non-empty-string
 validation below.
 
+Prompt-embedding bounds (v1.67.0): two parts of the patch prompt
+were embedded verbatim, at any size, from ``failing_evidence`` —
+the ``candidate_files`` snapshot and the ``patch_error``
+feedback. The repair loop caps both at the source (its snapshot
+skips files over 4,000 characters and stops at 12,000 total; a
+stored patch error is truncated to 2,000), but the adapter is
+the method the loop's contract is documented on, and a direct
+caller bypassed every cap: one probe call carrying a
+500,000-character file and a 500,000-character patch error
+produced a 1,001,449-character prompt — a paid call whose cost
+the caller never chose. The embedding now mirrors the loop's
+caps at the method: only (string path, string content) file
+entries are embedded, a file over ``MAX_EMBED_FILE_CHARS`` is
+skipped whole (never truncated — a truncated file would invite
+a diff whose context lines do not exist, the snapshot's own
+reasoning), embedding stops at ``MAX_EMBED_TOTAL_CHARS``
+total, and the patch error is truncated to
+``MAX_EMBED_PATCH_ERROR_CHARS``. Prompts the repair loop
+produces are byte-identical: its snapshot and feedback already
+satisfy every cap.
+
 Nothing in here can affect a verdict; it only produces advisory text.
 """
 
@@ -141,6 +162,17 @@ EXPLAIN_MAX_TOKENS = 4096
 # A network call that has not answered in an hour is not going to;
 # an unbounded timeout on a paid call is a hang, not patience.
 MAX_TIMEOUT_S = 3600
+
+# Prompt-embedding bounds (v1.67.0, see the module docstring):
+# the per-file and total caps mirror the repair loop's candidate
+# snapshot (``repair._MAX_FILE_CHARS`` / ``repair._MAX_TOTAL_CHARS``)
+# and the patch-error cap mirrors its stored-error truncation
+# (``repair.MAX_PATCH_ERROR_CHARS``), so a prompt the loop's own
+# evidence produces is embedded exactly as before, and only a
+# direct caller's oversized evidence is bounded.
+MAX_EMBED_FILE_CHARS = 4000
+MAX_EMBED_TOTAL_CHARS = 12000
+MAX_EMBED_PATCH_ERROR_CHARS = 2000
 
 
 def validate_timeout_s(timeout_s, name: str = "timeout_s"):
@@ -391,10 +423,15 @@ class TokenFactoryAdapter(LLMAdapter):
                 "address the failures:\n"
                 + evidence_json[:6000]
             )
-            if failing_evidence.get("patch_error"):
+            patch_error = failing_evidence.get("patch_error")
+            if patch_error:
+                # Embedded truncated (v1.67.0): the loop's feedback
+                # is already capped at its stored-error ceiling, but
+                # a direct caller's error text is not — a prompt is a
+                # paid call, so its size is bounded at the method.
                 user += (
                     "\n\nYour previous diff was REJECTED by the patch "
-                    f"applier: {failing_evidence['patch_error']}\n"
+                    f"applier: {str(patch_error)[:MAX_EMBED_PATCH_ERROR_CHARS]}\n"
                     "The usual cause is a context or removed line that "
                     "does not match the file character for character "
                     "(paraphrased, re-wrapped, or merged lines). Copy "
@@ -403,8 +440,23 @@ class TokenFactoryAdapter(LLMAdapter):
             files = failing_evidence.get("candidate_files") or {}
             if not isinstance(files, dict):
                 files = {}
+            # Embedded under the snapshot caps (v1.67.0): only
+            # string path/content pairs, a file over the per-file
+            # cap skipped whole (a truncated file would invite a
+            # diff against contents that do not exist), and a
+            # total cap across files. The repair loop's snapshot
+            # already satisfies all three, so its prompts are
+            # unchanged.
+            embedded_total = 0
             for path, content in files.items():
+                if not isinstance(path, str) \
+                        or not isinstance(content, str) \
+                        or len(content) > MAX_EMBED_FILE_CHARS \
+                        or embedded_total + len(content) \
+                        > MAX_EMBED_TOTAL_CHARS:
+                    continue
                 user += f"\n\nCurrent contents of {path}:\n```\n{content}\n```"
+                embedded_total += len(content)
         user += (
             "\n\nReason silently: your reply must contain no deliberation, "
             "analysis, or draft diffs — earlier replies that reasoned in "

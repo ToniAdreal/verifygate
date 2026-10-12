@@ -586,6 +586,32 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.67.0 — prompt-embedding bounds:
+the real adapter embedded two parts
+of failing_evidence into the patch
+prompt verbatim, at any size — the
+candidate_files snapshot and the
+patch_error feedback. The repair loop
+caps both at the source, but a direct
+caller bypassed every cap: one probe
+call carrying a 500,000-character
+file and a 500,000-character patch
+error produced a 1,001,449-character
+prompt, a paid call whose size the
+caller never chose. The embedding now
+mirrors the loop's caps at the
+method: only string path/content
+pairs are embedded, a file over the
+4,000-character per-file cap is
+skipped whole (never truncated — a
+truncated file would invite a diff
+against contents that do not exist),
+embedding stops at 12,000 characters
+total, and the patch error is
+truncated to 2,000. Prompts the
+repair loop produces are unchanged.
+10 new tests (2057 total).
+
 1.66.0 — adapter-surface resilience:
 the adapters' optional surface — the
 `name` attribute and the usage-log

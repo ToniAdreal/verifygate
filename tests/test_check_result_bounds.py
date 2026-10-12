@@ -72,15 +72,30 @@ def _record(check) -> dict:
 def test_ceilings_are_the_documented_generous_values():
     assert MAX_DURATION_MS == MAX_TIMEOUT_S * 2 * 1000
     assert (MIN_EXIT_CODE, MAX_EXIT_CODE) == (-255, 255)
-    # Every committed fixture sits far below the duration ceiling
-    # and uses exit codes 0/1 only.
-    for path in (APP / "samples" / "evidence_passing.json",
-                 APP / "evidence_self_check.json"):
-        data = json.loads(path.read_text(encoding="utf-8"))
-        for entry in data["entries"]:
-            if entry.get("kind") == "check":
-                assert entry["duration_ms"] <= MAX_DURATION_MS // 10
-                assert entry["exit_code"] in (0, 1)
+    # The sample fixture sits far below the duration ceiling and
+    # uses exit codes 0/1 only.
+    sample = json.loads(
+        (APP / "samples" / "evidence_passing.json").read_text(
+            encoding="utf-8"))
+    for entry in sample["entries"]:
+        if entry.get("kind") == "check":
+            assert entry["duration_ms"] <= MAX_DURATION_MS // 10
+            assert entry["exit_code"] in (0, 1)
+    # The dogfood record asserts the cap itself, not a headroom
+    # fraction (corrected in v1.67.0, the v1.55.0 precedent): its
+    # one check is the whole test suite, whose duration is set by
+    # the suite's size and the machine's load, not by anything the
+    # ceiling governs — a 751,942 ms inner run under load crossed
+    # the //10 line and self-locked the regeneration (run 2's
+    # inner suite failed this very assertion over run 1's genuine
+    # PASS record). The cap is still enforced structurally over
+    # the same record by the verify_chain / document_ok tests.
+    dogfood = json.loads(
+        (APP / "evidence_self_check.json").read_text(encoding="utf-8"))
+    for entry in dogfood["entries"]:
+        if entry.get("kind") == "check":
+            assert entry["duration_ms"] <= MAX_DURATION_MS
+            assert entry["exit_code"] in (0, 1)
 
 
 def test_duration_at_the_ceiling_verifies():
