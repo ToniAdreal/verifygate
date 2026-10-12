@@ -586,6 +586,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.60.0 — error-note normalisation:
+the two text helpers on the runner's
+sealing path judged only the *length* of
+what they were handed. `_cap_error`
+truncated a long string but copied any
+other value verbatim — and the one note
+it does not format itself, a lookup's
+`last_error`, is adapter-supplied: a
+third-party lookup may set it to anything.
+An int or dict note sealed verbatim
+produced a record whose diagnosis entry
+fails the structure check (a note must be
+a string or None within the cap), so the
+record failed its own verification the
+moment it was written; a non-serializable
+note (an exception object, a set) crashed
+`build_record`'s JSON encoding with a raw
+`TypeError` and the FAIL record was lost
+entirely. `normalise_explanation` likewise
+crashed with a raw `TypeError` on a
+non-string input. A non-string error note
+is now discarded for a deterministic
+placeholder naming only the offending
+type, and a non-string explanation is one
+`ValueError`; string notes and
+explanations pass through exactly as
+before. 34 new tests (1920 total).
 1.59.0 — record-writer validation:
 `write_record`, the one function that
 materialises a sealed record to disk (and

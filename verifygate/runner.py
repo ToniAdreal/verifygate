@@ -154,6 +154,32 @@ record leaves a pre-existing destination byte-for-byte
 unchanged. Genuine filesystem faults (a missing parent, a
 directory as the destination) stay ``OSError``, exactly as
 every other write path reports them.
+
+Error-note normalisation (v1.60.0): the two text helpers on this
+sealing path judged only the *length* of what they were handed.
+:func:`_cap_error` truncated a long string but copied any other
+value verbatim — and the one note it does not format itself, a
+lookup's ``last_error``, is adapter-supplied text a third-party
+``ReferenceLookup`` may set to anything at all. An ``int`` or a
+``dict`` note was sealed verbatim into the diagnosis entry,
+whose structure check requires a string-or-``None`` note within
+``MAX_ERROR_CHARS``: the record failed its own verification the
+moment it was written. A non-serializable note (an exception
+object, a set) was worse: ``build_record``'s canonical JSON
+encoding raised a raw ``TypeError`` and the FAIL record the
+checks had already decided was lost entirely — the v1.19.0 loss
+class, through the note instead of the explanation.
+:func:`normalise_explanation` likewise assumed a string and
+crashed with a raw ``TypeError`` (``len()``) on any other type —
+its runner call site guarantees a string today, but the helper
+is the one sealing path for diagnosis text and now judges its
+own input like every other sealing helper. A non-string error
+note is now discarded for a deterministic runner-formatted
+placeholder naming only the offending type (the note's content
+is the lookup's own malformed value; nothing of it is sealed),
+and a non-string explanation is one ``ValueError``. String
+notes and explanations — every first-party value — pass through
+exactly as before.
 """
 
 from __future__ import annotations
@@ -199,7 +225,17 @@ def normalise_explanation(text: str) -> str:
     its diagnosis was truncated instead of silently dropping the
     tail. Applied to model, mock, and fallback text alike: this is
     the one sealing path, and ``evidence`` mirrors the cap.
+
+    A non-string input is one ``ValueError`` (v1.60.0): the
+    helper previously assumed a string and crashed with a raw
+    ``TypeError`` from ``len()`` — the runner's call site checks
+    the adapter's return before calling this, but the sealing
+    helper judges its own input like every other one.
     """
+    if not isinstance(text, str):
+        raise ValueError(
+            "explanation must be a string, got "
+            f"{type(text).__name__}")
     if len(text) <= MAX_EXPLANATION_CHARS:
         return text
     marker = (
@@ -217,10 +253,23 @@ def _cap_error(value):
     notes the runner seals, so a lookup's ``last_error`` — the one
     note the runner does not format itself — cannot seal a record
     the structure check then rejects for its length.
+
+    A non-string, non-``None`` value is normalised, not copied
+    (v1.60.0): the structure check requires a string-or-``None``
+    note, so an ``int`` / ``dict`` note sealed verbatim produced
+    a record that failed its own verification, and a
+    non-serializable note (an exception object, a set) crashed
+    ``build_record``'s JSON encoding with a raw ``TypeError``
+    and lost the record. The malformed value is discarded for a
+    deterministic placeholder naming only its type — nothing of
+    the lookup's own malformed content is sealed.
     """
-    if isinstance(value, str) and len(value) > MAX_ERROR_CHARS:
+    if value is None:
+        return None
+    if isinstance(value, str):
         return value[:MAX_ERROR_CHARS]
-    return value
+    return (f"malformed error note discarded "
+            f"(got {type(value).__name__})")
 
 
 def _fallback_explanation(check_dicts: list[dict], adapter_name: str,
