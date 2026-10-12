@@ -592,6 +592,20 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.83.0 — The patch applier is faithful
+to a file's line endings too: lines
+were read with splitlines() and always
+written back joined by LF, so patching
+one line of a CRLF (Windows-style) file
+silently rewrote every line ending in
+it — and a mode-only commit on such a
+file did the same while changing no
+content at all. A modified file now
+keeps its dominant line ending, and a
+created file takes the patch text's own
+ending. 9 new
+tests (2237 total).
+
 1.82.0 — The patch applier is faithful
 down to the trailing newline: the
 ``\ No newline at end of file`` marker

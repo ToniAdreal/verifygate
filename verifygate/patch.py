@@ -29,6 +29,20 @@ and a patch that touched only the first lines of a file without
 a trailing newline added one at its end too: the patched tree
 was not the tree the diff specified.
 
+Line-ending fidelity (since v1.83.0): a modified file keeps its
+own line-ending style. Before this, lines were read with
+``splitlines()`` and always written back joined by ``\\n``, so
+patching one line of a CRLF (Windows-style) file silently
+rewrote every line ending in it — and a mode-only commit on a
+CRLF file did the same while changing no content at all. The
+staged state now records the file's dominant line ending
+(``\\r\\n`` when CRLF breaks are at least as common as lone-LF
+breaks) and the commit writes that ending back; a created file
+takes the patch text's own ending (CRLF when the diff itself
+arrives in CRLF, LF otherwise). Mixed-ending files follow the
+dominant-ending rule, documented here rather than guessed
+per line.
+
 Application is **atomic across files** (since v1.10.0): every file
 patch is validated and applied to an in-memory staged copy first,
 and the workspace on disk is written only after the *whole* diff has
@@ -440,11 +454,29 @@ def _read_lines(path: Path) -> list[str]:
             f"cannot patch {path.name}: not a UTF-8 text file") from exc
 
 
-def _write_lines(path: Path, lines: list[str], trailing_newline: bool = True) -> None:
+def _dominant_line_ending(raw: bytes) -> str:
+    """The line ending a file predominantly uses (v1.83.0).
+
+    CRLF wins ties: a file whose breaks are half CRLF is a CRLF
+    file with some stray LF lines, and normalising it to LF would
+    rewrite the endings its author chose for the other half.
+    """
+    crlf = raw.count(b"\r\n")
+    if crlf and crlf >= raw.count(b"\n") - crlf:
+        return "\r\n"
+    return "\n"
+
+
+def _write_lines(
+    path: Path,
+    lines: list[str],
+    trailing_newline: bool = True,
+    line_ending: str = "\n",
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = "\n".join(lines)
+    text = line_ending.join(lines)
     if text and trailing_newline:
-        text += "\n"
+        text += line_ending
     path.write_text(text, encoding="utf-8")
 
 
@@ -456,13 +488,14 @@ class _Staged:
     lines: list[str] = field(default_factory=list)
     trailing_newline: bool = True
     mode: int | None = None  # chmod to apply at commit; None = keep
+    line_ending: str = "\n"  # the file's own ending, written back (v1.83.0)
 
 
 def _staged_bytes(state: _Staged) -> int:
     """Byte size of a staged file's content as the commit writes it."""
-    text = "\n".join(state.lines)
+    text = state.line_ending.join(state.lines)
     if text and state.trailing_newline:
-        text += "\n"
+        text += state.line_ending
     return len(text.encode("utf-8"))
 
 
@@ -611,6 +644,9 @@ def apply_patch(
                 # Preserve the file's trailing-newline state so a
                 # mode-only commit rewrites byte-identical content.
                 trailing_newline=not raw or raw.endswith(b"\n"),
+                # Preserve the file's line-ending style too
+                # (v1.83.0): a CRLF file stays CRLF, line for line.
+                line_ending=_dominant_line_ending(raw),
             )
             staged[target] = state
         else:
@@ -636,6 +672,9 @@ def apply_patch(
                 trailing_newline=not eof_no_newline
                 if eof_no_newline is not None else True,
                 mode=fp.new_mode,
+                # A created file has no on-disk style to preserve:
+                # it takes the patch text's own ending (v1.83.0).
+                line_ending="\r\n" if "\r\n" in patch_text else "\n",
             )
             changed.append(fp.new_path)
         elif fp.new_path == "/dev/null":  # file deletion
@@ -675,7 +714,8 @@ def apply_patch(
         if not state.exists:
             target.unlink(missing_ok=True)
             continue
-        _write_lines(target, state.lines, state.trailing_newline)
+        _write_lines(
+            target, state.lines, state.trailing_newline, state.line_ending)
         if state.mode is not None:
             target.chmod(state.mode & 0o777)
     return changed
