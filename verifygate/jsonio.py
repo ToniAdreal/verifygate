@@ -136,11 +136,35 @@ cliff — rejects any document nested deeper than
 The ceiling is generous: the deepest genuine document (a
 repair report: report → attempt → record → entry → usage →
 call → usage) nests about ten levels.
+
+Strict JSON decoding (v1.76.0): the loader's contract — every
+malformed input is one :class:`JsonFileError` — had two holes
+left in the decoder itself. (1) An integer literal longer than
+the interpreter's conversion limit (4,300 digits) makes
+``json.loads`` raise a plain ``ValueError`` that is *not* a
+``JSONDecodeError``: it escaped the loader raw, and on the spec
+path — whose loader re-raises only :class:`JsonFileError` and
+``OSError`` as ``SpecError`` — the CLI died with an unhandled
+traceback and exit 1 instead of its one-line spec error with
+exit 2 (reproduced with a 6,000-digit timeout). (2) The decoder
+accepted the non-standard constants ``NaN``, ``Infinity`` and
+``-Infinity`` — Python extensions that are not JSON at all — so
+a file no other JSON parser would accept loaded here. The
+decoder now rejects both: oversize integer literals are the
+same :class:`JsonFileError` as malformed JSON (naming only the
+rule, never the literal), and the constants are rejected via
+``parse_constant``. A numeric literal that overflows float
+range (``1e999``) decodes to ``inf`` without passing through
+``parse_constant`` at all, so the decoded document is also
+scanned — iteratively — for a non-finite float. No genuine
+document is affected: every document VerifyGate writes is
+standard JSON with small ints and no floats.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import os
 import stat
 from pathlib import Path
@@ -210,7 +234,9 @@ def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
     (v1.46.0 — validated before ``open()`` is ever reached, so an
     ``int`` is never mistaken for a file descriptor), an invalid
     ``max_bytes`` (v1.53.0 — validated before the path), an
-    oversize file, non-UTF-8 content, malformed JSON, or a
+    oversize file, non-UTF-8 content, malformed JSON (strictly
+    decoded since v1.76.0: non-standard constants and oversize
+    integer literals are the same rejection), or a
     document nested deeper than :data:`MAX_JSON_DEPTH`
     (v1.75.0 — a decoder ``RecursionError`` is the same
     rejection, never a traceback); ``OSError`` propagates for
@@ -238,10 +264,32 @@ def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise JsonFileError(f"{kind} file is not UTF-8: {path}: {exc}") from exc
+    def _reject_constant(name: str):
+        # Strict JSON (v1.76.0, see the module docstring): NaN /
+        # Infinity / -Infinity are Python extensions, not JSON;
+        # the three names are fixed strings, safe to name here.
+        raise JsonFileError(
+            f"{kind} file is not valid JSON: non-standard constant "
+            f"{name}: {path}")
+
     try:
-        data = json.loads(text)
+        data = json.loads(text, parse_constant=_reject_constant)
+    except JsonFileError:
+        raise
     except json.JSONDecodeError as exc:
         raise JsonFileError(str(exc)) from exc
+    except ValueError:
+        # Strict JSON (v1.76.0): the decoder's remaining
+        # ValueError is the integer-literal digit limit (an int
+        # with more digits than the interpreter converts). It is
+        # a plain ValueError, not a JSONDecodeError, so before
+        # this it escaped the loader raw — and on the spec path,
+        # whose loader re-raises only JsonFileError / OSError,
+        # it crashed the CLI with a traceback. The rejection
+        # names only the rule, never the literal.
+        raise JsonFileError(
+            f"{kind} file is not valid JSON: an integer literal "
+            f"exceeds the maximum number of digits: {path}") from None
     except RecursionError:
         # Nesting-depth bound (v1.75.0, see the module docstring):
         # the decoder recursed past the interpreter limit. The
@@ -254,7 +302,30 @@ def load_json_file(path: str | Path, *, max_bytes: int, kind: str = "JSON"):
         raise JsonFileError(
             f"{kind} file exceeds the maximum nesting depth of "
             f"{MAX_JSON_DEPTH}: {path}")
+    if _has_nonfinite_float(data):
+        # Strict JSON (v1.76.0): a numeric literal that overflows
+        # float range (1e999) decodes to inf without ever passing
+        # through parse_constant; a decoded document carrying a
+        # non-finite float holds a value JSON cannot represent.
+        raise JsonFileError(
+            f"{kind} file is not valid JSON: a numeric literal is "
+            f"out of range: {path}")
     return data
+
+
+def _has_nonfinite_float(data) -> bool:
+    """Whether decoded JSON carries an inf/nan float (iterative)."""
+    stack = [data]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, float):
+            if not math.isfinite(node):
+                return True
+        elif isinstance(node, dict):
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return False
 
 
 def _json_depth(data) -> int:

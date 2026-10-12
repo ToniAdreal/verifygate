@@ -592,6 +592,25 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.76.0 — Strict JSON decoding in the
+bounded loader: an integer literal
+longer than the interpreter's conversion
+limit made `json.loads` raise a plain
+`ValueError` (not a `JSONDecodeError`),
+which escaped the loader raw and crashed
+`verifygate run` / `repair` on a spec
+with an unhandled traceback (exit 1);
+and the decoder accepted values that are
+not JSON at all — the `NaN` / `Infinity`
+/ `-Infinity` constants, and numeric
+literals that overflow float range
+(`1e999` → inf). All are now the same
+one-line `JsonFileError` usage error
+(exit 2) as malformed JSON. Genuine
+documents (standard JSON, small ints,
+finite floats) load exactly as before.
+22 new tests (2165 total).
+
 1.75.0 — JSON nesting-depth bound:
 the bounded loader handed its text to
 `json.loads`, whose decoder recurses, so
