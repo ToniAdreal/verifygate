@@ -249,6 +249,20 @@ null stay legitimate: ``failed_patch`` and ``last_patch_error``
 when no patch was rejected, an applied patch's ``error`` /
 ``error_kind``, and attempt 0's ``patch_from_previous``.
 
+Unhashable report adapter (v1.63.0): the narrative check's
+sealed-adapter cross-check compared the sealed adapter names
+against ``{adapter}`` — a set built out of the report's stated
+``llm_adapter``, an untrusted field. Hashable non-string values
+(an int, ``true``) were already flagged as not an adapter name
+and as a mismatch, but a stated adapter rewritten as a list or
+an object is unhashable: building the set raised ``TypeError``
+and crashed :func:`verify_document` and the web view, and the
+CLI's backstop reported it as a usage error (exit 2) instead
+of the tampered-report answer (exit 1 with a SUMMARY MISMATCH
+banner). The comparison now requires a string adapter equal
+to the sealed names; any other stated value is a mismatch by
+construction, never a set member.
+
 Result-aggregation validation (v1.56.0): :func:`document_ok` —
 the one function that turns per-record results into the
 document's intact / not-intact answer — took its input on
@@ -792,7 +806,16 @@ def narrative_problems(data) -> list[str]:
 
     # The credited adapter must be the one the sealed parts name:
     # every FAIL attempt's sealed diagnosis and every sealed usage
-    # call was recorded under the adapter that actually ran.
+    # call was recorded under the adapter that actually ran. The
+    # comparison must never build a set out of the stated adapter
+    # (v1.63.0): a report is untrusted input, and a stated adapter
+    # rewritten as a list or an object is unhashable — ``{adapter}``
+    # raised ``TypeError`` and crashed verify and the web view
+    # (the CLI backstop turned it into a usage error, exit 2,
+    # instead of the tampered-report answer, exit 1) even though
+    # the field had already been flagged as not an adapter name
+    # above. A non-string adapter cannot equal the sealed string
+    # names, so it is a mismatch by construction.
     if adapter is not None:
         sealed_adapters = set()
         for attempt in attempts:
@@ -814,7 +837,9 @@ def narrative_problems(data) -> list[str]:
                         if isinstance(call, dict) \
                                 and isinstance(call.get("adapter"), str):
                             sealed_adapters.add(call["adapter"])
-        if sealed_adapters and sealed_adapters != {adapter}:
+        if sealed_adapters and not (
+                isinstance(adapter, str)
+                and sealed_adapters == {adapter}):
             problems.append("report adapter does not match the sealed attempts")
     return problems
 

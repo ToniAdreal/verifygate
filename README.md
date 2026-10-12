@@ -586,6 +586,22 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.63.0 — unhashable report adapter:
+the narrative check's sealed-adapter
+cross-check built a set out of the
+report's stated `llm_adapter`, an
+untrusted field. A stated adapter
+rewritten as a list or an object is
+unhashable: building the set raised
+`TypeError` and crashed `verify` and
+the web view (at the CLI the backstop
+reported a usage error, exit 2,
+instead of the tampered-report
+answer, exit 1). The comparison now
+requires a string adapter equal to
+the sealed names; any other stated
+value is a mismatch by construction.
+16 new tests (1960 total).
 1.62.0 — non-object patch linkage in
 replay: the reconstruction path read
 each later attempt's
