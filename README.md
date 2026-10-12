@@ -592,6 +592,24 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.88.0 — The patched-out copy never
+writes through a link: a destination
+entry on a path the copy will write
+that is a symlink (or a directory link
+on the way to a copied file), or a
+regular file hardlinked to another
+name, carried the copy outside the
+destination tree to an unrelated file
+whenever it was not one of the
+protected artifacts the v1.86.0 scan
+names. Those written paths are now
+scanned immediately before the copy:
+a write-through entry is an output
+error and nothing is copied, while
+aliases on unwritten paths and plain
+pre-existing files behave exactly as
+before. 8 new tests (2281 total).
+
 1.87.0 — The patch commit never
 writes a shared inode in place: a
 patch target hardlinked to a file

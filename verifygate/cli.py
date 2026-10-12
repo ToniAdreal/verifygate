@@ -109,6 +109,29 @@ leave byte-unchanged. The destination tree is now scanned
 before any work: any entry inside it whose followed inode is
 the spec file, the report path, or any entry of the candidate
 tree is an output error.
+
+Patched-out write-through (v1.88.0): the v1.86.0 scan protects
+the artifacts this invocation reads — the candidate, the spec,
+the report. It does not protect *anyone else's* file. A
+destination entry on a path the copy will actually write that
+is a symlink (a file link, or a directory link on the way to a
+copied file), or a regular file hardlinked to another name,
+passed the scan whenever its target was an unrelated file —
+and ``copytree`` then wrote the patched file *through* it:
+the file at the other end of the link, outside the destination
+tree, came back holding patched content while the CLI reported
+a successful copy (both shapes reproduced against v1.87.0).
+Immediately before the copy — the first moment the patched
+tree, and therefore the set of paths the copy will write, is
+known — those paths are scanned in the destination: a symlink
+component on a written path, or a multiply-linked regular
+file at a written path, is an output error (exit 2) and
+nothing is copied. Entries the copy will not touch are not
+judged (an unrelated alias on an unwritten path stays the
+caller's business, exactly as v1.86.0 pinned), a plain
+pre-existing file on a written path is still overwritten as
+before, and the destination root itself is the caller's own
+choice, followed the way file outputs follow it.
 """
 
 from __future__ import annotations
@@ -117,6 +140,7 @@ import argparse
 import json
 import os
 import shutil
+import stat
 import sys
 from pathlib import Path
 
@@ -265,6 +289,58 @@ def _patched_out_alias_conflict(patched, *, candidate_dir=None,
             if ino is not None and ino in protected:
                 return (f"{entry} is the same file as "
                         f"{protected[ino]}")
+    return None
+
+
+def _patched_out_write_through_conflict(patched, source) -> str | None:
+    """Name a destination entry the patched-out copy would write through.
+
+    Patched-out write-through (v1.88.0, see the module docstring):
+    ``shutil.copytree`` opens each destination path, following
+    symlinks and truncating hardlinked inodes, so an entry the
+    copy writes can carry the write outside the destination tree
+    to a file that is neither the candidate, the spec, nor the
+    report — the v1.86.0 alias scan, which protects only those
+    three, cannot see it. Only the paths the copy will actually
+    write are judged (the entries of the patched tree, minus the
+    copy's own ignore set): for each, every existing destination
+    component is ``lstat``-ed — a symlink component anywhere on
+    the path, or a multiply-linked regular file at the path
+    itself, is a conflict. A component that does not exist yet
+    ends the walk for that path: the copy creates it fresh, as a
+    plain file inside the destination. The destination root is
+    not judged: it is the caller's own chosen path, followed the
+    way every file output follows its root.
+    """
+    patched = Path(patched)
+    source = Path(source)
+    if not patched.is_dir() or not source.is_dir():
+        return None
+    rels: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(source):
+        base = Path(dirpath)
+        ignored = _IGNORE(str(base), list(dirnames) + list(filenames))
+        dirnames[:] = [d for d in dirnames if d not in ignored]
+        for name in list(dirnames) + list(filenames):
+            if name not in ignored:
+                rels.append((base / name).relative_to(source))
+    for rel in sorted(rels, key=str):
+        current = patched
+        parts = rel.parts
+        for index, part in enumerate(parts):
+            current = current / part
+            try:
+                info = current.lstat()
+            except OSError:
+                break  # missing component: the copy creates it fresh
+            if stat.S_ISLNK(info.st_mode):
+                return (f"{current} is a symlink; the copy would "
+                        f"write through it, outside the destination "
+                        f"tree")
+            if index == len(parts) - 1 \
+                    and stat.S_ISREG(info.st_mode) and info.st_nlink > 1:
+                return (f"{current} is hardlinked to another name; "
+                        f"the copy would rewrite that file too")
     return None
 
 
@@ -669,14 +745,28 @@ def main(argv: list[str] | None = None) -> int:
             if args.patched_out and report["rounds_used"] > 0 \
                     and report["attempts"][-1]["patch_from_previous"]:
                 dest = Path(args.patched_out)
-                try:
-                    shutil.copytree(
-                        report["attempts"][-1]["candidate_dir"], dest,
-                        dirs_exist_ok=True, ignore=_IGNORE)
-                    print(f"  patched candidate copied to {dest}")
-                except (OSError, shutil.Error) as exc:
-                    print(f"output error: {exc}", file=sys.stderr)
-                    copy_error = exc
+                source_tree = Path(report["attempts"][-1]["candidate_dir"])
+                through = _patched_out_write_through_conflict(
+                    dest, source_tree)
+                if through is not None:
+                    # Judged before the copy (v1.88.0): an entry on
+                    # a path the copy will write that is a symlink
+                    # or a multiply-linked file would carry the
+                    # write outside the destination tree, to a file
+                    # no protection has named. Nothing is copied.
+                    print(f"output error: --patched-out {dest}: "
+                          f"{through}; choose a different "
+                          f"--patched-out path", file=sys.stderr)
+                    copy_error = ValueError(through)
+                else:
+                    try:
+                        shutil.copytree(
+                            source_tree, dest,
+                            dirs_exist_ok=True, ignore=_IGNORE)
+                        print(f"  patched candidate copied to {dest}")
+                    except (OSError, shutil.Error) as exc:
+                        print(f"output error: {exc}", file=sys.stderr)
+                        copy_error = exc
         # The repair loop keeps its final patched copy for the caller;
         # the CLI has now copied it out (or not been asked to), and the
         # sealed report is self-contained — remove the temp copy so a
