@@ -43,6 +43,27 @@ arrives in CRLF, LF otherwise). Mixed-ending files follow the
 dominant-ending rule, documented here rather than guessed
 per line.
 
+Path fidelity (since v1.85.0): a header path runs to the end of
+the line or to a TAB (the timestamp separator), never to the
+first space — a filename may contain spaces. Before this,
+``_clean_path`` cut the path at its first space, so a patch for
+``my file.txt`` was parsed as a patch for ``my``: a modification
+was rejected against a file that was never the target, and a
+*creation* silently wrote a wrong file named ``my`` into the
+patched candidate — a tree the diff never specified, which the
+checks then judged as if it were the model's fix. Git's C-style
+quoted paths are decoded too: git quotes any path with special
+or non-ASCII bytes (``"b/caf\\303\\251.txt"`` for
+``b/café.txt``) in ``diff --git`` / ``---`` / ``+++`` headers,
+and the quoted form was previously taken literally, so a real
+``git diff`` touching such a file could never apply at all.
+The ``diff --git`` line tokenises quoted paths exactly and
+splits unquoted ones on the `` b/`` boundary (preferring the
+boundary whose two sides name the same file); decoding happens
+*before* the ``a/``/``b/`` prefix is stripped and before
+``_safe_target`` judges the path, so a quoted escape that
+decodes to ``..`` is rejected exactly like a literal one.
+
 Application is **atomic across files** (since v1.10.0): every file
 patch is validated and applied to an in-memory staged copy first,
 and the workspace on disk is written only after the *whole* diff has
@@ -213,13 +234,121 @@ _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 _BARE_HUNK_RE = re.compile(r"^@@\s*$|^@@\s.*@@\s*$")
 
 
+_C_ESCAPES = {
+    "a": 7, "b": 8, "f": 12, "n": 10, "r": 13, "t": 9, "v": 11,
+    "\\": 92, '"': 34,
+}
+
+
+def _unquote_git_path(path: str) -> str:
+    """Decode a git C-style quoted path (v1.85.0).
+
+    Git quotes paths that carry special or non-ASCII bytes in
+    ``diff --git`` / ``---`` / ``+++`` headers, e.g.
+    ``"b/caf\\303\\251.txt"`` for ``b/café.txt``. The quoted form
+    is a byte string: octal escapes carry the raw UTF-8 bytes, so
+    decoding goes through bytes, never per-character.
+    """
+    if len(path) < 2 or not path.startswith('"'):
+        return path
+    end = path.find('"', 1)
+    # The caller has already cut the token at its closing quote
+    # (diff --git line) or the quote runs to the end of the header
+    # (---/+++ line). Anything malformed is returned as-is, so it
+    # fails as an ordinary missing-file rejection downstream.
+    body = path[1:end] if end != -1 else path[1:]
+    if end == -1:
+        return path
+    out = bytearray()
+    i = 0
+    while i < len(body):
+        ch = body[i]
+        if ch == "\\" and i + 1 < len(body):
+            nxt = body[i + 1]
+            if nxt in "01234567":
+                j = i + 1
+                value = 0
+                while j < len(body) and j < i + 4 and body[j] in "01234567":
+                    value = value * 8 + int(body[j])
+                    j += 1
+                out.append(value & 0xFF)
+                i = j
+                continue
+            if nxt in _C_ESCAPES:
+                out.append(_C_ESCAPES[nxt])
+                i += 2
+                continue
+            out.extend(nxt.encode("utf-8"))
+            i += 2
+            continue
+        out.extend(ch.encode("utf-8"))
+        i += 1
+    return bytes(out).decode("utf-8", errors="surrogateescape")
+
+
 def _clean_path(raw: str) -> str:
-    path = raw.strip().split("\t")[0].split(" ")[0]
+    # A header path runs to the end of the line or to a TAB, which
+    # is how both git and GNU diff separate the timestamp that may
+    # follow it. A SPACE is part of the filename (v1.85.0): before
+    # this the path was also cut at the first space, so a patch
+    # for "my file.txt" was parsed as a patch for "my" — a
+    # modification was rejected against a file that was never the
+    # target, and a creation silently wrote the wrong file.
+    path = raw.strip().split("\t")[0].rstrip()
+    path = _unquote_git_path(path)
     if path == "/dev/null":
         return path
     if path.startswith(("a/", "b/")):
         path = path[2:]
     return path
+
+
+def _split_git_paths(rest: str) -> tuple[str, str] | None:
+    """Split the two paths of a ``diff --git`` line (v1.85.0).
+
+    Quoted paths tokenise exactly. Unquoted paths are separated
+    by the `` b/`` boundary: a rename keeps its two different
+    names under the first such boundary, and when several
+    boundaries are possible the one whose two sides name the
+    same file (the ordinary modify / mode-only case) wins. The
+    ``---``/``+++`` pair overrides these paths for content diffs
+    in any case; they are load-bearing only for mode-only diffs.
+    """
+    rest = rest.strip()
+    if not rest:
+        return None
+    if rest.startswith('"'):
+        end = 1
+        while end < len(rest):
+            if rest[end] == "\\":
+                end += 2
+                continue
+            if rest[end] == '"':
+                break
+            end += 1
+        if end >= len(rest):
+            return None
+        first, remainder = rest[:end + 1], rest[end + 1:].strip()
+        if not remainder:
+            return None
+        return _clean_path(first), _clean_path(remainder)
+    candidates = []
+    start = 0
+    while True:
+        idx = rest.find(" b/", start)
+        if idx == -1:
+            break
+        candidates.append(idx)
+        start = idx + 1
+    if not candidates:
+        return None
+    chosen = candidates[0]
+    for idx in candidates:
+        left, right = rest[:idx], rest[idx + 1:]
+        if left.startswith("a/") and left[2:] == right[2:]:
+            chosen = idx
+            break
+    return _clean_path(rest[:chosen]), _clean_path(rest[chosen + 1:])
 
 
 def _mode_value(line: str) -> int | None:
@@ -283,9 +412,7 @@ def parse_patch(text: str) -> list[FilePatch]:
     while i < len(lines):
         if lines[i].startswith("diff --git "):
             flush_mode_only()
-            parts = lines[i].split()
-            if len(parts) >= 4:
-                git_paths = (_clean_path(parts[2]), _clean_path(parts[3]))
+            git_paths = _split_git_paths(lines[i][len("diff --git "):])
             i += 1
             continue
         if lines[i].startswith("new file mode "):

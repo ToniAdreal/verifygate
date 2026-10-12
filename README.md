@@ -592,6 +592,26 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.85.0 — The patch applier is faithful
+to filenames too: a header path was
+cut at its first space, so a patch for
+"my file.txt" was parsed as a patch
+for "my" — a modification was rejected
+against the wrong file, and a creation
+silently wrote a file named "my" that
+the diff never specified. Paths now
+run to the end of the line or a TAB
+timestamp separator, and git's C-style
+quoted paths (its default for special
+or non-ASCII names, e.g.
+"b/caf\303\251.txt" for "b/café.txt")
+are decoded before the prefix is
+stripped and the path is judged, so a
+real git diff touching such a file
+applies — and a quoted escape decoding
+to ".." is rejected like a literal one.
+10 new tests (2253 total).
+
 1.84.0 — The patch applier's line-ending
 fidelity extends to lone CR: the
 dominant-ending rule knew only CRLF
