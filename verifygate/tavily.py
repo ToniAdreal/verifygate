@@ -73,6 +73,21 @@ deliberately forgiving rule in ``_effective_max_results``:
 lookups must never break a run, so a bad request falls back to
 the default instead of raising. Normalisation is a pure
 function on the sealing path; its callers pass constants.)
+
+Bounded response read (v1.80.0): the real transport read its
+response with a bare ``resp.read()`` — the whole body materialised
+in memory before parsing, however large the endpoint (or anything
+able to answer for it) chose to make it. Every other reader in
+this project is bounded while reading (disk documents in
+``jsonio``, candidate files in ``evidence`` / ``repair``, check
+output in ``sandbox``); the network response was the last one
+that was not. ``_post_search`` now reads at most
+:data:`MAX_RESPONSE_BYTES` + 1 bytes and raises ``ValueError``
+past the ceiling, which ``lookup`` degrades exactly like any
+other transport failure: no references, reason on ``last_error``,
+verdict untouched. The ceiling is generous over a genuine reply
+(at most ``MAX_RESULTS_CEILING`` results with capped fields is
+tens of kilobytes).
 """
 
 from __future__ import annotations
@@ -84,6 +99,7 @@ import urllib.request
 from abc import ABC, abstractmethod
 
 TAVILY_URL = "https://api.tavily.com/search"
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024  # bounded response read (v1.80.0)
 MAX_REFERENCES = 3
 MAX_RESULTS_CEILING = 10
 TITLE_LIMIT = 300
@@ -352,7 +368,11 @@ class TavilyReferenceLookup(ReferenceLookup):
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+            raw = resp.read(MAX_RESPONSE_BYTES + 1)
+        if len(raw) > MAX_RESPONSE_BYTES:
+            raise ValueError(
+                f"Tavily response exceeds {MAX_RESPONSE_BYTES} bytes")
+        return json.loads(raw.decode("utf-8"))
 
     # -- lookup -----------------------------------------------------------
 

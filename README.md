@@ -592,6 +592,18 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.80.0 — The Tavily transport reads
+its response bounded: a bare
+``resp.read()`` materialised the whole
+body before parsing, the last
+unbounded reader in the project. It
+now reads at most 4 MiB + 1 and raises
+past the ceiling, which the lookup
+degrades like any other transport
+failure — no references, reason
+recorded, verdict untouched. 5 new
+tests (2207 total).
+
 1.79.0 — Candidate files are read
 streamed or not at all: the tree hash
 fed each file to SHA-256 whole
