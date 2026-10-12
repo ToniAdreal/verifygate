@@ -592,6 +592,24 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.86.0 — Output-destination protection
+is judged by file identity, not just
+by path: a `--out` given as a hardlink
+alias of the task spec (or, for the
+web view, of the record) passed every
+resolved-path comparison and overwrote
+the spec/record through the alias, and
+a `repair --patched-out` destination
+holding a hardlink to (or a symlink at)
+a candidate file was written through by
+the copy, modifying the original
+candidate. File outputs now also match
+by inode, and the patched-out
+destination tree is scanned before any
+work for entries aliasing the spec, the
+report path, or the candidate tree.
+13 new tests (2266 total).
+
 1.85.0 — The patch applier is faithful
 to filenames too: a header path was
 cut at its first space, so a patch for

@@ -90,12 +90,32 @@ destination that is not a directory is an output error,
 instead of a repair that runs to completion — in real mode,
 spending Token Factory calls — and only then fails at the
 copy.
+
+Hardlink-alias outputs (v1.86.0): the v1.48.0 protection compared
+*paths*, resolved — but two different paths can name one file.
+A ``--out`` given as a hardlink alias of the task spec (or, for
+``view``, of the record) passed every path comparison and then
+overwrote the spec/record through the alias: same destruction,
+different spelling. Identity is therefore also judged by inode
+(``st_dev`` / ``st_ino``, following symlinks): an output that
+*is* the spec or the record file, under any name, is the same
+usage error. The patched-out copy had the same hole one level
+down: an existing destination directory holding a file that is
+a hardlink to (or a symlink at) a candidate file passed the
+tree-overlap check — which judges only the destination root —
+and ``copytree`` then wrote the patched file *through* the
+alias, modifying the original candidate the repair exists to
+leave byte-unchanged. The destination tree is now scanned
+before any work: any entry inside it whose followed inode is
+the spec file, the report path, or any entry of the candidate
+tree is an output error.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -134,6 +154,27 @@ def _resolved(path) -> Path:
     return Path(path).resolve()
 
 
+def _inode(path) -> tuple[int, int] | None:
+    """The (device, inode) identity of ``path``, following symlinks.
+
+    Hardlink-alias outputs (v1.86.0, see the module docstring):
+    path comparison cannot see that two different names are one
+    file; the inode can. ``None`` when the path cannot be statted
+    (a missing output has no identity to alias yet).
+    """
+    try:
+        st = Path(path).stat()
+    except OSError:
+        return None
+    return (st.st_dev, st.st_ino)
+
+
+def _same_file(a, b) -> bool:
+    """True when ``a`` and ``b`` name the same file (any spelling)."""
+    ia, ib = _inode(a), _inode(b)
+    return ia is not None and ia == ib
+
+
 def _file_out_conflict(out: Path, *, spec_path=None, record_path=None,
                        candidate_dir=None) -> str | None:
     """Name the input artifact a file output would destroy, or None.
@@ -144,6 +185,10 @@ def _file_out_conflict(out: Path, *, spec_path=None, record_path=None,
     directory itself. Deliberately *not* checked: a new file
     inside the candidate tree (the documented dogfood command
     writes its record at the candidate's root).
+
+    Since v1.86.0 identity is also judged by inode, so a hardlink
+    alias of the spec/record — a different path naming the same
+    file — is the same conflict, not a spelling that slips past.
     """
     resolved_out = _resolved(out)
     for label, candidate_path in (
@@ -151,8 +196,75 @@ def _file_out_conflict(out: Path, *, spec_path=None, record_path=None,
             ("the evidence record", record_path),
             ("the candidate directory", candidate_dir)):
         if candidate_path is not None \
-                and resolved_out == _resolved(candidate_path):
+                and (resolved_out == _resolved(candidate_path)
+                     or _same_file(out, candidate_path)):
             return f"{out} would overwrite {label} ({candidate_path})"
+    return None
+
+
+def _tree_inodes(root) -> dict[tuple[int, int], Path]:
+    """Map every entry under ``root`` (root included) by inode.
+
+    Stat follows symlinks, so a link *at* a protected entry
+    registers that entry's inode — the identity a later write
+    through the link would actually reach.
+    """
+    root = Path(root)
+    inodes: dict[tuple[int, int], Path] = {}
+    own = _inode(root)
+    if own is not None:
+        inodes[own] = root
+    if not root.is_dir():
+        return inodes
+    for dirpath, dirnames, filenames in os.walk(root):
+        for name in dirnames + filenames:
+            entry = Path(dirpath) / name
+            ino = _inode(entry)
+            if ino is not None:
+                inodes.setdefault(ino, entry)
+    return inodes
+
+
+def _patched_out_alias_conflict(patched, *, candidate_dir=None,
+                                  spec_path=None,
+                                  report_out=None) -> str | None:
+    """Name the destination entry aliasing a protected artifact.
+
+    Hardlink-alias outputs (v1.86.0, see the module docstring):
+    ``shutil.copytree`` writes each patched file by opening its
+    destination path, which follows hardlinks and symlinks — an
+    existing destination entry that *is* a candidate file (or
+    the spec, or the report path) under another name would be
+    written through, modifying the very artifact the copy must
+    leave alone. The tree-overlap check judges the destination
+    root only; this scan judges every entry inside it, before
+    any check runs or any model call is made. A destination that
+    does not exist yet has no entries, so it cannot alias.
+    """
+    patched = Path(patched)
+    if not patched.is_dir():
+        return None
+    protected: dict[tuple[int, int], str] = {}
+    for label, path in (("the task spec", spec_path),
+                        ("the repair report", report_out)):
+        if path is not None:
+            ino = _inode(path)
+            if ino is not None:
+                protected[ino] = f"{label} ({path})"
+    if candidate_dir is not None:
+        for ino, entry in _tree_inodes(candidate_dir).items():
+            protected.setdefault(
+                ino, f"the original candidate ({candidate_dir}), "
+                     f"via its entry {entry}")
+    if not protected:
+        return None
+    for dirpath, dirnames, filenames in os.walk(patched):
+        for name in dirnames + filenames:
+            entry = Path(dirpath) / name
+            ino = _inode(entry)
+            if ino is not None and ino in protected:
+                return (f"{entry} is the same file as "
+                        f"{protected[ino]}")
     return None
 
 
@@ -502,6 +614,20 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"output error: --patched-out {patched} already "
                       f"exists and is not a directory; choose a "
                       f"different --patched-out path", file=sys.stderr)
+                return 2
+            alias = _patched_out_alias_conflict(
+                patched, candidate_dir=args.candidate,
+                spec_path=args.spec, report_out=out)
+            if alias is not None:
+                # Judged before any work (v1.86.0): an entry inside
+                # the destination that aliases the candidate, the
+                # spec, or the report would be written through by
+                # the copy, modifying the artifact it aliases.
+                print(f"output error: --patched-out {patched} contains "
+                      f"an entry that aliases a protected artifact: "
+                      f"{alias}; the original candidate is never "
+                      f"modified — choose a different --patched-out "
+                      f"path", file=sys.stderr)
                 return 2
         try:
             llm, references = _adapters(args.mode, args.model)
