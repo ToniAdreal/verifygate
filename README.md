@@ -592,6 +592,26 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.78.0 — Check output is streamed,
+not spooled: stdout/stderr used to go
+to temp files, and only the read-back
+was capped — the spool itself grew
+without bound while the check ran, so
+a check printing 200 MB grew the temp
+filesystem by 200 MB mid-run (on a
+512 MB temp filesystem, a ~600 MB
+print exhausts it while the verdict
+is still being decided). Output now
+flows through pipes into a bounded
+in-memory tail buffer that keeps only
+the last bytes of each stream; the
+sealed tails are byte-for-byte what
+the spool produced, the process-group
+sweep runs when the leader exits, and
+draining is grace-bounded so a child
+holding a pipe open cannot hang the
+capture. 11 new tests (2191 total).
+
 1.77.0 — Duplicate JSON object keys
 rejected in the bounded loader: the
 decoder silently kept the last value

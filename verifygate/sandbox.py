@@ -24,9 +24,26 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   candidate snapshot, so what is hashed and what is shown to the LLM
   is exactly what was verified — never a host file reached through a
   link.
-* **Bounded output** — check stdout/stderr go to temp files, not
-  memory; only a capped tail is read back, so a check printing
-  gigabytes cannot OOM the harness.
+* **Bounded output** — check stdout/stderr are streamed through
+  pipes into a capped in-memory tail buffer (v1.78.0). Before
+  this, output was spooled to temp files and only the *read-back*
+  was capped: the spool itself grew without bound for as long as
+  the check ran, so a check printing 200 MB grew the temp
+  filesystem by 200 MB mid-run (probed against v1.77.0) — and on
+  the 512 MB tmpfs this project already filled once in practice
+  (the v1.0.0 Errno 28 incident), a check printing ~600 MB, or
+  a verbose stdout and stderr together, exhausts the temp
+  filesystem while its own verdict is still being decided,
+  taking the harness and any concurrent workspace copies down
+  with it. The capture now keeps only the last
+  :data:`_READ_BYTES` bytes of each stream in memory, discarding
+  the rest as it arrives: memory stays capped, nothing is spooled
+  to disk, and the sealed tails are byte-for-byte what the spool
+  produced. A background child that inherits a pipe and outlives
+  its leader cannot hang the capture either — the process-group
+  sweep runs the moment the leader exits, and draining stops
+  after a short grace period even if a session-detached child
+  (the documented sweep escape) still holds a pipe open.
 * **Closed stdin** — check commands run with stdin attached to
   ``/dev/null`` (v1.69.0). Before this, a check inherited the
   harness's own stdin: the same candidate and the same check
@@ -201,6 +218,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+import selectors
 import shutil
 import signal
 import subprocess
@@ -579,11 +597,36 @@ def remove_tree(path: str | Path) -> None:
                 pass
 
 
-def _read_tail(f) -> str:
-    f.seek(0, os.SEEK_END)
-    size = f.tell()
-    f.seek(max(0, size - _READ_BYTES))
-    return _tail(f.read().decode("utf-8", "replace"))
+class _TailBuffer:
+    """Bounded capture of one output stream (v1.78.0).
+
+    Keeps only the last :data:`_READ_BYTES` bytes appended,
+    discarding the rest as it arrives, so a check's output costs
+    the same memory and the same (zero) disk however much it
+    prints. :meth:`tail` decodes and truncates exactly as the
+    old temp-file spool's read-back did, so sealed tails are
+    unchanged for every output that fit the spool.
+    """
+
+    def __init__(self) -> None:
+        self._data = bytearray()
+
+    def append(self, chunk: bytes) -> None:
+        self._data += chunk
+        excess = len(self._data) - _READ_BYTES
+        if excess > 0:
+            del self._data[:excess]
+
+    def tail(self) -> str:
+        return _tail(bytes(self._data).decode("utf-8", "replace"))
+
+
+# How long output capture may keep draining after the check's
+# leader process has exited (v1.78.0): the process-group sweep
+# runs at leader exit, so group members' pipe copies close and
+# EOF follows at once; the grace only bounds a session-detached
+# child (the documented sweep escape) still holding a pipe open.
+_DRAIN_GRACE_S = 1.0
 
 
 def validate_check_command(command, name: str = "command") -> str:
@@ -656,38 +699,94 @@ def run_command(command: str, cwd: Path, timeout_s: int) -> CommandResult:
     start = time.monotonic()
     timed_out = False
     exit_code: int | None = None
-    with tempfile.TemporaryFile() as out_f, tempfile.TemporaryFile() as err_f:
-        proc = subprocess.Popen(
-            command,
-            shell=True,
-            cwd=str(cwd),
-            stdin=subprocess.DEVNULL,
-            stdout=out_f,
-            stderr=err_f,
-            env=sanitized_env(),
-            start_new_session=True,
-        )
-        try:
-            exit_code = proc.wait(timeout=timeout_s)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            exit_code = None
-        # No member of the check's process group may outlive the
-        # check (v1.72.0): on a timeout this is the kill that has
-        # always happened; on a normal exit — pass or fail — it
-        # sweeps any background child the command left behind,
-        # which previously leaked onto the host (see the module
-        # docstring). The leader itself has already exited on the
-        # normal path, so this can only reach leftover children.
+    # Output is streamed into bounded tail buffers (v1.78.0, see
+    # the module docstring): the temp-file spool this replaces
+    # grew on disk without bound for as long as the check ran.
+    proc = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=str(cwd),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=sanitized_env(),
+        start_new_session=True,
+    )
+    assert proc.stdout is not None and proc.stderr is not None
+    buffers = {proc.stdout: _TailBuffer(), proc.stderr: _TailBuffer()}
+    selector = selectors.DefaultSelector()
+    for stream in buffers:
+        os.set_blocking(stream.fileno(), False)
+        selector.register(stream, selectors.EVENT_READ)
+    deadline = start + timeout_s
+    leader_dead_at: float | None = None
+    swept = False
+    try:
+        while True:
+            now = time.monotonic()
+            if proc.poll() is not None:
+                if leader_dead_at is None:
+                    leader_dead_at = now
+                    exit_code = proc.returncode
+                    # No member of the check's process group may
+                    # outlive the check (v1.72.0): the sweep runs
+                    # the moment the leader exits — pass or fail —
+                    # which also closes the pipe copies background
+                    # children hold, so draining below reaches EOF
+                    # instead of waiting on a leaked child.
+                    _kill_process_group(proc)
+                    swept = True
+                if not selector.get_map():
+                    break  # leader dead and both streams at EOF
+                if now - leader_dead_at > _DRAIN_GRACE_S:
+                    break  # a detached child still holds a pipe open
+            elif now >= deadline:
+                timed_out = True
+                exit_code = None
+                break
+            if selector.get_map():
+                wait = 0.05
+                if leader_dead_at is not None:
+                    wait = min(wait, max(
+                        0.0, leader_dead_at + _DRAIN_GRACE_S - now))
+                elif deadline - now > 0:
+                    wait = min(wait, deadline - now)
+                events = selector.select(wait)
+            else:
+                # The check closed both streams but is still
+                # running: nothing to read, just watch the clock.
+                time.sleep(0.01)
+                events = []
+            for key, _mask in events:
+                stream = key.fileobj  # type: ignore[attr-defined]
+                try:
+                    chunk = os.read(stream.fileno(), 65536)
+                except (BlockingIOError, InterruptedError):
+                    continue
+                except OSError:
+                    chunk = b""
+                if chunk:
+                    buffers[stream].append(chunk)  # type: ignore[index]
+                else:
+                    selector.unregister(stream)
+    finally:
+        selector.close()
+    if not swept:
+        # Timeout path (the normal path sweeps at leader exit):
+        # the same process-group kill that has always happened.
         _kill_process_group(proc)
-        if timed_out:
-            proc.wait()
-        duration = int((time.monotonic() - start) * 1000)
-        return CommandResult(
-            command=command,
-            exit_code=exit_code,
-            duration_ms=duration,
-            stdout_tail=_read_tail(out_f),
-            stderr_tail=_read_tail(err_f),
-            timed_out=timed_out,
-        )
+    proc.wait()
+    for stream in buffers:
+        try:
+            stream.close()
+        except OSError:
+            pass
+    duration = int((time.monotonic() - start) * 1000)
+    return CommandResult(
+        command=command,
+        exit_code=exit_code,
+        duration_ms=duration,
+        stdout_tail=buffers[proc.stdout].tail(),
+        stderr_tail=buffers[proc.stderr].tail(),
+        timed_out=timed_out,
+    )
