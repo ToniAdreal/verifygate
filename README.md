@@ -592,6 +592,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.84.0 — The patch applier's line-ending
+fidelity extends to lone CR: the
+dominant-ending rule knew only CRLF
+and LF, so a file using classic-Mac CR
+breaks fell through to LF — patching
+one line rewrote every ending, and its
+trailing CR was read as "no trailing
+newline", dropping the final break too.
+CR now counts as an ending of its own
+(winning ties against LF, as CRLF
+does), the trailing state reads any
+break, and a file created by a
+CR-carried diff is a CR file. 6 new
+tests (2243 total).
+
 1.83.0 — The patch applier is faithful
 to a file's line endings too: lines
 were read with splitlines() and always

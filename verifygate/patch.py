@@ -460,10 +460,19 @@ def _dominant_line_ending(raw: bytes) -> str:
     CRLF wins ties: a file whose breaks are half CRLF is a CRLF
     file with some stray LF lines, and normalising it to LF would
     rewrite the endings its author chose for the other half.
+    Lone CR (the classic Mac ending) counts as an ending of its
+    own (v1.84.0): a CR file's breaks are neither CRLF nor LF,
+    and before this it fell through to LF and was rewritten
+    whole, exactly like the pre-v1.83.0 CRLF case. CR wins ties
+    against LF for the same reason CRLF does.
     """
     crlf = raw.count(b"\r\n")
-    if crlf and crlf >= raw.count(b"\n") - crlf:
+    lone_lf = raw.count(b"\n") - crlf
+    lone_cr = raw.count(b"\r") - crlf
+    if crlf and crlf >= lone_lf and crlf >= lone_cr:
         return "\r\n"
+    if lone_cr and lone_cr >= lone_lf:
+        return "\r"
     return "\n"
 
 
@@ -643,7 +652,7 @@ def apply_patch(
                 lines=_read_lines(target),
                 # Preserve the file's trailing-newline state so a
                 # mode-only commit rewrites byte-identical content.
-                trailing_newline=not raw or raw.endswith(b"\n"),
+                trailing_newline=not raw or raw.endswith((b"\n", b"\r")),
                 # Preserve the file's line-ending style too
                 # (v1.83.0): a CRLF file stays CRLF, line for line.
                 line_ending=_dominant_line_ending(raw),
@@ -673,8 +682,12 @@ def apply_patch(
                 if eof_no_newline is not None else True,
                 mode=fp.new_mode,
                 # A created file has no on-disk style to preserve:
-                # it takes the patch text's own ending (v1.83.0).
-                line_ending="\r\n" if "\r\n" in patch_text else "\n",
+                # it takes the patch text's own ending (v1.83.0);
+                # a diff carried entirely in CR separators gives a
+                # CR file (v1.84.0).
+                line_ending=("\r\n" if "\r\n" in patch_text
+                             else "\r" if "\r" in patch_text
+                             and "\n" not in patch_text else "\n"),
             )
             changed.append(fp.new_path)
         elif fp.new_path == "/dev/null":  # file deletion
