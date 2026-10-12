@@ -586,6 +586,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.61.0 — present-but-null report fields:
+the narrative check's legacy policy —
+only fields that are present are judged,
+so a report omitting a later-added field
+is not failed for the omission — was
+implemented with `is not None` guards,
+which conflate "absent" with "present
+but null". The loop never emits a null
+for the fields it always writes, yet
+nulling any of them verified INTACT:
+the report's `kind`, `version`,
+`max_rounds`, `stopped_reason` and
+`llm_adapter`; each attempt's
+`candidate_dir`; the `unsealed_llm_usage`
+list; and each patch linkage's
+`changed_files`, `patch_text`,
+`llm_usage` and `llm_adapter` (applied
+linkage and preserved rejection alike).
+The judged-when-present fields are now
+judged whenever the key is present, null
+included; a genuinely omitted field
+stays unjudged, and the nulls the loop
+itself emits (`failed_patch`,
+`last_patch_error`, an applied patch's
+`error` / `error_kind`, attempt 0's
+`patch_from_previous`) stay legitimate.
+13 new tests (1933 total).
 1.60.0 — error-note normalisation:
 the two text helpers on the runner's
 sealing path judged only the *length* of

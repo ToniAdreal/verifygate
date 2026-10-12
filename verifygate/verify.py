@@ -228,6 +228,27 @@ module docstrings): a malformed record renders next to its
 CHAIN INVALID banner and replays as not reproduced — it never
 crashes the tool asked to judge it.
 
+Present-but-null report fields (v1.61.0): the narrative check's
+legacy policy — only fields that are present are judged, so a
+report that *omits* a later-added field is not failed for the
+omission — was implemented with ``is not None`` guards, which
+conflate "absent" with "present but null". The loop never emits
+a null for the fields it always writes, yet nulling any of them
+verified INTACT (all reproduced): the report's ``kind``,
+``version``, ``max_rounds``, ``stopped_reason`` and
+``llm_adapter``; each attempt's ``candidate_dir``; the report's
+``unsealed_llm_usage`` list; and each patch linkage's
+``changed_files``, ``patch_text``, ``llm_usage`` and
+``llm_adapter``. A reader was shown a report whose kind, budget,
+stop reason, credited adapter, patched-file list and token
+snapshot had all been erased to null, stamped intact. The
+judged-when-present fields are now judged whenever the key is
+present, null included; a genuinely omitted field remains
+unjudged, exactly as before. Fields the loop itself emits as
+null stay legitimate: ``failed_patch`` and ``last_patch_error``
+when no patch was rejected, an applied patch's ``error`` /
+``error_kind``, and attempt 0's ``patch_from_previous``.
+
 Result-aggregation validation (v1.56.0): :func:`document_ok` —
 the one function that turns per-record results into the
 document's intact / not-intact answer — took its input on
@@ -552,13 +573,19 @@ def _patch_linkage_problems(patch: dict, problems: list[str]) -> None:
             and isinstance(patch.get("patch_text"), str) \
             and len(patch["patch_text"]) > MAX_PATCH_TEXT_CHARS:
         problems.append("patch text exceeds the stored maximum")
+    # Judged whenever present (v1.61.0): a present null list or
+    # snapshot is a rewritten field, not an omission — the type
+    # judgement for an applied linkage's list lives with its
+    # caller above; here the bounds (and, for the preserved
+    # rejection, the shape) are enforced for both.
     changed = patch.get("changed_files")
-    if changed is not None and isinstance(changed, list) and (
-            len(changed) > MAX_CHANGED_FILES
+    if "changed_files" in patch and (
+            not isinstance(changed, list)
+            or len(changed) > MAX_CHANGED_FILES
             or any(isinstance(f, str) and len(f) > MAX_CHANGED_FILE_CHARS
                    for f in changed)):
         problems.append("patch changed_files exceeds the stored bounds")
-    if patch.get("llm_usage") is not None \
+    if "llm_usage" in patch \
             and not _patch_usage_ok(patch.get("llm_usage")):
         problems.append("patch llm_usage exceeds the stored bounds")
 
@@ -582,9 +609,12 @@ def narrative_problems(data) -> list[str]:
     # not failed for the omission (see the module docstring).
     if set(data) - REPORT_KEYS:
         problems.append("repair report carries unknown top-level fields")
-    if data.get("kind") is not None and data["kind"] != "repair-report":
+    # Judged whenever the key is present (v1.61.0): the loop always
+    # writes a real kind/version, so a present null is a rewritten
+    # field, not a legacy omission.
+    if "kind" in data and data["kind"] != "repair-report":
         problems.append("report kind is not repair-report")
-    if data.get("version") is not None and not (
+    if "version" in data and not (
             isinstance(data["version"], str)
             and _VERSION_RE.match(data["version"])):
         problems.append("report version is not a version string")
@@ -611,14 +641,19 @@ def narrative_problems(data) -> list[str]:
         problems.append("report spec_name exceeds the sealed maximum")
     if isinstance(adapter, str) and len(adapter) > MAX_ADAPTER_NAME_CHARS:
         problems.append("report llm_adapter exceeds the sealed maximum")
+    # Present-but-null (v1.61.0): the loop always credits a real
+    # adapter and always writes its unsealed list (possibly empty);
+    # an omitted field stays unjudged, a nulled one does not.
+    if "llm_adapter" in data and not isinstance(adapter, str):
+        problems.append("report llm_adapter is not an adapter name")
     unsealed = data.get("unsealed_llm_usage")
-    if unsealed is not None and not _patch_usage_ok(unsealed):
+    if "unsealed_llm_usage" in data and not _patch_usage_ok(unsealed):
         problems.append("unsealed_llm_usage exceeds the stored bounds")
     for attempt in attempts:
         if not isinstance(attempt, dict):
             continue
         cdir = attempt.get("candidate_dir")
-        if cdir is not None and not (
+        if "candidate_dir" in attempt and not (
                 isinstance(cdir, str)
                 and len(cdir) <= MAX_CANDIDATE_DIR_CHARS):
             problems.append(
@@ -660,15 +695,21 @@ def narrative_problems(data) -> list[str]:
             problems.append("an attempt's patch is not an applied patch")
         if patch.get("error_kind") is not None:
             problems.append("an attempt's patch carries an error kind")
+        # Present-but-null linkage fields (v1.61.0): the loop always
+        # names the adapter that produced the patch, always stores
+        # its text, and always lists the files it changed.
+        if "llm_adapter" in patch \
+                and not isinstance(patch.get("llm_adapter"), str):
+            problems.append("patch adapter is not an adapter name")
         if adapter is not None and patch.get("llm_adapter") is not None \
                 and patch.get("llm_adapter") != adapter:
             problems.append("patch adapter does not match the report adapter")
         changed = patch.get("changed_files")
-        if changed is not None and (
+        if "changed_files" in patch and (
                 not isinstance(changed, list)
                 or not all(isinstance(f, str) for f in changed)):
             problems.append("patch changed_files is not a list of file names")
-        if patch.get("patch_text") is not None \
+        if "patch_text" in patch \
                 and not isinstance(patch.get("patch_text"), str):
             problems.append("patch text is not a string")
         _patch_linkage_problems(patch, problems)
@@ -689,6 +730,9 @@ def narrative_problems(data) -> list[str]:
                 or (derived_rounds is not None
                     and failed["round"] > derived_rounds):
             problems.append("failed_patch round is not a rejected round")
+        if isinstance(failed, dict) and "llm_adapter" in failed \
+                and not isinstance(failed.get("llm_adapter"), str):
+            problems.append("failed_patch adapter is not an adapter name")
         if isinstance(failed, dict) and adapter is not None \
                 and failed.get("llm_adapter") is not None \
                 and failed.get("llm_adapter") != adapter:
@@ -707,7 +751,7 @@ def narrative_problems(data) -> list[str]:
             if isinstance(failed.get("error"), str) \
                     and len(failed["error"]) > MAX_PATCH_ERROR_CHARS:
                 problems.append("failed_patch error exceeds the stored maximum")
-            if failed.get("patch_text") is not None \
+            if "patch_text" in failed \
                     and not isinstance(failed.get("patch_text"), str):
                 problems.append("failed_patch patch text is not a string")
             _patch_linkage_problems(failed, problems)
@@ -725,7 +769,7 @@ def narrative_problems(data) -> list[str]:
     # (a non-negative int no larger than MAX_ROUNDS — see the module
     # docstring), and rounds used can never exceed it.
     max_rounds = data.get("max_rounds")
-    if max_rounds is not None:
+    if "max_rounds" in data:
         if not _is_round(max_rounds) or max_rounds < 0:
             problems.append("max_rounds is not a non-negative integer")
         elif max_rounds > MAX_ROUNDS:
@@ -733,11 +777,18 @@ def narrative_problems(data) -> list[str]:
         elif derived_rounds is not None and derived_rounds > max_rounds:
             problems.append("rounds used exceed max_rounds")
 
-    # Why the loop stopped is determined by how it ended.
-    if data.get("stopped_reason") is not None:
-        derived_stop = derived_stopped_reason(data)
-        if derived_stop is not None and data["stopped_reason"] != derived_stop:
-            problems.append("stopped_reason does not match the loop outcome")
+    # Why the loop stopped is determined by how it ended. A present
+    # null is not a stop reason (v1.61.0); an omitted one stays
+    # unjudged.
+    if "stopped_reason" in data:
+        if not isinstance(data["stopped_reason"], str):
+            problems.append("stopped_reason is not a stop reason")
+        else:
+            derived_stop = derived_stopped_reason(data)
+            if derived_stop is not None \
+                    and data["stopped_reason"] != derived_stop:
+                problems.append(
+                    "stopped_reason does not match the loop outcome")
 
     # The credited adapter must be the one the sealed parts name:
     # every FAIL attempt's sealed diagnosis and every sealed usage
