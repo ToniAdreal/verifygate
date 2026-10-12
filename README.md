@@ -586,6 +586,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.69.0 — closed stdin for checks:
+check commands ran with the harness's
+own stdin inherited. The same candidate
+and the same check (`read answer; test
+"$answer" = yes`) sealed PASS when the
+harness's stdin happened to carry `yes`
+and FAIL when it did not — a verdict
+depending on input that is in neither
+the spec nor the candidate, and that
+replay (a different process, different
+stdin) could never reproduce. A check
+that consumes stdin (`cat`, `read`,
+`input()`) also hung until its timeout
+whenever the harness's stdin was a
+terminal or a held-open pipe. Checks
+now run with stdin attached to
+/dev/null: reads see immediate EOF, the
+verdict is a function of the spec and
+the candidate only, and a check can
+never consume input meant for the
+harness or the operator. 7 new tests
+(2075 total).
+
 1.68.0 — symlink-loop traversal:
 the single candidate traversal behind
 the workspace copy, the tree hash,

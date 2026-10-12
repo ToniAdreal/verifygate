@@ -27,6 +27,19 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
 * **Bounded output** — check stdout/stderr go to temp files, not
   memory; only a capped tail is read back, so a check printing
   gigabytes cannot OOM the harness.
+* **Closed stdin** — check commands run with stdin attached to
+  ``/dev/null`` (v1.69.0). Before this, a check inherited the
+  harness's own stdin: the same candidate and the same check
+  sealed PASS when the harness's stdin happened to carry the
+  line the check was reading for and FAIL when it did not, so
+  the verdict depended on input that is in neither the spec
+  nor the candidate — and could never be reproduced by replay,
+  which runs in a different process with different stdin. A
+  check that reads stdin (``cat``, ``read``, ``input()``) also
+  hung until its timeout whenever the harness's stdin was a
+  held-open pipe or a terminal. A check now gets immediate EOF:
+  deterministic, replayable, and unable to consume input meant
+  for the harness or the operator.
 * **Timeout kills the process group** — checks start in a new session
   and a timeout SIGKILLs the whole group, so a check cannot leave a
   detached child running after it has been failed.
@@ -544,6 +557,7 @@ def run_command(command: str, cwd: Path, timeout_s: int) -> CommandResult:
             command,
             shell=True,
             cwd=str(cwd),
+            stdin=subprocess.DEVNULL,
             stdout=out_f,
             stderr=err_f,
             env=sanitized_env(),
