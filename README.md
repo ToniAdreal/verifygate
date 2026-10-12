@@ -586,6 +586,37 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.66.0 — adapter-surface resilience:
+the adapters' optional surface — the
+`name` attribute and the usage-log
+methods (`drain_calls` /
+`pending_calls`) — was read directly
+by the runner and the repair loop,
+although the validators promise both
+stay optional for duck-typed
+adapters. A nameless adapter crashed
+a FAIL run with an AttributeError
+while the diagnosis entry was being
+assembled (a PASS run noticed
+nothing) and crashed the repair loop
+before its first run; a usage-log
+method that raised, or a non-callable
+attribute standing where one was
+expected, propagated out of the
+sealing path and destroyed a verdict
+the checks had already decided.
+Names are now read through getattr
+(a missing name normalises to the
+fallback label, exactly like an empty
+one), and the usage log is drained
+and snapshotted only through guarded
+helpers in the `llm` module: a
+missing, broken, or non-list log
+degrades to no recorded usage, never
+to a lost record or report. First-
+party adapters never degrade.
+13 new tests (2047 total).
+
 1.65.0 — sealing-argument validation:
 build_record, the one function that
 assembles and seals an evidence

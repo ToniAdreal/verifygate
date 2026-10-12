@@ -180,6 +180,23 @@ is the lookup's own malformed value; nothing of it is sealed),
 and a non-string explanation is one ``ValueError``. String
 notes and explanations — every first-party value — pass through
 exactly as before.
+
+Adapter-surface resilience (v1.66.0): the adapters' *optional*
+surface was still read directly on this path — ``llm.name`` /
+``references.name`` while the diagnosis entry is assembled, and
+``llm.drain_calls()`` at sealing time — although
+``validate_llm`` / ``validate_references`` promise both stay
+optional. A duck-typed adapter with no ``name`` crashed a FAIL
+run with an ``AttributeError`` at that assembly (a PASS run,
+which skips the diagnosis, noticed nothing), and a
+``drain_calls`` that raised destroyed the record after every
+check had run — the v1.19.0 loss class through the optional
+surface instead of the advisory methods. Names are now read
+through ``getattr`` (a missing name normalises to the fallback
+label, exactly like an empty one), and the drain goes through
+``llm.drain_calls_safely``: a missing, broken, or non-list
+usage log degrades to no recorded usage, never to a lost
+record. See the ``llm`` module docstring.
 """
 
 from __future__ import annotations
@@ -201,7 +218,7 @@ from .evidence import (
     validate_mode,
 )
 from .jsonio import validate_file_path
-from .llm import LLMAdapter, validate_llm
+from .llm import LLMAdapter, drain_calls_safely, validate_llm
 from .sandbox import prepare_workspace, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
 from .tavily import (
@@ -388,7 +405,8 @@ def run_verification(
                 f"{str(exc)[:200]}")
             explanation = _fallback_explanation(
                 check_dicts,
-                normalise_adapter_name(llm.name, "unknown-llm-adapter"),
+                normalise_adapter_name(
+                    getattr(llm, "name", None), "unknown-llm-adapter"),
                 diagnosis_error)
         query = diagnosis_query(check_dicts)
         refs: list[dict] = []
@@ -439,10 +457,14 @@ def run_verification(
             # Adapter/lookup names are sealed verbatim no longer
             # (v1.35.0): they pass through the same normalisation
             # as every other adapter-supplied value on this path.
+            # Both are optional surface (v1.66.0): read through
+            # getattr, so a nameless adapter normalises to the
+            # fallback label instead of crashing the assembly.
             "llm_adapter": normalise_adapter_name(
-                llm.name, "unknown-llm-adapter"),
+                getattr(llm, "name", None), "unknown-llm-adapter"),
             "reference_source": normalise_adapter_name(
-                references.name, "unknown-reference-lookup"),
+                getattr(references, "name", None),
+                "unknown-reference-lookup"),
             # Both error notes are capped on the same path
             # (v1.29.0): the runner's own are short by construction,
             # but a lookup's last_error is the lookup's own text.
@@ -464,9 +486,10 @@ def run_verification(
     # The drained calls are adapter-supplied, so they are normalised
     # on this sealing path first (v1.35.0): a malformed call must
     # never crash build_record or seal a record that fails its own
-    # verification.
-    llm_usage = normalise_usage_calls(
-        llm.drain_calls() if hasattr(llm, "drain_calls") else [])
+    # verification. The drain itself is optional surface
+    # (v1.66.0): a missing, raising, or non-list usage log degrades
+    # to no recorded usage, never to a lost record.
+    llm_usage = normalise_usage_calls(drain_calls_safely(llm))
     return build_record(
         spec_name=spec.name,
         spec_hash=spec.hash,

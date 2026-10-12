@@ -90,6 +90,21 @@ report this loop emits passes its own narrative check (which caps
 all three) even when an adapter's name or recorded calls are
 malformed. See ``evidence.normalise_usage_calls``.
 
+Adapter-surface resilience (v1.66.0): the credited name and every
+usage snapshot above come from the adapter's *optional* surface,
+which this loop read directly — ``llm.name`` before the first run
+(a nameless duck-typed adapter crashed here with an
+``AttributeError`` and no report at all, although
+``validate_llm`` promises the name stays optional),
+``llm.pending_calls()`` around every generation call, and
+``llm.drain_calls()`` during report assembly (a raising usage log
+destroyed a completed loop's report). All three now go through
+the guarded reads in ``llm`` (``getattr`` for the name,
+``pending_calls_safely`` / ``drain_calls_safely`` for the log): a
+missing, broken, or non-list usage log degrades to an empty
+snapshot, and a missing name to the fallback label — the report
+is always delivered. See the ``llm`` module docstring.
+
 Generation resilience (v1.20.0): ``llm.generate_patch`` is guarded
 exactly like the diagnosis call in the runner. Before this, a
 generation failure — a network error, a malformed Token Factory
@@ -155,7 +170,12 @@ from .evidence import (
     validate_label,
     validate_mode,
 )
-from .llm import LLMAdapter, validate_llm
+from .llm import (
+    LLMAdapter,
+    drain_calls_safely,
+    pending_calls_safely,
+    validate_llm,
+)
 from .patch import MAX_PATCH_TEXT_CHARS, PatchError, apply_patch
 from .runner import run_verification
 from .sandbox import (
@@ -299,7 +319,8 @@ def run_repair(
     # normalises the sealed copies (v1.35.0), so the report's own
     # narrative check — which caps both — passes on a report this
     # loop emits, whatever the adapter calls itself or recorded.
-    adapter_name = normalise_adapter_name(llm.name, "unknown-llm-adapter")
+    adapter_name = normalise_adapter_name(
+        getattr(llm, "name", None), "unknown-llm-adapter")
     attempts: list[dict] = []
     current_dir = Path(candidate_dir)
     current_label = candidate_label
@@ -339,7 +360,7 @@ def run_repair(
             # exact rejection back so the next proposal can fix its
             # form, not just its content. Each retry costs one round.
             failing_evidence["patch_error"] = patch_feedback
-        calls_before = len(llm.pending_calls()) if hasattr(llm, "pending_calls") else 0
+        calls_before = len(pending_calls_safely(llm))
         rounds_used += 1
         try:
             patch_text = llm.generate_patch(spec.brief, failing_evidence)
@@ -361,8 +382,7 @@ def run_repair(
                 # Snapshot only — the calls stay pending and are
                 # surfaced as the report's unsealed usage below.
                 "llm_usage": normalise_usage_calls(
-                    llm.pending_calls()[calls_before:]
-                    if hasattr(llm, "pending_calls") else []),
+                    pending_calls_safely(llm)[calls_before:]),
                 # No proposal exists to preserve.
                 "patch_text": "",
             }
@@ -371,8 +391,7 @@ def run_repair(
             stopped_reason = "generation_failed"
             break
         patch_calls = normalise_usage_calls(
-            llm.pending_calls()[calls_before:]
-            if hasattr(llm, "pending_calls") else []
+            pending_calls_safely(llm)[calls_before:]
         )
         patch_info = {
             "round": rounds_used,
@@ -454,8 +473,7 @@ def run_repair(
     # Calls still pending were never sealed into a record (e.g. a patch
     # that did not apply ended the loop): surface them at report level
     # instead of dropping the usage on the floor.
-    unsealed = normalise_usage_calls(
-        llm.drain_calls() if hasattr(llm, "drain_calls") else [])
+    unsealed = normalise_usage_calls(drain_calls_safely(llm))
     sealed_calls = [
         c
         for a in attempts

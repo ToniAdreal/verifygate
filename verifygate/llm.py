@@ -28,6 +28,28 @@ evidence record, so real token usage ends up inside the hash chain —
 usage claims in a report are as tamper-evident as the verdict itself.
 The deterministic mock records nothing, which keeps Judge Mode records
 byte-stable.
+
+Adapter-surface resilience (v1.66.0): an adapter is duck-typed, and
+its *optional* surface — the ``name`` attribute and the usage-log
+methods (``drain_calls`` / ``pending_calls``) — was read directly by
+the runner and the repair loop, on the claim (in ``validate_llm`` /
+``validate_references``) that it stays optional. The claim was false
+in two places. A nameless adapter crashed a FAIL run on
+``llm.name`` / ``references.name`` while the diagnosis entry was
+being assembled — after every check had run — and crashed the
+repair loop before its first run; a PASS run noticed nothing,
+exactly the shape v1.42.0 described for malformed adapters. And a
+usage-log method that raised (or a non-callable attribute standing
+where one was expected) propagated out of the sealing path: a
+verdict the checks had already decided produced no record, and a
+repair in progress produced no report. The optional surface is now
+read only through :func:`drain_calls_safely` /
+:func:`pending_calls_safely` and ``getattr``-guarded name reads: a
+missing, broken, or non-list usage log degrades to *no recorded
+usage* — the calls are commentary about spend, never a verdict
+input — and a missing name degrades to the caller's fallback label.
+First-party adapters never degrade: their names and logs behave
+exactly as before.
 """
 
 from __future__ import annotations
@@ -137,6 +159,48 @@ def validate_llm(llm, name: str = "llm"):
                 f"{name} must provide a callable {method}() "
                 f"(got {type(llm).__name__})")
     return llm
+
+
+def drain_calls_safely(llm) -> list:
+    """Drain an adapter's usage log, or ``[]`` if that is impossible.
+
+    Adapter-surface resilience (v1.66.0, see the module docstring):
+    ``drain_calls`` is optional surface — an adapter may not provide
+    it, may provide a non-callable attribute under its name, may
+    raise, or may return a non-list. Every one of those previously
+    propagated out of the runner's sealing path (or the repair
+    loop's report assembly) and destroyed a verdict the checks had
+    already decided. A broken usage log degrades to no recorded
+    usage, never to a lost record; a genuine adapter's list is
+    returned (and drained) exactly as before.
+    """
+    method = getattr(llm, "drain_calls", None)
+    if not callable(method):
+        return []
+    try:
+        calls = method()
+    except Exception:  # a broken usage log must never lose a verdict
+        return []
+    return calls if isinstance(calls, list) else []
+
+
+def pending_calls_safely(llm) -> list:
+    """Snapshot an adapter's usage log, or ``[]`` if impossible.
+
+    The companion to :func:`drain_calls_safely` for the repair loop,
+    which lengths and slices the snapshot: a missing, non-callable,
+    raising, or non-list ``pending_calls`` degrades to an empty
+    snapshot, never to a lost report. A genuine adapter's list (or
+    tuple) snapshot is returned as a list, exactly as before.
+    """
+    method = getattr(llm, "pending_calls", None)
+    if not callable(method):
+        return []
+    try:
+        calls = method()
+    except Exception:  # a broken usage log must never lose a report
+        return []
+    return list(calls) if isinstance(calls, (list, tuple)) else []
 
 
 class LLMAdapter(ABC):
