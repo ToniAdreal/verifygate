@@ -219,7 +219,7 @@ from .evidence import (
 )
 from .jsonio import validate_file_path
 from .llm import LLMAdapter, drain_calls_safely, validate_llm
-from .sandbox import prepare_workspace, validate_candidate_dir
+from .sandbox import prepare_workspace, remove_tree, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
 from .tavily import (
     MAX_REFERENCES,
@@ -382,7 +382,7 @@ def run_verification(
         # the moment they have run, and leaving it behind leaks a full
         # candidate copy per run (a long CI/dogfood session can fill
         # the temp filesystem — observed in practice, Errno 28).
-        shutil.rmtree(workspace, ignore_errors=True)
+        remove_tree(workspace)
     verdict = overall_verdict(results)
     check_dicts = [r.to_dict() for r in results]
 

@@ -181,6 +181,7 @@ from .runner import run_verification
 from .sandbox import (
     iter_candidate_files,
     prepare_workspace,
+    remove_tree,
     validate_candidate_dir,
 )
 from .spec import TaskSpec, validate_spec
@@ -414,7 +415,7 @@ def run_repair(
             changed = apply_patch(new_dir, patch_text)
         except PatchError as exc:
             # The rejected copy is never used again; do not leak it.
-            shutil.rmtree(new_dir, ignore_errors=True)
+            remove_tree(new_dir)
             # An applier message embeds the offending path, which
             # the proposal itself chose: cap what the report stores
             # (and what feedback/prompts carry) at the source.
@@ -438,7 +439,7 @@ def run_repair(
         # final patched copy is kept (the CLI's --patched-out copies
         # from attempts[-1].candidate_dir after the loop returns).
         if owned_dir is not None:
-            shutil.rmtree(owned_dir, ignore_errors=True)
+            remove_tree(owned_dir)
         owned_dir = new_dir
         current_dir = new_dir
         current_label = str(new_dir)

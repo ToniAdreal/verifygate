@@ -126,7 +126,7 @@ from .evidence import tree_hash, validate_label, validate_mode, verify_chain
 from .llm import LLMAdapter, validate_llm
 from .patch import PatchError, apply_patch
 from .runner import run_verification
-from .sandbox import prepare_workspace, validate_candidate_dir
+from .sandbox import prepare_workspace, remove_tree, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
 from .tavily import ReferenceLookup, validate_references
 from .verify import collect_records, header_of
@@ -302,7 +302,7 @@ def replay_document(
             ))
     finally:
         for d in owned:
-            shutil.rmtree(d, ignore_errors=True)
+            remove_tree(d)
     return results
 
 

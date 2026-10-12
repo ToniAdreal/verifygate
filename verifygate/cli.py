@@ -89,7 +89,7 @@ from .mock_llm import MockLLMAdapter
 from .replay import replay_document, replay_ok
 from .repair import MAX_ROUNDS, run_repair
 from .runner import run_verification, write_record
-from .sandbox import _IGNORE
+from .sandbox import _IGNORE, remove_tree
 from .spec import SpecError, load_spec
 from .tavily import MockReferenceLookup, TavilyReferenceLookup
 from .verify import document_ok, verify_document
@@ -533,7 +533,7 @@ def main(argv: list[str] | None = None) -> int:
         if report["rounds_used"] > 0:
             final_dir = Path(report["attempts"][-1]["candidate_dir"])
             if final_dir.name.startswith("verifygate-"):
-                shutil.rmtree(final_dir, ignore_errors=True)
+                remove_tree(final_dir)
         if copy_error is not None:
             return 2
         usage = report.get("llm_usage_total") or {}

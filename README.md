@@ -299,6 +299,12 @@ Candidate code is untrusted, so the sandbox treats it that way:
 - **Bounded output** — check stdout/stderr stream to temp files and
   only a capped tail is read back; a check printing gigabytes cannot
   exhaust the harness's memory.
+- **Deep nesting** — the candidate traversal, the workspace
+  directory skeleton, and workspace removal are iterative, not
+  recursive: a candidate nested deeper than Python's recursion
+  limit (1,000 frames) is copied, hashed, verified, and cleaned
+  up exactly like a shallow one, instead of crashing with a bare
+  `RecursionError` and leaking its workspace copy.
 - **Process-group timeouts** — checks start in a new session and a
   timeout kills the whole group, so no detached child outlives a FAIL.
 - **Workspace cleanup** — every temp copy is removed when its owner
@@ -585,6 +591,27 @@ the `verifygate` console script from a different directory).
 MIT — see `LICENSE`.
 
 ## Version
+
+1.70.0 — deep-nesting traversal:
+the candidate traversal and the
+workspace directory skeleton walked
+the tree by recursion, so a candidate
+nested deeper than Python's recursion
+limit crashed the workspace copy, the
+tree hash, and the repair snapshot
+with a bare RecursionError (surfaced
+at the CLI as an adapter error, exit
+2, with no record), and
+shutil.rmtree raised the same error
+out of workspace cleanup, leaking
+the copy. All three walks — traversal,
+skeleton, and the new
+sandbox.remove_tree removal helper
+now used by the runner, the repair
+loop, replay, and the CLI — are
+iterative, in the same sorted
+depth-first order as before. 8 new
+tests (2083 total).
 
 1.69.0 — closed stdin for checks:
 check commands ran with the harness's

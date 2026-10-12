@@ -40,6 +40,19 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   held-open pipe or a terminal. A check now gets immediate EOF:
   deterministic, replayable, and unable to consume input meant
   for the harness or the operator.
+* **Iterative traversal** — the candidate traversal and the
+  workspace directory skeleton are iterative, not recursive
+  (v1.70.0). Before this, both walked the tree by recursion, so a
+  candidate nested deeper than Python's recursion limit (1,000
+  frames by default — a depth vendored or generated trees can
+  reach) crashed the copy, the tree hash, and the repair
+  snapshot with a bare ``RecursionError`` (a ``RuntimeError``,
+  so the CLI surfaced it as an adapter error, exit 2, with no
+  record) even though the candidate's files were fine and within
+  every size bound. The traversal now carries its stack on the
+  heap, in the same sorted depth-first order as before, so depth
+  is bounded by the filesystem's path limits and the candidate
+  size bounds, not by the interpreter's call stack.
 * **Timeout kills the process group** — checks start in a new session
   and a timeout SIGKILLs the whole group, so a check cannot leave a
   detached child running after it has been failed.
@@ -325,6 +338,8 @@ def iter_candidate_files(root: str | Path):
     directory symlinks and links pointing outside are never followed,
     and a link whose target cannot be resolved (a symlink loop) is
     dropped rather than raising out of the traversal (v1.68.0).
+    The walk itself is iterative (v1.70.0): depth is bounded by
+    the filesystem, not by the interpreter's recursion limit.
 
     Traversal-root validation (v1.58.0): ``root`` is validated
     through :func:`validate_candidate_dir` *eagerly*, at call time —
@@ -349,31 +364,42 @@ def iter_candidate_files(root: str | Path):
 
 def _iter_candidate_files(root: Path):
     root_resolved = root.resolve()
-
-    def walk(directory: Path, prefix: str):
-        for entry in sorted(os.scandir(directory), key=lambda e: e.name):
-            if entry.name in _IGNORED_NAMES or entry.name.endswith(".pyc"):
+    # Iterative depth-first walk (v1.70.0, see the module
+    # docstring): the stack of entry iterators lives on the heap,
+    # so a candidate nested deeper than the interpreter's
+    # recursion limit traverses exactly like a shallow one, in
+    # the same sorted order the recursive walk produced.
+    stack: list[tuple[object, str]] = [
+        (iter(sorted(os.scandir(root), key=lambda e: e.name)), "")]
+    while stack:
+        entries, prefix = stack[-1]
+        try:
+            entry = next(entries)  # type: ignore[arg-type]
+        except StopIteration:
+            stack.pop()
+            continue
+        if entry.name in _IGNORED_NAMES or entry.name.endswith(".pyc"):
+            continue
+        rel = f"{prefix}{entry.name}"
+        if entry.is_symlink():
+            try:
+                target = Path(entry.path).resolve()
+            except (OSError, RuntimeError):
+                # Unresolvable link (a symlink loop raises
+                # RuntimeError, an unstatable target OSError):
+                # dropped like an outside or directory link
+                # (v1.68.0) — one bad link must not destroy the
+                # traversal the copy, hash, and snapshot share.
                 continue
-            rel = f"{prefix}{entry.name}"
-            if entry.is_symlink():
-                try:
-                    target = Path(entry.path).resolve()
-                except (OSError, RuntimeError):
-                    # Unresolvable link (a symlink loop raises
-                    # RuntimeError, an unstatable target OSError):
-                    # dropped like an outside or directory link
-                    # (v1.68.0) — one bad link must not destroy the
-                    # traversal the copy, hash, and snapshot share.
-                    continue
-                if _within(target, root_resolved) and target.is_file():
-                    yield rel, target
-                continue  # outside link or dir link: dropped
-            if entry.is_dir(follow_symlinks=False):
-                yield from walk(Path(entry.path), f"{rel}/")
-            elif entry.is_file(follow_symlinks=False):
-                yield rel, Path(entry.path)
-
-    yield from walk(root, "")
+            if _within(target, root_resolved) and target.is_file():
+                yield rel, target
+            continue  # outside link or dir link: dropped
+        if entry.is_dir(follow_symlinks=False):
+            stack.append(
+                (iter(sorted(os.scandir(Path(entry.path)),
+                             key=lambda e: e.name)), f"{rel}/"))
+        elif entry.is_file(follow_symlinks=False):
+            yield rel, Path(entry.path)
 
 
 def validate_candidate_bound(value, name: str, ceiling: int) -> int:
@@ -469,17 +495,19 @@ def prepare_workspace(candidate_dir: str | Path) -> Path:
     check_candidate_bounds(candidate_dir)
     ws = Path(tempfile.mkdtemp(prefix="verifygate-"))
     # Recreate the real directory skeleton (incl. empty dirs), without
-    # ever descending through a symlink.
-    def make_dirs(directory: Path, dest: Path):
+    # ever descending through a symlink. Iterative (v1.70.0), like
+    # the traversal above: a recursive skeleton walk crashed with
+    # RecursionError on the same deep candidates.
+    dir_stack: list[tuple[Path, Path]] = [(candidate_dir, ws)]
+    while dir_stack:
+        directory, dest = dir_stack.pop()
         for entry in sorted(os.scandir(directory), key=lambda e: e.name):
             if entry.name in _IGNORED_NAMES or entry.is_symlink():
                 continue
             if entry.is_dir(follow_symlinks=False):
                 sub = dest / entry.name
                 sub.mkdir(exist_ok=True)
-                make_dirs(Path(entry.path), sub)
-
-    make_dirs(candidate_dir, ws)
+                dir_stack.append((Path(entry.path), sub))
     for rel, source in iter_candidate_files(candidate_dir):
         target = ws / rel
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -490,6 +518,53 @@ def prepare_workspace(candidate_dir: str | Path) -> Path:
         # disk. Preserve the source's permission bits exactly.
         shutil.copymode(source, target)
     return ws
+
+
+def remove_tree(path: str | Path) -> None:
+    """Remove a tree iteratively, ignoring missing paths (v1.70.0).
+
+    ``shutil.rmtree`` walks by recursion, so removing a deep
+    workspace copy raised ``RecursionError`` out of the cleanup
+    in the runner's ``finally`` — destroying the record the
+    checks had just decided and leaking the copy anyway. This
+    removal carries its stack on the heap, deletes files and
+    symlinks without following them, and removes directories
+    bottom-up; a path that is already gone, or an entry that
+    cannot be removed, is ignored exactly as ``rmtree`` with
+    ``ignore_errors=True`` ignored it, so cleanup never raises.
+    """
+    root = Path(path)
+    try:
+        if root.is_symlink() or root.is_file():
+            root.unlink()
+            return
+        if not root.is_dir():
+            return
+    except OSError:
+        return
+    stack: list[tuple[Path, bool]] = [(root, False)]
+    while stack:
+        current, expanded = stack.pop()
+        if expanded:
+            try:
+                current.rmdir()
+            except OSError:
+                pass
+            continue
+        stack.append((current, True))
+        try:
+            entries = list(os.scandir(current))
+        except OSError:
+            continue
+        for entry in entries:
+            child = Path(entry.path)
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append((child, False))
+                else:
+                    child.unlink()
+            except OSError:
+                pass
 
 
 def _read_tail(f) -> str:
