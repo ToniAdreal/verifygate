@@ -65,6 +65,23 @@ come only from deterministic validators: exit codes and assertions.
 </div>
 
 <div class="card">
+  <h2>See a real run — chain-v3 reports (current chain)</h2>
+  <p><a href="evidence_real_repair_v3.html">Evidence view — chain-v3 real
+  Nemotron repair report (Python)</a>: the flagship loop under the current
+  chain, which seals each record's top-level metadata (its replay command,
+  version, and dev-key disclosure) into the record hash. Nemotron 3 Super
+  120B diagnosed the failing candidate, its first diff was rejected by the
+  patch applier and fed back, and its second diff was applied to a copy and
+  re-verified — <span class="pass">attempt 0 FAIL &rarr; attempt 2
+  PASS</span>, 9,407 tokens sealed.</p>
+  <p><a href="evidence_js_real_repair_v3.html">Evidence view — chain-v3 real
+  Nemotron repair report (JavaScript)</a>: the same chain-v3 proof for the
+  Node.js sample — <span class="pass">attempt 0 FAIL &rarr; attempt 1
+  PASS</span>, 5,318 tokens sealed. The two reports above it are the
+  earlier chain-v1 reports, kept as the historical record.</p>
+</div>
+
+<div class="card">
   <h2>Verify a record yourself — no re-run, no keys</h2>
   <p>A record's point is that a third party can check it without trusting
   the producer. The standalone <code>verifygate verify</code> command recomputes

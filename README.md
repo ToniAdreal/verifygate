@@ -571,11 +571,15 @@ clean-tree rehearsal on every push and pull request.
 resources) deployable to any static host: `demo/index.html` explains the
 project and the Judge Mode quickstart, shows the standalone
 `verifygate verify` check and the `verifygate replay` reproduction
-check, and links to both rendered real-mode
+check, and links to the rendered real-mode
 Nemotron repair reports — `demo/evidence_real_repair.html` (Python
 sample, FAIL → PASS, 5,367 tokens sealed) and
 `demo/evidence_js_real_repair.html` (JavaScript sample, FAIL → PASS,
-6,390 tokens sealed) — with their hash chains verified on the page.
+6,390 tokens sealed), plus the chain-v3 reports
+`demo/evidence_real_repair_v3.html` (Python, FAIL → PASS, 9,407 tokens
+sealed) and `demo/evidence_js_real_repair_v3.html` (JavaScript,
+FAIL → PASS, 5,318 tokens sealed) — with their hash chains verified on
+the page.
 No candidate code is executed by the hosted demo.
 
 ## Clean-tree rehearsal
@@ -604,6 +608,19 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.103.0 — The hosted demo renders the
+chain-v3 real-mode reports: the
+demo previously rendered only the
+legacy chain-v1 reports, so the
+judge-facing hosted page never
+showed a record sealed under the
+current chain (which also seals
+each record's top-level metadata).
+Both chain-v3 reports (Python:
+9,407 tokens; JavaScript: 5,318
+tokens) are now rendered into
+`demo/` and linked from the landing
+page, chains verified on the page.
 1.102.0 — The candidate tree hash
 is faithful to the bytes on disk:
 a filename is bytes, not text — a

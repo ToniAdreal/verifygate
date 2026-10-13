@@ -38,6 +38,31 @@ def test_demo_js_evidence_page_chains_verify():
     assert "6,390" in html or "6390" in html
 
 
+def test_demo_v3_evidence_pages_chains_verify():
+    # v1.103.0: the flagship chain-v3 real-mode reports are rendered
+    # on the hosted demo too — before this the demo rendered only the
+    # legacy chain-v1 reports, so a judge arriving from the hosted
+    # page never saw a v3-sealed record rendered.
+    for name, total in (
+        ("evidence_real_repair_v3.html", "9407"),
+        ("evidence_js_real_repair_v3.html", "5318"),
+    ):
+        page = DEMO / name
+        assert page.exists(), f"{name} must be rendered and committed"
+        html = page.read_text(encoding="utf-8")
+        assert "Hash chain verified" in html
+        assert "CHAIN INVALID" not in html
+        assert "<script" not in html
+        assert 'src="http' not in html and "src='http" not in html
+        assert total in html
+
+
+def test_demo_index_links_v3_pages():
+    html = (DEMO / "index.html").read_text(encoding="utf-8")
+    assert "evidence_real_repair_v3.html" in html
+    assert "evidence_js_real_repair_v3.html" in html
+
+
 def test_demo_index_links_js_page_and_verify_command():
     html = (DEMO / "index.html").read_text(encoding="utf-8")
     assert "evidence_js_real_repair.html" in html
