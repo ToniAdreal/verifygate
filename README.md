@@ -604,6 +604,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.95.0 — A binary patch block is a
+clean rejection, never a silent
+drop: a ``GIT binary patch`` block
+(``git diff --binary``) and the
+``Binary files a/<path> and
+b/<path> differ`` line (plain
+``git diff``) carry no
+``---``/``+++`` pair and no hunks,
+so they produced no file patch —
+alone they failed misleadingly as
+"no unified diff found", and inside
+a multi-file diff they were silently
+dropped while the text changes
+applied and reported success,
+leaving the patched tree different
+from the tree the diff specified.
+Both markers now raise a clean
+``PatchError`` at parse time (naming
+the target when known), so the
+whole diff fails atomically and the
+repair loop feeds the rejection
+back. The markers match as whole
+top-level lines only, so a text
+patch whose content adds a line
+reading ``GIT binary patch`` still
+applies. 9 new tests (2365 total).
+
 1.94.0 — A patch can delete an
 empty file: git emits no
 ``---``/``+++`` pair and no hunks

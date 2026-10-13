@@ -157,6 +157,26 @@ own. A hunk-less deletion of a *non-empty* file is still a
 clean :class:`PatchError` at apply time: the deletion branch
 requires the hunks to account for every line on disk.
 
+Binary patch blocks (since v1.95.0): a ``GIT binary patch``
+block (what ``git diff --binary`` emits for a binary change) and
+the ``Binary files a/<path> and b/<path> differ`` line (what a
+plain ``git diff`` emits instead) carry no ``---``/``+++`` pair
+and no hunks, so the parser produced no file patch for them.
+Alone, a binary diff therefore failed misleadingly as "no
+unified diff found"; inside a multi-file diff it was *silently
+dropped* while the text changes applied and reported success —
+the patched tree was not the tree the diff specified (the same
+silent-drop shape as the v1.94.0 empty-file deletion). Both
+markers are now a clean :class:`PatchError` at parse time,
+naming the target when the ``diff --git`` line named one, so
+the whole diff fails atomically before anything is staged or
+written and the repair loop feeds the rejection back like any
+other inapplicable diff. VerifyGate applies text diffs only; a
+binary change is a rejection, never a partial application. The
+markers are matched as whole top-level lines only, so a text
+patch whose *content* adds a line reading ``GIT binary patch``
+(as a ``+`` line inside a hunk) applies exactly as before.
+
 File-type mode validation (since v1.92.0): a git mode line was
 honoured for its permission bits only — any octal value was
 masked with ``& 0o777`` at commit — so a mode naming a
@@ -635,6 +655,22 @@ def parse_patch(text: str) -> list[FilePatch]:
 
     i = 0
     while i < len(lines):
+        if lines[i] == "GIT binary patch" or (
+                lines[i].startswith("Binary files ")
+                and lines[i].endswith(" differ")):
+            # A binary change carries no text hunks the applier
+            # could honour (v1.95.0): reject the whole diff at
+            # parse time instead of silently dropping this block
+            # while the rest applies. Hunk content lines never
+            # reach this loop (they are consumed by the hunk
+            # reader), so a "+" line adding this exact text to a
+            # file is unaffected.
+            target = f" for {git_paths[1]!r}" if git_paths else ""
+            raise PatchError(
+                f"binary patch{target} cannot be applied: "
+                "VerifyGate applies text (unified) diffs only; "
+                "propose the change as a text diff or leave the "
+                "binary file unchanged")
         if lines[i].startswith("diff --git "):
             flush_mode_only()
             git_paths = _split_git_paths(lines[i][len("diff --git "):])
