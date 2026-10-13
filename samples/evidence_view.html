@@ -177,7 +177,7 @@ Both should exit with code 0 and show all tests passing.</pre>
 <div class="card"><p>Patch from previous attempt applied to: <strong>stringtools.py</strong></p></div>
 <div class="verdict-banner pass"><span class="big">VERDICT: PASS</span><br>spec: stringtools-slugify-fix · mode: real · created: 2026-10-10T11:31:39.796272+00:00</div>
 <div class="chain-ok">Hash chain verified at render time — this record is intact and tamper-evident.</div>
-<div class="card"><h3>Replay</h3><p class="mono">python3 -m verifygate run --spec samples/spec.json --candidate /tmp/verifygate-repair-g1k8hjkx --mode real</p><p class="mono">spec hash: 5477ea11ac6b862af5012c86edb334f6a498b1d674377e5c1e0a0a3c8814aba0<br>candidate tree hash: 065b8671139fe84b89129ae6784082f18114608906316487b2ebbb3c3ae470a6<br>record hash: 1a8454856058fc5d599065d0de1d8d1b5fe547c7da90dc789e07d339c0cfe804<br>signature: 14997c9402e9ea7ffca2b237cc9e8160…</p>
+<div class="card"><h3>Replay</h3><p class="mono">python3 -m verifygate replay --record samples/evidence_real_repair.json --spec samples/spec.json --candidate samples/failing --mode real  # attempt 1: patched copy, reconstructed from the report&#x27;s recorded patch</p><p class="mono">spec hash: 5477ea11ac6b862af5012c86edb334f6a498b1d674377e5c1e0a0a3c8814aba0<br>candidate tree hash: 065b8671139fe84b89129ae6784082f18114608906316487b2ebbb3c3ae470a6<br>record hash: 1a8454856058fc5d599065d0de1d8d1b5fe547c7da90dc789e07d339c0cfe804<br>signature: 14997c9402e9ea7ffca2b237cc9e8160…</p>
 <p>Signed with the labelled public development key (demonstrates the mechanism; not production key management).</p>
 </div>
 <div class="card">

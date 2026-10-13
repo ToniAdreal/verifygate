@@ -608,6 +608,20 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.104.0 — The hosted demo's legacy
+chain-v1 evidence pages are
+re-rendered: they went stale when
+v1.3.0 corrected the patched
+attempts' replay commands inside
+the records, and still printed a
+`verifygate run` command pointing
+at a deleted temp workspace. The
+pages now print the executable
+`verifygate replay …` command the
+records carry, and a drift-guard
+test pins every committed render
+to a fresh render of its source
+record.
 1.103.0 — The hosted demo renders the
 chain-v3 real-mode reports: the
 demo previously rendered only the
