@@ -604,6 +604,25 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.90.0 — A patch never stages a file
+and a path beneath it: staging judged
+each file patch independently, so a diff
+creating both `x` and `x/y` (in either
+order) staged cleanly and then failed
+in the commit loop — after the first
+target had already been written — with
+a raw `FileExistsError` /
+`IsADirectoryError` that escaped the
+repair loop's `PatchError` handling and
+lost the whole report. Staged targets
+are now checked against each other
+before anything is written: no staged
+target may be an ancestor of another,
+so the diff is a clean rejection, the
+tree is left untouched, and the loop
+feeds it back like any other rejection.
+10 new tests (2299 total).
+
 1.89.0 — A file output never overwrites
 a candidate file: `--out` was judged
 against the spec, the record, and the

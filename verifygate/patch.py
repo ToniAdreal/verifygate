@@ -64,6 +64,24 @@ boundary whose two sides name the same file); decoding happens
 ``_safe_target`` judges the path, so a quoted escape that
 decodes to ``..`` is rejected exactly like a literal one.
 
+Staged path conflicts (since v1.90.0): staging judged each
+file patch independently, so a diff that staged both a file
+and a path *beneath* it — creating ``x`` and ``x/y``, in either
+order — staged cleanly and then failed in the commit loop,
+after the first target had already been written: a raw
+``FileExistsError`` / ``IsADirectoryError`` (not a
+:class:`PatchError`, so it escaped the repair loop's rejection
+handling and lost the whole report) over a half-applied tree —
+the v1.10.0 atomicity contract broken by a shape staging never
+judged. Staged targets are now checked against each other
+before anything is written: no staged target may be a proper
+ancestor of another staged target, whatever either one's
+staged state (created, modified, or deleted). Such a diff is
+a clean :class:`PatchError`, the tree is left untouched, and
+the repair loop feeds the rejection back like any other.
+Sibling paths, and names that merely share a string prefix
+(``xy`` beside ``x/y``), are not ancestors and apply as before.
+
 Hardlink fidelity (since v1.87.0): the commit never writes a
 shared inode in place. ``_safe_target`` judges a patch path by
 its resolved location, but a target file can share its inode
@@ -706,6 +724,44 @@ def _check_result_bounds(
             "(the candidate size bound in sandbox.py)")
 
 
+def _check_staged_path_conflicts(
+    root: Path,
+    staged: dict[Path, _Staged],
+) -> None:
+    """Reject staged targets that are ancestors of other staged targets.
+
+    Staged path conflicts (v1.90.0, see the module docstring):
+    a file and a directory cannot occupy the same path, so a
+    diff staging both ``x`` and ``x/y`` — as creations, or one
+    as a modification and the other as a creation — can never
+    be committed as staged: the commit would write one target
+    and then fail on the other, half-applying the diff with a
+    raw ``OSError``. Judged here, after the whole diff has
+    staged and before anything is written, it is a clean
+    :class:`PatchError` and the tree is left untouched. The
+    comparison is by path components, never by string prefix:
+    ``xy`` is not an ancestor of ``x/y``.
+    """
+    root_resolved = root.resolve()
+    rels: dict[Path, str] = {}
+    for target in staged:
+        try:
+            rels[target] = target.relative_to(root_resolved).as_posix()
+        except ValueError:
+            continue  # not under root: judged by _safe_target already
+    targets = sorted(rels, key=lambda t: rels[t])
+    for i, ancestor in enumerate(targets):
+        ancestor_parts = ancestor.relative_to(root_resolved).parts
+        for descendant in targets[i + 1:]:
+            parts = descendant.relative_to(root_resolved).parts
+            if len(parts) > len(ancestor_parts) \
+                    and parts[:len(ancestor_parts)] == ancestor_parts:
+                raise PatchError(
+                    f"patch stages both {rels[ancestor]} and "
+                    f"{rels[descendant]}: a file and a path beneath "
+                    f"it cannot both be written")
+
+
 def apply_patch(
     root: str | Path,
     patch_text: str,
@@ -854,6 +910,8 @@ def apply_patch(
             if fp.new_mode is not None:
                 state.mode = fp.new_mode
             changed.append(fp.new_path)
+
+    _check_staged_path_conflicts(root, staged)
 
     # The staged result must stay within the candidate size bounds,
     # checked here — after the whole diff applied cleanly in staging
