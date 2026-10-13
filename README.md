@@ -604,6 +604,35 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.94.0 — A patch can delete an
+empty file: git emits no
+``---``/``+++`` pair and no hunks
+when an empty file is deleted — the
+whole block is a ``diff --git`` line
+plus a ``deleted file mode`` line —
+and that mode line was not parsed
+at all, so the block produced no
+file patch: alone it failed as "no
+unified diff found", and inside a
+multi-file diff it was silently
+dropped while the rest applied and
+reported success, leaving a file
+the diff had deleted in the patched
+tree. ``deleted file mode`` is now
+parsed (validated like every other
+mode line) and flushed as a
+hunk-less deletion, and a hunk-less
+``---``/``+++`` pair naming
+``/dev/null`` on either side stands
+as a creation or deletion on its
+own. A hunk-less deletion of a
+non-empty file is still a clean
+``PatchError`` — the hunks must
+account for every line on disk —
+and a failed deletion fails the
+whole diff atomically. 14 new tests
+(2356 total).
+
 1.93.0 — A patch can rename or copy
 a file: git ``rename from`` /
 ``rename to`` and ``copy from`` /

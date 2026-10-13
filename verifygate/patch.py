@@ -138,6 +138,25 @@ untouched, and the repair loop feeds it back like any other
 inapplicable diff. Replay reconstructs a renamed attempt from
 the recorded patch text exactly as it does any other.
 
+Empty-file deletion (since v1.94.0): git emits no
+``---``/``+++`` pair and no hunks when an *empty* file is
+deleted — the whole diff block is ``diff --git`` plus a
+``deleted file mode`` line and an ``index`` line. That mode
+line was not parsed at all, so such a block produced no file
+patch: alone it failed as "no unified diff found", and inside
+a multi-file diff it was *silently dropped* while the rest
+applied and reported success — the patched tree still held a
+file the diff had deleted. ``deleted file mode`` is now
+parsed (its value validated by :func:`_mode_value` exactly
+like the other mode lines) and flushed as a hunk-less deletion
+at the next boundary, exactly like a mode-only diff; a
+``---``/``+++`` pair whose new side is ``/dev/null`` with no
+hunks (or whose old side is ``/dev/null`` — an empty creation
+carrying no mode line) likewise stands as a file patch on its
+own. A hunk-less deletion of a *non-empty* file is still a
+clean :class:`PatchError` at apply time: the deletion branch
+requires the hunks to account for every line on disk.
+
 File-type mode validation (since v1.92.0): a git mode line was
 honoured for its permission bits only — any octal value was
 masked with ``& 0o777`` at commit — so a mode naming a
@@ -564,11 +583,18 @@ def parse_patch(text: str) -> list[FilePatch]:
     pending_rename_from: str | None = None
     pending_copy: tuple[str, str] | None = None
     pending_copy_from: str | None = None
+    # A `deleted file mode` line since the last file patch
+    # (v1.94.0): git emits no ---/+++ pair and no hunks when an
+    # empty file is deleted, so the deletion exists only in
+    # this header and is flushed as a hunk-less FilePatch at
+    # the next boundary, exactly like a mode-only diff.
+    pending_delete = False
 
     def flush_mode_only() -> None:
         nonlocal git_paths, pending_mode, pending_create
         nonlocal pending_rename, pending_rename_from
         nonlocal pending_copy, pending_copy_from
+        nonlocal pending_delete
         if pending_rename is not None:
             patches.append(FilePatch(
                 old_path=pending_rename[0],
@@ -585,6 +611,12 @@ def parse_patch(text: str) -> list[FilePatch]:
                 new_mode=pending_mode,
                 is_copy=True,
             ))
+        elif pending_delete and git_paths is not None:
+            patches.append(FilePatch(
+                old_path=git_paths[0],
+                new_path="/dev/null",
+                hunks=[],
+            ))
         elif git_paths is not None and pending_mode is not None:
             patches.append(FilePatch(
                 old_path="/dev/null" if pending_create else git_paths[0],
@@ -599,6 +631,7 @@ def parse_patch(text: str) -> list[FilePatch]:
         pending_rename_from = None
         pending_copy = None
         pending_copy_from = None
+        pending_delete = False
 
     i = 0
     while i < len(lines):
@@ -614,6 +647,15 @@ def parse_patch(text: str) -> list[FilePatch]:
             continue
         if lines[i].startswith("new mode "):
             pending_mode = _mode_value(lines[i])
+            i += 1
+            continue
+        if lines[i].startswith("deleted file mode "):
+            # Validated like every other mode line (v1.92.0):
+            # a non-regular or malformed value is a parse-time
+            # PatchError. The bits themselves name the file
+            # being deleted and are not applied anywhere.
+            _mode_value(lines[i])
+            pending_delete = True
             i += 1
             continue
         if lines[i].startswith("rename from "):
@@ -655,6 +697,13 @@ def parse_patch(text: str) -> list[FilePatch]:
                     or (pending_copy is not None
                         and pending_copy != pair):
                 flush_mode_only()
+            if pending_delete and git_paths is not None and not (
+                    pair[1] == "/dev/null" and pair[0] == git_paths[0]):
+                # A pending empty-file deletion from an earlier
+                # block whose pair this is not: flush it first so
+                # it is neither lost nor attributed to this pair.
+                flush_mode_only()
+            pair_is_delete = pending_delete
             fp = FilePatch(
                 old_path=_clean_path(lines[i][4:]),
                 new_path=_clean_path(lines[i + 1][4:]),
@@ -669,6 +718,7 @@ def parse_patch(text: str) -> list[FilePatch]:
             pending_rename_from = None
             pending_copy = None
             pending_copy_from = None
+            pending_delete = False
             i += 2
             while i < len(lines):
                 m = _HUNK_RE.match(lines[i])
@@ -725,7 +775,12 @@ def parse_patch(text: str) -> list[FilePatch]:
                     if not hunk.lines:
                         break
                 fp.hunks.append(hunk)
-            if fp.hunks or fp.new_mode is not None:
+            if fp.hunks or fp.new_mode is not None or pair_is_delete \
+                    or fp.old_path == "/dev/null" \
+                    or fp.new_path == "/dev/null":
+                # A hunk-less pair still stands on its own when it
+                # names a creation or a deletion (v1.94.0): an
+                # empty file has no lines for a hunk to carry.
                 patches.append(fp)
         else:
             i += 1
