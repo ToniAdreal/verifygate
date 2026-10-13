@@ -56,6 +56,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from .jsonio import has_lone_surrogates
 from .spec import MAX_BRIEF_CHARS
 
 
@@ -81,11 +82,26 @@ def validate_brief(brief, name: str = "brief") -> str:
     passes — and anything else is a ``ValueError`` before any model
     call is made. An empty brief stays legal: a spec's brief may be
     empty, and the mock renders it as ``(no brief)``.
+
+    Brief encodability (v1.100.0): a brief carrying lone surrogates
+    is likewise rejected before any model call. The brief is
+    embedded verbatim in the real adapter's prompt and echoed by
+    the mock into its patch proposal; a surrogate can be encoded
+    as UTF-8 by neither path, and a proposal carrying one is a
+    ``PatchError`` at parse time, so the repair loop burned every
+    round blaming the patch text for the brief's characters. The
+    spec layer judges the same field the same way
+    (``spec.parse_spec`` / ``spec.validate_spec``), so a brief
+    taken from a validated spec always passes here too.
     """
     if not isinstance(brief, str) or len(brief) > MAX_BRIEF_CHARS:
         raise ValueError(
             f"{name} must be a string of at most "
             f"{MAX_BRIEF_CHARS} characters, got {_bounded_repr(brief)}")
+    if has_lone_surrogates(brief):
+        raise ValueError(
+            f"{name} contains lone surrogates — characters that "
+            "are not valid Unicode and cannot be encoded as UTF-8")
     return brief
 
 

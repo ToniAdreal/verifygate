@@ -604,6 +604,35 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.100.0 — The spec brief is now
+judged encodable as UTF-8 at the
+same validations that already
+judged its type and length. The
+brief was the one spec text field
+the encodability pass left: it is
+neither sealed nor spawned, so a
+brief carrying lone surrogates
+passed the spec and adapter
+validation — yet it is embedded
+verbatim in every patch-generation
+prompt and echoed by the mock
+adapter into its patch proposal,
+and a proposal carrying surrogates
+is a PatchError at parse time.
+Such a brief poisoned every repair
+round of a non-sample task and
+stopped the loop
+``patch_not_applicable`` with the
+blame on the patch text, and in
+real mode it entered a paid prompt
+as text no UTF-8 encoding can
+carry. ``parse_spec``,
+``validate_spec``, and
+``llm.validate_brief`` now reject
+it up front, before any check runs
+or any model call is made. 15 new
+tests (2451 total).
+
 1.99.0 — The spec/candidate labels
 are now judged encodable as UTF-8
 at the same validation that already

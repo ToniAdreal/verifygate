@@ -104,6 +104,24 @@ the checks below were accepted and each broke something downstream):
   still accepted: it is valid UTF-8 text, it seals and verifies
   like any other, and only the command crosses the spawn
   boundary.
+* The brief is encodable too (v1.100.0): the v1.97.0 pass judged
+  the spec name, the check names, and the commands, but not the
+  brief — the one spec text field that is neither sealed nor
+  spawned, so its unencodability surfaced one step later and
+  blamed the wrong artifact. The brief is embedded verbatim in
+  every patch-generation prompt and echoed by the mock adapter
+  into its patch proposal, and a proposal carrying lone
+  surrogates is a ``PatchError`` at parse time (v1.97.0): a
+  surrogate brief therefore poisoned every repair round of a
+  non-sample task and stopped the loop ``patch_not_applicable``
+  with the rejection blamed on the patch text, and in real mode
+  it entered a paid prompt as text no UTF-8 encoding can carry.
+  ``parse_spec`` and ``validate_spec`` now reject a surrogate
+  brief up front, and ``llm.validate_brief`` applies the same
+  judgement at the adapter layer. A NUL byte in a brief stays
+  legal, exactly as in a name: it is valid UTF-8, and a proposal
+  echoing it stops as an ordinary no-diff proposal, identically
+  to a clean brief.
 """
 
 from __future__ import annotations
@@ -233,6 +251,13 @@ def parse_spec(raw: dict) -> TaskSpec:
             "every evidence record the spec produces")
     if not isinstance(brief, str):
         raise SpecError("spec.brief must be a string")
+    if has_lone_surrogates(brief):
+        raise SpecError(
+            "spec.brief contains lone surrogates — characters that "
+            "are not valid Unicode and cannot be encoded as "
+            "UTF-8 — so it could never be embedded in a "
+            "patch-generation prompt or echoed into a patch "
+            "proposal")
     if len(brief) > MAX_BRIEF_CHARS:
         raise SpecError(
             f"spec.brief must be at most {MAX_BRIEF_CHARS} "
@@ -335,6 +360,13 @@ def validate_spec(spec) -> TaskSpec:
             f"spec.name must be at most {MAX_SPEC_NAME_CHARS} characters")
     if not isinstance(spec.brief, str):
         raise SpecError("spec.brief must be a string")
+    if has_lone_surrogates(spec.brief):
+        raise SpecError(
+            "spec.brief contains lone surrogates — characters that "
+            "are not valid Unicode and cannot be encoded as "
+            "UTF-8 — so it could never be embedded in a "
+            "patch-generation prompt or echoed into a patch "
+            "proposal")
     if len(spec.brief) > MAX_BRIEF_CHARS:
         raise SpecError(
             f"spec.brief must be at most {MAX_BRIEF_CHARS} characters")
