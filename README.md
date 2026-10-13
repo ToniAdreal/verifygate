@@ -604,6 +604,39 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.102.0 — The candidate tree hash
+is faithful to the bytes on disk:
+a filename is bytes, not text — a
+candidate may legally contain a
+name that is not valid UTF-8 (a
+Latin-1 name committed on another
+system; git tracks such names
+routinely), which the filesystem
+layer decodes with
+surrogateescape. The workspace
+copy, the check execution, and
+the patch applier all round-trip
+those bytes, but tree_hash joined
+its lines as text and hashed them
+as UTF-8, which raises a
+UnicodeEncodeError on the
+surrogate such a name decodes to
+— a run over the tree lost the
+record its checks had decided,
+and no record could be bound to
+the tree at all. Each hash line
+is now encoded as UTF-8 with
+surrogateescape, so a filename
+enters the hash as exactly its
+disk bytes: distinct raw bytes
+stay distinct (never collapsed
+into U+FFFD), and a
+surrogate-free tree hashes
+identically to before, so every
+committed record's candidate
+binding is unchanged. 8 new tests
+(2468 total).
+
 1.101.0 — The Tavily lookup query
 is now judged encodable as UTF-8
 at the same validation that already

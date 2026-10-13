@@ -656,6 +656,25 @@ def tree_hash(root: str | Path) -> str:
     ``Path(...)``, an empty string does not silently hash the
     current directory, and a regular file is the run path's
     ``FileNotFoundError``, not a ``NotADirectoryError``.
+
+    Byte fidelity (v1.102.0): a filename on disk is bytes, not
+    text — a candidate may legally contain a name that is not
+    valid UTF-8 (a Latin-1 name committed on another system;
+    ``git`` tracks such names routinely), which the filesystem
+    layer decodes with ``surrogateescape``. The workspace copy,
+    the check execution, and the patch applier (bytes-level
+    quoted-path decoding, v1.85.0) all round-trip those bytes,
+    but the joined lines were hashed as ``text.encode("utf-8")``,
+    which raises ``UnicodeEncodeError`` on the surrogate such a
+    name decodes to — a run over the tree lost the record its
+    checks had already decided, and no record could be bound to
+    the tree at all. Each line is now encoded as UTF-8 with
+    ``surrogateescape`` before hashing, so a filename enters the
+    hash as exactly the bytes it has on disk: distinct raw bytes
+    stay distinct (never collapsed into U+FFFD), and a
+    surrogate-free tree encodes byte-identically to the previous
+    computation, so every committed record's candidate binding is
+    unchanged.
     """
     from .sandbox import check_candidate_bounds, iter_candidate_files
 
@@ -665,7 +684,8 @@ def tree_hash(root: str | Path) -> str:
         f"{_escape_tree_rel(rel)}:{_hash_file(source)}"
         for rel, source in iter_candidate_files(root)
     ]
-    return _sha("\n".join(lines))
+    return _sha_bytes(
+        b"\n".join(line.encode("utf-8", "surrogateescape") for line in lines))
 
 
 def _hash_file(source: Path) -> str:
