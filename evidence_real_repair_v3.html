@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VerifyGate repair report — stringtools-slugify-fix</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;margin:0;
+ background:#f6f7f9;color:#16181d;line-height:1.5}
+main{max-width:960px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:1.6rem;margin:.2em 0}
+h2{font-size:1.15rem;margin:1.6em 0 .5em;border-bottom:2px solid #e2e4e9;
+ padding-bottom:.25em}
+h3{font-size:1rem;margin:1em 0 .4em}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em;
+ word-break:break-all}
+.badge{display:inline-block;padding:.1em .6em;border-radius:999px;
+ font-weight:700;font-size:.85em;letter-spacing:.02em}
+.pass{background:#d9f2e3;color:#0c5a2e}
+.fail{background:#fbdcdc;color:#7d1212}
+.neutral{background:#e6e8ec;color:#333}
+.card{background:#fff;border:1px solid #e2e4e9;border-radius:10px;
+ padding:14px 16px;margin:10px 0}
+.verdict-banner{border-radius:10px;padding:16px;margin:14px 0;color:#fff}
+.verdict-banner.pass{background:#12753a}
+.verdict-banner.fail{background:#a12626}
+.verdict-banner .big{font-size:1.5rem;font-weight:800}
+.chain-ok{background:#eef7f0;border:1px solid #bfe3cc;border-radius:8px;
+ padding:10px 14px;margin:10px 0}
+.chain-bad{background:#fdecec;border:2px solid #a12626;border-radius:8px;
+ padding:10px 14px;margin:10px 0;font-weight:700;color:#7d1212}
+pre{background:#101216;color:#e8eaed;border-radius:8px;padding:10px 12px;
+ overflow-x:auto;white-space:pre-wrap;word-break:break-word;font-size:.82rem}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{border:1px solid #e2e4e9;padding:6px 8px;text-align:left;
+ vertical-align:top}
+th{background:#f0f1f4}
+.ref{margin:.3em 0}
+.src{font-size:.75em;background:#e6e8ec;border-radius:4px;padding:.05em .4em}
+details{margin:.4em 0}
+summary{cursor:pointer;font-weight:600;font-size:.9rem}
+footer{color:#666;font-size:.85rem;margin-top:40px}
+a{color:#0b57a4}
+</style>
+</head>
+<body>
+<main>
+<h1>VerifyGate — evidence record</h1>
+<p><em>AI proposes. Deterministic checks dispose. The evidence record proves it.</em></p>
+<div class="card"><h3>Repair report</h3><p>spec: stringtools-slugify-fix · mode: real · LLM adapter: nebius-token-factory</p><p>final verdict: <span class="badge pass">PASS</span> · repair rounds used: 2 / 3 · stopped: passed</p>
+<p>LLM usage total: 3 call(s), 9407 total token(s)</p>
+<p>last patch error: stringtools.py: hunk @@ -5 @@ does not match the file on disk (context/removed lines differ)</p>
+</div>
+<h2>Attempt 0 — FAIL</h2>
+<div class="verdict-banner fail"><span class="big">VERDICT: FAIL</span><br>spec: stringtools-slugify-fix · mode: real · created: 2026-10-11T03:06:24.703778+00:00</div>
+<div class="chain-ok">Hash chain verified at render time — this record is intact and tamper-evident.</div>
+<div class="card"><h3>Replay</h3><p class="mono">python3 -m verifygate run --spec samples/spec.json --candidate samples/failing --mode real</p><p class="mono">spec hash: 5477ea11ac6b862af5012c86edb334f6a498b1d674377e5c1e0a0a3c8814aba0<br>candidate tree hash: 5aa2047a510a0078a21ca17aec3dba1417fdb5e807a68143aee17e13683a5eec<br>record hash: 5ebb2585acfa7bd95c5c07b95fa142cc7e145f59d7f5d3e29cbb71e8b64131e7<br>signature: 9e02178853b46d66a62888fb9c91bcb7…</p>
+<p>Signed with the labelled public development key (demonstrates the mechanism; not production key management).</p>
+</div>
+<div class="card">
+<h3>unit_tests <span class="badge fail">FAIL</span></h3>
+<p class="mono">python3 -m pytest -q</p>
+<p>exit code: <strong>1</strong> · duration: 1961 ms · timed out: False</p>
+<details><summary>stdout tail</summary><pre>FFF.                                                                     [100%]
+=================================== FAILURES ===================================
+______________________________ test_slugify_basic ______________________________
+
+    def test_slugify_basic():
+&gt;       assert slugify(&quot;Hello World&quot;) == &quot;hello-world&quot;
+E       AssertionError: assert &#x27;Hello-World&#x27; == &#x27;hello-world&#x27;
+E         
+E         - hello-world
+E         ? ^     ^
+E         + Hello-World
+E         ? ^     ^
+
+test_stringtools.py:5: AssertionError
+___________________________ test_slugify_punctuation ___________________________
+
+    def test_slugify_punctuation():
+&gt;       assert slugify(&quot;Hello, World!&quot;) == &quot;hello-world&quot;
+E       AssertionError: assert &#x27;Hello,-World!&#x27; == &#x27;hello-world&#x27;
+E         
+E         - hello-world
+E         ? ^     ^
+E         + Hello,-World!
+E         ? ^    + ^    +
+
+test_stringtools.py:9: AssertionError
+______________________ test_slugify_collapses_separators _______________________
+
+    def test_slugify_collapses_separators():
+&gt;       assert slugify(&quot;  Multiple   Spaces  &quot;) == &quot;multiple-spaces&quot;
+E       AssertionError: assert &#x27;Multiple---Spaces&#x27; == &#x27;multiple-spaces&#x27;
+E         
+E         - multiple-spaces
+E         ? ^        ^
+E         + Multiple---Spaces
+E         ? ^        ^^^
+
+test_stringtools.py:13: AssertionError
+=========================== short test summary info ============================
+FAILED test_stringtools.py::test_slugify_basic - AssertionError: assert &#x27;Hell...
+FAILED test_stringtools.py::test_slugify_punctuation - AssertionError: assert...
+FAILED test_stringtools.py::test_slugify_collapses_separators - AssertionErro...
+3 failed, 1 passed in 0.17s
+</pre></details>
+<p class="mono">entry hash: 7327b9f76850f1ab…</p></div>
+<div class="card">
+<h3>repro_script <span class="badge fail">FAIL</span></h3>
+<p class="mono">python3 repro.py</p>
+<p>exit code: <strong>1</strong> · duration: 127 ms · timed out: False</p>
+<details><summary>stderr tail</summary><pre>Traceback (most recent call last):
+  File &quot;/tmp/verifygate-w1ncr6uq/repro.py&quot;, line 5, in &lt;module&gt;
+    assert result == &quot;hello-world&quot;, f&quot;slugify repro failed: got {result!r}&quot;
+           ^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: slugify repro failed: got &#x27;Hello,-World!&#x27;
+</pre></details>
+<p class="mono">entry hash: 2f9e14a2a247eec3…</p></div>
+<div class="card">
+<h3>Diagnosis <span class="src">commentary — never a verdict input</span></h3>
+<pre>
+
+**What failed**
+
+- `unit_tests` – three tests in `test_stringtools.py` (`test_slugify_basic`, `test_slugify_punctuation`, `test_slugify_collapses_separators`) all failed because the `slugify` function returned strings that were **not lower‑cased**, **kept punctuation**, and **did not collapse consecutive spaces/hyphens**.
+- `repro_script` – the same assertion error (`got &#x27;Hello,-World!&#x27;`) shows the repro script exercises the same faulty path.
+
+**Most likely cause**
+
+The current `slugify` implementation probably:
+
+1. Only replaces spaces with a hyphen (or does nothing to case).
+2. Does **not** convert the input to lower case.
+3. Does **not** strip or replace punctuation/special characters.
+4. Treats each space character individually, so multiple spaces become multiple hyphens instead of a single hyphen.
+
+**Smallest next fix to try**
+
+Replace the body of `slugify` with a concise, correct version that:
+
+- Lower‑cases the string.
+- Substitutes any run of non‑alphanumeric characters with a single hyphen.
+- Strips leading/trailing hyphens.
+
+```python
+import re
+
+def slugify(text: str) -&gt; str:
+    text = text.lower()
+    text = re.sub(r&#x27;[^a-z0-9]+&#x27;, &#x27;-&#x27;, text)
+    return text.strip(&#x27;-&#x27;)
+```
+
+*If the existing code already imports `re`, just add the three lines above; otherwise add the import.* This change should make all three unit tests and the repro script pass.</pre>
+<p>LLM adapter: nebius-token-factory · reference source: tavily</p>
+<p>References unavailable: TAVILY_API_KEY is not set; references skipped (diagnosis proceeds without them) The verdict above does not depend on references.</p>
+</div>
+<div class="card"><h3>LLM usage <span class="src">sealed in the hash chain</span></h3><table><tr><th>purpose</th><th>model</th><th>prompt</th><th>completion</th><th>total</th></tr><tr><td>explain_failure</td><td class="mono">nvidia/nemotron-3-super-120b-a12b</td><td>789</td><td>680</td><td>1469</td></tr></table><p>Total tokens: <strong>1469</strong></p></div>
+<h2>Attempt 2 — PASS</h2>
+<div class="card"><p>Patch from previous attempt applied to: <strong>stringtools.py</strong></p></div>
+<div class="verdict-banner pass"><span class="big">VERDICT: PASS</span><br>spec: stringtools-slugify-fix · mode: real · created: 2026-10-11T03:06:52.820734+00:00</div>
+<div class="chain-ok">Hash chain verified at render time — this record is intact and tamper-evident.</div>
+<div class="card"><h3>Replay</h3><p class="mono">python3 -m verifygate replay --record &lt;repair-report.json&gt; --spec samples/spec.json --candidate samples/failing --mode real  # attempt 2: patched copy, reconstructed from the report&#x27;s recorded patch</p><p class="mono">spec hash: 5477ea11ac6b862af5012c86edb334f6a498b1d674377e5c1e0a0a3c8814aba0<br>candidate tree hash: e7ab716b969113764755f5ebd36f9d8d2fe694aab1ade68c93aca2919f213384<br>record hash: d96d16a1b76b8925e7eb8eb21a43fafda2c67c7fa9160e9466fe229630f57e20<br>signature: f99199820bb8da5f040144a6f4d83714…</p>
+<p>Signed with the labelled public development key (demonstrates the mechanism; not production key management).</p>
+</div>
+<div class="card">
+<h3>unit_tests <span class="badge pass">PASS</span></h3>
+<p class="mono">python3 -m pytest -q</p>
+<p>exit code: <strong>0</strong> · duration: 3723 ms · timed out: False</p>
+<details><summary>stdout tail</summary><pre>....                                                                     [100%]
+4 passed in 0.19s
+</pre></details>
+<p class="mono">entry hash: b919e96720b6fea0…</p></div>
+<div class="card">
+<h3>repro_script <span class="badge pass">PASS</span></h3>
+<p class="mono">python3 repro.py</p>
+<p>exit code: <strong>0</strong> · duration: 289 ms · timed out: False</p>
+<details><summary>stdout tail</summary><pre>repro OK: hello-world
+</pre></details>
+<p class="mono">entry hash: 1b198174148dbc6f…</p></div>
+<div class="card"><h3>LLM usage <span class="src">sealed in the hash chain</span></h3><table><tr><th>purpose</th><th>model</th><th>prompt</th><th>completion</th><th>total</th></tr><tr><td>generate_patch</td><td class="mono">nvidia/nemotron-3-super-120b-a12b</td><td>1362</td><td>2059</td><td>3421</td></tr><tr><td>generate_patch</td><td class="mono">nvidia/nemotron-3-super-120b-a12b</td><td>1442</td><td>3075</td><td>4517</td></tr></table><p>Total tokens: <strong>7938</strong></p></div>
+<footer>Generated by VerifyGate from the sealed JSON record. Verdicts come only from deterministic checks (exit codes); LLM text is commentary. Replay the checks with the command shown on the record to reproduce the verdict.</footer>
+</main>
+</body>
+</html>
