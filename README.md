@@ -604,6 +604,35 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.101.0 — The Tavily lookup query
+is now judged encodable as UTF-8
+at the same validation that already
+judged its type and length. The
+query was the one text sent to an
+external API the encodability
+passes left: the API key was
+judged in 1.98.0, but a query
+carrying lone surrogates — built
+by a direct caller with
+``diagnosis_query`` from check
+results whose output tail carries
+a ``\ud800`` escape — was echoed
+verbatim by the mock lookup into
+its canned reference's snippet
+(text no UTF-8 encoding can
+carry, handed back as if it were
+a reference) and sent verbatim by
+the real adapter as the search
+body's ``query``. A surrogate
+query now degrades exactly like
+every other unusable query: no
+references, the reason on
+``last_error``, never an
+exception, and no transport call.
+A NUL byte in a query stays
+legal, as in a brief. 9 new tests
+(2460 total).
+
 1.100.0 — The spec brief is now
 judged encodable as UTF-8 at the
 same validations that already

@@ -88,6 +88,23 @@ other transport failure: no references, reason on ``last_error``,
 verdict untouched. The ceiling is generous over a genuine reply
 (at most ``MAX_RESULTS_CEILING`` results with capped fields is
 tens of kilobytes).
+
+Query encodability (v1.101.0): the lookup query was the one text
+sent to an external API that the encodability passes never
+judged — v1.98.0 judged the API *key*, and ``_query_problem``
+(v1.52.0) judged the query's type and length, but not its
+encodability. A query carrying lone surrogates — reachable when
+``diagnosis_query`` is built by a direct caller from check
+results whose output tail carries a ``\\ud800`` escape decoded
+from JSON — was echoed verbatim by the mock into its canned
+reference's snippet (text no UTF-8 encoding can carry, returned
+to the caller as if it were a reference), and sent verbatim by
+the real adapter as the search body's ``query``. A surrogate
+query now degrades exactly like every other unusable query: no
+references, the reason on ``last_error``, never an exception,
+and — for the real adapter — no transport call is made. A NUL
+byte in a query stays legal, exactly as in a brief (v1.100.0):
+it is valid UTF-8.
 """
 
 from __future__ import annotations
@@ -141,7 +158,9 @@ def _query_problem(query) -> str | None:
     raise*), and the real adapter sent a non-string verbatim as the
     JSON body's ``query``. An unusable query now degrades exactly
     like a failed lookup: no references, the reason on
-    ``last_error``, never an exception.
+    ``last_error``, never an exception. Query encodability
+    (v1.101.0) is judged here too: a query carrying lone
+    surrogates degrades the same way, before any transport call.
     """
     if not isinstance(query, str):
         return (f"lookup query must be a string "
@@ -149,6 +168,15 @@ def _query_problem(query) -> str | None:
     if len(query) > MAX_QUERY_CHARS:
         return (f"lookup query exceeds the maximum of "
                 f"{MAX_QUERY_CHARS} characters; references skipped")
+    if has_lone_surrogates(query):
+        # Query encodability (v1.101.0): the query is sent to an
+        # external API verbatim and echoed by the mock into its
+        # canned snippet, so a lone surrogate in it is text no
+        # UTF-8 encoding can carry — degrade like any other
+        # unusable query, before any transport call is made.
+        return ("lookup query contains lone surrogates — characters "
+                "that are not valid Unicode and cannot be encoded "
+                "as UTF-8; references skipped")
     return None
 
 
