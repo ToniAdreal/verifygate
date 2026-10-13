@@ -108,6 +108,23 @@ shape it replaced halfway. Atomicity is unchanged: every
 judgement happens in staging, before a single byte is written,
 and a deletion that fails to stage fails the whole diff.
 
+File-type mode validation (since v1.92.0): a git mode line was
+honoured for its permission bits only — any octal value was
+masked with ``& 0o777`` at commit — so a mode naming a
+non-regular file was silently mangled into a regular one: a
+``new file mode 120000`` (symlink) creation produced a regular
+file holding the link target as text with mode ``000``, and
+gitlink (``160000``) and directory (``040000``) modes did the
+same; a malformed (non-octal) mode token was dropped silently
+and the patch applied without its mode line at all. The
+patched tree was not the tree the diff specified, yet the
+checks judged it as if it were the model's fix. Mode lines
+now validate at parse time (see :func:`_mode_value`): only
+regular-file modes (type ``100000``) are accepted, with their
+permission bits honoured exactly as before; anything else is
+a clean :class:`PatchError` rejection, fed back by the repair
+loop like any other inapplicable diff.
+
 Hardlink fidelity (since v1.87.0): the commit never writes a
 shared inode in place. ``_safe_target`` judges a patch path by
 its resolved location, but a target file can share its inode
@@ -408,11 +425,54 @@ def _split_git_paths(rest: str) -> tuple[str, str] | None:
     return _clean_path(rest[:chosen]), _clean_path(rest[chosen + 1:])
 
 
-def _mode_value(line: str) -> int | None:
+_FILE_TYPE_MASK = 0o170000
+_REGULAR_FILE_TYPE = 0o100000
+_MODE_KIND_NAMES = {
+    0o120000: "a symlink",
+    0o160000: "a gitlink (submodule)",
+    0o040000: "a directory",
+}
+
+
+def _mode_value(line: str) -> int:
+    """Parse and validate a git mode line's value (v1.92.0).
+
+    Only regular-file modes can be honoured: the applier writes
+    regular text files, and the workspace copy materialises every
+    verified file as one. Before this, any octal value was taken
+    at face value and its permission bits were applied with
+    ``mode & 0o777`` at commit, so a ``new file mode 120000``
+    (symlink) creation silently produced a *regular* file —
+    containing the link target as its text, with mode ``000`` —
+    instead of the symlink the diff specified, and a gitlink
+    (``160000``) or directory (``040000``) mode did the same.
+    The patched tree was not the tree the diff described, yet
+    the checks judged it as if it were. A malformed (non-octal)
+    mode token was likewise silently dropped: the mode line
+    vanished and the patch applied without it. A non-regular or
+    malformed mode is now a :class:`PatchError` at parse time,
+    so the repair loop feeds the rejection back like any other
+    inapplicable diff and nothing is staged or written.
+    Regular modes keep their permission bits exactly as before
+    (``100644`` / ``100755`` and any other ``100xxx`` form).
+    """
+    parts = line.split()
+    token = parts[-1] if parts else ""
     try:
-        return int(line.split()[-1], 8)
+        value = int(token, 8)
     except ValueError:
-        return None
+        raise PatchError(
+            f"malformed mode in patch: {line.strip()!r}") from None
+    file_type = value & _FILE_TYPE_MASK
+    if file_type != _REGULAR_FILE_TYPE:
+        kind = _MODE_KIND_NAMES.get(
+            file_type, "a non-regular file")
+        raise PatchError(
+            f"unsupported mode {value:06o} in patch: it names "
+            f"{kind}, and VerifyGate patches regular text files "
+            "only — a symlink, gitlink or directory cannot be "
+            "created or re-typed by a patch")
+    return value
 
 
 def _note_no_newline_marker(hunk: Hunk) -> None:

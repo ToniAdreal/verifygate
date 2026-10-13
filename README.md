@@ -604,6 +604,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.92.0 — A patch's git mode line must
+name a regular file: any octal value
+was previously masked with ``& 0o777``
+at commit, so a ``new file mode
+120000`` (symlink) creation silently
+produced a regular file holding the
+link target as text with mode ``000``
+— and gitlink (``160000``) and
+directory (``040000``) modes did the
+same — while a malformed (non-octal)
+mode token was dropped silently and
+the patch applied without its mode
+line at all. The patched tree was not
+the tree the diff specified. Mode
+lines now validate at parse time:
+only regular-file modes (type
+``100000``) are accepted, with their
+permission bits honoured exactly as
+before; anything else is a clean
+``PatchError`` rejection the repair
+loop feeds back like any other
+inapplicable diff. 14 new tests
+(2325 total).
+
 1.91.0 — A patch can replace a file
 with a directory, or a directory with
 a file: both shapes are real
