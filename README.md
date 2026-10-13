@@ -604,6 +604,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.91.0 — A patch can replace a file
+with a directory, or a directory with
+a file: both shapes are real
+``git diff`` output, and both were
+clean rejections the applier could
+not honour — the creation beneath a
+still-present file died as an
+"unusable path", and the creation at
+a still-present directory as "already
+exists" (in git's canonical order the
+directory-to-file creation is emitted
+before the deletions that make room
+for it). A creation is now judged
+against the staged world plus the
+paths the same diff deletes; the
+staged-conflict check exempts
+exactly the replacement pairs; and
+the commit lands in phases —
+deletions, replaced-directory
+removal, writes. A directory with
+any entry the diff does not delete
+keeps the rejection, atomically.
+12 new tests (2311 total).
+
 1.90.0 — A patch never stages a file
 and a path beneath it: staging judged
 each file patch independently, so a diff

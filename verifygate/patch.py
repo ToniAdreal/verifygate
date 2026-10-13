@@ -82,6 +82,32 @@ the repair loop feeds the rejection back like any other.
 Sibling paths, and names that merely share a string prefix
 (``xy`` beside ``x/y``), are not ancestors and apply as before.
 
+File/directory replacement (since v1.91.0): the ancestor rule
+above rejected two shapes a real ``git diff`` produces — a file
+replaced by a directory (delete ``x``, create ``x/y``) and a
+directory replaced by a file (delete every file under ``x``,
+create ``x``). Both were clean rejections, but the diff was a
+valid one the applier could not honour: the creation under a
+still-present file died as an "unusable path", and the creation
+at a still-present directory as "already exists" — in git's
+canonical path order the directory-to-file creation is even
+emitted *before* the deletions that make room for it. Staging
+now judges a creation against the staged world plus the set of
+paths this same diff deletes: a creation beneath a deleted file
+stages as a creation under nothing, and a creation at a
+directory stages when every entry under that directory is
+deleted by this same diff (any entry left behind — an
+undeleted file, a symlink, a staged creation — keeps the
+"already exists" rejection). The staged-conflict check exempts
+exactly the replacement pairs (a staged-deleted ancestor with
+a staged creation beneath it, a staged creation whose staged
+descendants are all deletions), and the commit runs in phases
+— deletions first, then removal of a replaced directory's
+now-empty tree, then writes — so a replacement never meets the
+shape it replaced halfway. Atomicity is unchanged: every
+judgement happens in staging, before a single byte is written,
+and a deletion that fails to stage fails the whole diff.
+
 Hardlink fidelity (since v1.87.0): the commit never writes a
 shared inode in place. ``_safe_target`` judges a patch path by
 its resolved location, but a target file can share its inode
@@ -756,6 +782,16 @@ def _check_staged_path_conflicts(
             parts = descendant.relative_to(root_resolved).parts
             if len(parts) > len(ancestor_parts) \
                     and parts[:len(ancestor_parts)] == ancestor_parts:
+                # File/directory replacement (v1.91.0): the pair
+                # is committable exactly when one side is a staged
+                # deletion — a deleted file with a creation
+                # beneath it (file replaced by a directory), or
+                # a created file whose descendants are all
+                # deletions (a directory replaced by a file, its
+                # entries staged away). The commit's phases order
+                # the two so they never coexist on disk.
+                if staged[ancestor].exists != staged[descendant].exists:
+                    continue
                 raise PatchError(
                     f"patch stages both {rels[ancestor]} and "
                     f"{rels[descendant]}: a file and a path beneath "
@@ -825,6 +861,17 @@ def apply_patch(
             # caller turns that into a PatchError rejection.
             return False
 
+    def _is_dir(target: Path) -> bool:
+        try:
+            return target.is_dir()
+        except OSError:
+            # Same unstatable-target rule as _is_file: an
+            # over-long component raises ENAMETOOLONG out of
+            # is_dir instead of returning False, and such a
+            # target is not a directory the patch can replace —
+            # _exists turns it into a PatchError rejection.
+            return False
+
     def _exists(target: Path, rel: str) -> bool:
         try:
             os.stat(target)
@@ -860,12 +907,78 @@ def apply_patch(
             raise PatchError(f"cannot {what} {rel}: not a file")
         return state
 
-    for fp in parse_patch(patch_text):
+    file_patches = parse_patch(patch_text)
+    # Paths this same diff deletes, resolved up front (v1.91.0):
+    # a file/directory replacement's creation is judged against
+    # the world the diff leaves behind, and in git's canonical
+    # path order a directory-to-file creation is emitted before
+    # the deletions that make room for it. A deletion named here
+    # still has to stage successfully below — if it does not,
+    # the whole diff fails in staging and nothing is written.
+    deleted_targets: set[Path] = {
+        _safe_target(root, fp.old_path)
+        for fp in file_patches if fp.new_path == "/dev/null"
+    }
+
+    def _beneath_deleted_ancestor(target: Path) -> bool:
+        """True iff a proper ancestor of target is deleted by this diff."""
+        root_resolved = root.resolve()
+        try:
+            parts = target.relative_to(root_resolved).parts
+        except ValueError:
+            return False
+        for i in range(1, len(parts)):
+            ancestor = root_resolved.joinpath(*parts[:i])
+            if ancestor in deleted_targets:
+                return True
+            state = staged.get(ancestor)
+            if state is not None and not state.exists:
+                return True
+        return False
+
+    def _directory_replaced(target: Path) -> bool:
+        """True iff every entry under the directory target is deleted.
+
+        Judged against the staged deletions and the paths this
+        diff deletes (v1.91.0): any entry left behind — a file
+        the diff does not delete, a symlink, a staged creation —
+        means the directory survives and a file cannot take
+        its place.
+        """
+        for state_target, state in staged.items():
+            if state.exists and state_target != target \
+                    and target in state_target.parents:
+                return False
+        for dirpath, dirnames, filenames in os.walk(target):
+            entries = list(filenames)
+            entries += [name for name in dirnames
+                        if (Path(dirpath) / name).is_symlink()]
+            for name in entries:
+                entry = Path(dirpath) / name
+                state = staged.get(entry)
+                if entry in deleted_targets:
+                    continue
+                if state is not None and not state.exists:
+                    continue
+                return False
+        return True
+
+    for fp in file_patches:
         if fp.old_path == "/dev/null":  # file creation
             target = _safe_target(root, fp.new_path)
             existing = staged.get(target)
             if existing is not None:
                 if existing.exists:
+                    raise PatchError(
+                        f"cannot create {fp.new_path}: already exists")
+            elif _beneath_deleted_ancestor(target):
+                pass  # the ancestor file is deleted by this diff:
+                # in the staged world the path beneath it is free
+            elif _is_dir(target) and not target.is_symlink():
+                # A directory stands where the file must go: only
+                # a full replacement (every entry deleted by this
+                # same diff) makes room for it (v1.91.0).
+                if not _directory_replaced(target):
                     raise PatchError(
                         f"cannot create {fp.new_path}: already exists")
             elif _exists(target, fp.new_path):
@@ -921,9 +1034,25 @@ def apply_patch(
     _check_result_bounds(root, staged, max_files, max_bytes)
 
     # Commit: the whole diff validated in staging, so write it out.
+    # The commit runs in phases (v1.91.0) so a file/directory
+    # replacement never meets the shape it replaced halfway:
+    # deletions land first (a deleted file frees the path beneath
+    # it), then a replaced directory's now-empty tree is removed
+    # (its entries were all deleted in phase one), then the
+    # writes — whose parent creation now finds no file in the way.
     for target, state in staged.items():
         if not state.exists:
             target.unlink(missing_ok=True)
+    for target, state in staged.items():
+        if state.exists and not target.is_symlink():
+            try:
+                is_dir = target.is_dir()
+            except OSError:
+                is_dir = False
+            if is_dir:
+                sandbox.remove_tree(target)
+    for target, state in staged.items():
+        if not state.exists:
             continue
         # Hardlink break (v1.87.0): a target whose inode is shared
         # (st_nlink > 1) must not be written in place — write_text
