@@ -604,6 +604,36 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.99.0 — The spec/candidate labels
+are now judged encodable as UTF-8
+at the same validation that already
+judged their type and length. A
+label is sealed — it is interpolated
+into the record's ``replay`` string,
+which the chain hashes as UTF-8 —
+so a label carrying lone surrogates
+could never be sealed at all, and
+that is exactly how a non-UTF-8
+path arrives on POSIX: ``sys.argv``
+(the CLI passes the spec/candidate
+arguments verbatim as the labels)
+decodes bytes with surrogateescape.
+Such a label passed validation, the
+checks ran, and then the sealing
+layer refused — the decided
+verdict's record was lost and the
+error blamed the record content;
+in replay the same error escaped
+mid-replay, and replay's derived
+candidate label (the candidate
+directory's own string form, never
+judged) failed the same way for a
+directory whose name holds
+non-UTF-8 bytes. Both labels are
+now the one ``ValueError`` at
+entry, before any work. 15 new
+tests (2436 total).
+
 1.98.0 — The three values resolved
 from the environment — the HMAC
 signing key, the Tavily API key,

@@ -1047,6 +1047,27 @@ def validate_label(label, name: str = "label") -> str:
     characters are *not* rejected here: :func:`quote_label`
     already degrades such a label to the ``<unprintable-label>``
     placeholder, the v1.21.0 contract.
+
+    Encodability (v1.99.0): the label was judged only for type and
+    length, but a label is *sealed* — it is interpolated into the
+    record's ``replay`` string, which the chain hashes as UTF-8 —
+    so a label carrying lone surrogates could never be sealed at
+    all. Such a label is exactly how a non-UTF-8 path arrives on
+    POSIX: ``sys.argv`` (the CLI passes ``args.spec`` /
+    ``args.candidate`` verbatim as the labels) and ``os.environ``
+    decode bytes with surrogateescape, so a path whose filename
+    holds non-UTF-8 bytes is a string of legal length carrying
+    unpaired surrogates. It passed this validation, was
+    shlex-quoted by :func:`quote_label`, and the entry point ran
+    every check — then :func:`build_record` refused to seal, the
+    decided verdict's record was lost, and the error blamed the
+    "record content", not the label. In replay the same
+    ``ValueError`` escaped the per-record path (which catches only
+    ``OSError`` / ``RuntimeError``) mid-replay. A surrogate-bearing
+    label is now the one ``ValueError`` here, at entry, before any
+    work — the message names the rule and never echoes the label.
+    Control characters are still *not* rejected (the placeholder
+    contract above); lone surrogates are not control characters.
     """
     if not isinstance(label, str) or not label \
             or len(label) > MAX_LABEL_CHARS:
@@ -1056,6 +1077,12 @@ def validate_label(label, name: str = "label") -> str:
         raise ValueError(
             f"{name} must be a non-empty string of at most "
             f"{MAX_LABEL_CHARS} characters, got {desc}")
+    if has_lone_surrogates(label):
+        raise ValueError(
+            f"{name} must be encodable as UTF-8 (it is sealed "
+            "into the record's replay string), got a label "
+            "containing lone surrogates — characters that are "
+            "not valid Unicode and cannot be encoded as UTF-8")
     return label
 
 

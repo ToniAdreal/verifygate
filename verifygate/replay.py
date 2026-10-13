@@ -225,7 +225,15 @@ def replay_document(
     not its stringification — a non-path, empty, over-long, or
     not-a-directory candidate is a usage error up front, and its
     guarantees (a string form that is a non-empty label within the
-    same ceiling) subsume the v1.40.0 derived-label check.
+    same ceiling) subsume the v1.40.0 derived-label check. One
+    derived-label property it does *not* subsume is encodability
+    (v1.99.0): a directory whose name holds non-UTF-8 bytes is a
+    working candidate — surrogateescape round-trips it through
+    the filesystem — but its string form can never be sealed as
+    the re-run's candidate label, so that form is judged through
+    ``validate_label`` here too, before any record is replayed,
+    instead of escaping the per-record path mid-replay as the
+    sealing layer's ``ValueError``.
     The adapters are validated the same way (v1.42.0): a malformed
     ``llm`` / ``references`` is a usage error up front, not an
     ``AttributeError`` escaping the per-record path mid-replay
@@ -240,7 +248,9 @@ def replay_document(
     validate_mode(mode)
     validate_spec(spec)
     validate_label(spec_label, "spec_label")
-    validate_candidate_dir(candidate_dir, name="candidate_label")
+    candidate_path = validate_candidate_dir(
+        candidate_dir, name="candidate_label")
+    validate_label(str(candidate_path), "candidate_label")
     validate_llm(llm)
     validate_references(references)
     pairs = collect_records(data)
