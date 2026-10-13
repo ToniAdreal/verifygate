@@ -7,7 +7,7 @@ from verifygate.patch import NoPatchFound, PatchError, apply_patch, parse_patch
 MODIFY_DIFF = """\
 --- a/hello.py
 +++ b/hello.py
-@@ -1,3 +1,3 @@
+@@ -1,2 +1,2 @@
  def greet():
 -    return "hello"
 +    return "hello, world"
@@ -76,7 +76,7 @@ def test_path_traversal_rejected(tmp_path):
 def test_stale_line_numbers_tolerated(tmp_path):
     (tmp_path / "hello.py").write_text(
         '# one\n# two\ndef greet():\n    return "hello"\n')
-    stale = MODIFY_DIFF.replace("@@ -1,3 +1,3 @@", "@@ -1,3 +1,3 @@")
+    stale = MODIFY_DIFF.replace("@@ -1,2 +1,2 @@", "@@ -1,2 +1,2 @@")
     # context sits at line 3, not line 1: content search must still find it
     assert apply_patch(tmp_path, stale) == ["hello.py"]
 

@@ -25,7 +25,7 @@ from .llm import (
 _SAMPLE_SLUGIFY_DIFF = '''\
 --- a/stringtools.py
 +++ b/stringtools.py
-@@ -4,9 +4,14 @@
+@@ -4,7 +4,12 @@
  removes punctuation, so the spec's checks must catch it.
  """
  

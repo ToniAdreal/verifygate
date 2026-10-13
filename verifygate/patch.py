@@ -177,6 +177,38 @@ markers are matched as whole top-level lines only, so a text
 patch whose *content* adds a line reading ``GIT binary patch``
 (as a ``+`` line inside a hunk) applies exactly as before.
 
+Hunk integrity (since v1.96.0): a numbered hunk header declares
+exactly how many old and new lines its body must carry, and the
+parser now holds the body to that minimum. Before this, the
+body was read *up to* the declared counts and a shortfall was
+never checked: a hunk declaring five old and five new lines
+but carrying only one of each applied as if it had declared
+one, and a corrupt line inside a hunk (one starting with none
+of `` `` / ``-`` / ``+``) silently ended the hunk mid-body,
+dropping the rest of its lines — including its additions —
+while the partial change still applied. The patched tree was
+not the change the diff's own header specified, yet the checks
+judged it as if it were the model's fix — the
+silent-partial-application shape this module has closed at
+every other level. A numbered hunk whose body ends (at end of
+text, at a structural boundary, or at a corrupt line) before
+its declared counts are met is now a clean :class:`PatchError`
+at parse time, so the whole diff fails atomically and the
+repair loop feeds the rejection back like any other
+inapplicable diff. Lines arriving *after* the declared counts
+are met stay tolerated exactly as before, by design: real
+model patches routinely carry one trailing context line beyond
+their declared counts (a committed real-mode report's applied
+patch does), the counted hunk is self-consistent, and replay
+reconstructs the same counted hunk — so that tolerance is
+load-bearing for committed evidence, while a *shortfall* can
+never be legitimate: the change the header promises is simply
+not in the text. Bare ``@@`` hunks are unchanged: they declare
+no counts, so their counts are still derived from the body
+exactly as before, and stale *start* numbers in a numbered
+header are still tolerated — content is verified against
+disk, never numbers (see :func:`_apply_hunks`).
+
 File-type mode validation (since v1.92.0): a git mode line was
 honoured for its permission bits only — any octal value was
 masked with ``& 0o777`` at commit — so a mode naming a
@@ -803,6 +835,29 @@ def parse_patch(text: str) -> list[FilePatch]:
                     # no trailing newline silently gains one.
                     _note_no_newline_marker(hunk)
                     i += 1
+                if not bare:
+                    # Hunk integrity (v1.96.0): a numbered header's
+                    # declared counts are the hunk's contract. A
+                    # body that ends short of them — at the end of
+                    # the text, at a structural boundary, or at a
+                    # corrupt line the reader stopped on — means
+                    # the diff does not contain the change it
+                    # would partially apply: reject the whole
+                    # diff at parse time instead of silently
+                    # applying the fragment that arrived. (Lines
+                    # beyond the counts stay ignored, as before:
+                    # see the module docstring.)
+                    if need_old > 0 or need_new > 0:
+                        raise PatchError(
+                            f"{fp.new_path}: corrupt patch: hunk "
+                            f"@@ -{hunk.old_start},{hunk.old_count} "
+                            f"+{hunk.new_start},{hunk.new_count} @@ "
+                            f"declares {hunk.old_count} old and "
+                            f"{hunk.new_count} new lines, but its "
+                            f"body carries only "
+                            f"{hunk.old_count - need_old} old and "
+                            f"{hunk.new_count - need_new} new "
+                            "lines before it ends")
                 if bare:
                     hunk.old_count = sum(
                         1 for k, _ in hunk.lines if k in (" ", "-"))
