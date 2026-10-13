@@ -210,6 +210,19 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   crashed the comparison, ``True`` ran as 1, a huge value silently
   lifted the reference ceiling) — see those modules.
 
+* **Unspawnable commands** — :func:`validate_check_command` also
+  rejects a command that can never be spawned at all (v1.97.0):
+  one carrying a NUL byte (commands cross the exec boundary as
+  NUL-terminated strings, so ``subprocess`` raised a raw
+  ``ValueError: embedded null byte`` *mid-run* — after the checks
+  before it had already run, leaving no evidence record for
+  their verdicts) or lone surrogates (not valid Unicode, so the
+  spawn's own encoding raised ``UnicodeEncodeError`` the same
+  way). The rule is stated once in ``spec.check_command_problem``
+  and mirrored here, exactly as the non-empty / ceiling rules
+  already are; the spec layer rejects the same commands before
+  any workspace is prepared.
+
 This is a local/CI-grade sandbox (temp dir + timeout + scrubbed env),
 not a multi-tenant security boundary — see CONCEPT.md risks.
 """
@@ -227,7 +240,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .spec import MAX_CHECK_COMMAND_CHARS, MAX_TIMEOUT_S
+from .spec import MAX_CHECK_COMMAND_CHARS, MAX_TIMEOUT_S, check_command_problem
 
 MAX_OUTPUT_CHARS = 4000
 _READ_BYTES = 16_384  # > MAX_OUTPUT_CHARS even for multibyte text
@@ -635,9 +648,11 @@ def validate_check_command(command, name: str = "command") -> str:
     Mirrors the spec rules for a check command exactly (see the
     module docstring): a string, non-empty once stripped
     (whitespace-only rejected — the shell exits 0 on empty input,
-    so an empty command is a vacuous PASS, not a check), and at
-    most ``MAX_CHECK_COMMAND_CHARS`` characters. Anything else is
-    a ``ValueError`` before any process is spawned.
+    so an empty command is a vacuous PASS, not a check), at most
+    ``MAX_CHECK_COMMAND_CHARS`` characters, and *spawnable*
+    (v1.97.0 — no NUL byte, no lone surrogates, per
+    ``spec.check_command_problem``). Anything else is a
+    ``ValueError`` before any process is spawned.
     """
     if not isinstance(command, str) or not command.strip():
         raise ValueError(
@@ -647,6 +662,9 @@ def validate_check_command(command, name: str = "command") -> str:
         raise ValueError(
             f"{name} must be at most {MAX_CHECK_COMMAND_CHARS} "
             f"characters (got {len(command)})")
+    problem = check_command_problem(command)
+    if problem is not None:
+        raise ValueError(f"{name} {problem}")
     return command
 
 

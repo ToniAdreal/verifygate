@@ -84,6 +84,26 @@ the checks below were accepted and each broke something downstream):
   ``jsonio.validate_file_path`` first, inside the ``SpecError``
   mapping, exactly as the candidate directory is validated
   before any run (v1.41.0).
+* Sealed and spawned text must be *encodable* (v1.97.0): a JSON
+  ``\\uXXXX`` escape can decode to a lone surrogate — not valid
+  Unicode, unencodable as UTF-8 — and a command string can carry
+  a NUL byte, which no process can ever receive (commands cross
+  the exec boundary as NUL-terminated strings). A spec name or
+  check name carrying a lone surrogate was accepted and then
+  crashed evidence sealing *after* the checks ran; a command
+  carrying a surrogate crashed the spawn the same way; a command
+  carrying a NUL byte crashed the spawn with ``ValueError:
+  embedded null byte`` — in a multi-check spec, after the checks
+  before it had already run, leaving no record for their decided
+  verdicts. ``parse_spec`` and ``validate_spec`` now reject all
+  three shapes up front (:func:`check_command_problem` states
+  the command rule, shared with ``sandbox``); ``sandbox``
+  mirrors the command rule at spawn time and ``evidence``
+  mirrors it in the structure check, so a record claiming such
+  a command fails verification too. A NUL byte in a *name* is
+  still accepted: it is valid UTF-8 text, it seals and verifies
+  like any other, and only the command crosses the spawn
+  boundary.
 """
 
 from __future__ import annotations
@@ -96,6 +116,7 @@ from pathlib import Path
 from .jsonio import (
     MAX_SPEC_FILE_BYTES,
     JsonFileError,
+    has_lone_surrogates,
     load_json_file,
     validate_file_path,
 )
@@ -165,6 +186,32 @@ def _non_empty_str(value) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def check_command_problem(command: str) -> str | None:
+    """Why a check ``command`` can never run, or ``None`` (v1.97.0).
+
+    A command crosses two boundaries no other spec text crosses:
+    it is *spawned* (the operating system receives it as a
+    NUL-terminated string, so a NUL byte makes the spawn itself
+    impossible) and it is *sealed* (the evidence chain hashes
+    UTF-8 text, so a lone surrogate makes the sealing
+    impossible). Either character therefore condemns the check
+    before it starts, whatever the shell would have made of the
+    rest. Shared by :func:`parse_spec`, :func:`validate_spec`
+    and ``sandbox.validate_check_command`` so the rule is stated
+    once.
+    """
+    if "\x00" in command:
+        return ("contains a NUL byte, which no process can ever "
+                "receive (commands are passed as NUL-terminated "
+                "strings), so the check could never run")
+    if has_lone_surrogates(command):
+        return ("contains lone surrogates — characters that are "
+                "not valid Unicode and cannot be encoded as "
+                "UTF-8 — so the check could neither be spawned "
+                "nor sealed into an evidence record")
+    return None
+
+
 def parse_spec(raw: dict) -> TaskSpec:
     if not isinstance(raw, dict):
         raise SpecError("spec must be a JSON object")
@@ -173,6 +220,12 @@ def parse_spec(raw: dict) -> TaskSpec:
     checks_raw = raw.get("checks")
     if not _non_empty_str(name):
         raise SpecError("spec.name is required (non-empty string)")
+    if has_lone_surrogates(name):
+        raise SpecError(
+            "spec.name contains lone surrogates — characters that "
+            "are not valid Unicode and cannot be encoded as "
+            "UTF-8 — so it could never be sealed into an evidence "
+            "record")
     if len(name) > MAX_SPEC_NAME_CHARS:
         raise SpecError(
             f"spec.name must be at most {MAX_SPEC_NAME_CHARS} "
@@ -201,6 +254,12 @@ def parse_spec(raw: dict) -> TaskSpec:
         if not _non_empty_str(c.get("name")):
             raise SpecError(
                 f"spec.checks[{i}].name is required (non-empty string)")
+        if has_lone_surrogates(c["name"]):
+            raise SpecError(
+                f"spec.checks[{i}].name contains lone surrogates — "
+                "characters that are not valid Unicode and cannot "
+                "be encoded as UTF-8 — so it could never be sealed "
+                "into an evidence record")
         if len(c["name"]) > MAX_CHECK_NAME_CHARS:
             raise SpecError(
                 f"spec.checks[{i}].name must be at most "
@@ -211,6 +270,10 @@ def parse_spec(raw: dict) -> TaskSpec:
             raise SpecError(
                 f"spec.checks[{i}].command must be a non-empty string "
                 "(a whitespace-only command would pass vacuously)")
+        command_problem = check_command_problem(c["command"])
+        if command_problem is not None:
+            raise SpecError(
+                f"spec.checks[{i}].command {command_problem}")
         if len(c["command"]) > MAX_CHECK_COMMAND_CHARS:
             raise SpecError(
                 f"spec.checks[{i}].command must be at most "
@@ -261,6 +324,12 @@ def validate_spec(spec) -> TaskSpec:
             f"got {type(spec).__name__}")
     if not _non_empty_str(spec.name):
         raise SpecError("spec.name is required (non-empty string)")
+    if has_lone_surrogates(spec.name):
+        raise SpecError(
+            "spec.name contains lone surrogates — characters that "
+            "are not valid Unicode and cannot be encoded as "
+            "UTF-8 — so it could never be sealed into an evidence "
+            "record")
     if len(spec.name) > MAX_SPEC_NAME_CHARS:
         raise SpecError(
             f"spec.name must be at most {MAX_SPEC_NAME_CHARS} characters")
@@ -284,6 +353,12 @@ def validate_spec(spec) -> TaskSpec:
         if not _non_empty_str(c.name):
             raise SpecError(
                 f"spec.checks[{i}].name is required (non-empty string)")
+        if has_lone_surrogates(c.name):
+            raise SpecError(
+                f"spec.checks[{i}].name contains lone surrogates — "
+                "characters that are not valid Unicode and cannot "
+                "be encoded as UTF-8 — so it could never be sealed "
+                "into an evidence record")
         if len(c.name) > MAX_CHECK_NAME_CHARS:
             raise SpecError(
                 f"spec.checks[{i}].name must be at most "
@@ -292,6 +367,10 @@ def validate_spec(spec) -> TaskSpec:
             raise SpecError(
                 f"spec.checks[{i}].command must be a non-empty string "
                 "(a whitespace-only command would pass vacuously)")
+        command_problem = check_command_problem(c.command)
+        if command_problem is not None:
+            raise SpecError(
+                f"spec.checks[{i}].command {command_problem}")
         if len(c.command) > MAX_CHECK_COMMAND_CHARS:
             raise SpecError(
                 f"spec.checks[{i}].command must be at most "

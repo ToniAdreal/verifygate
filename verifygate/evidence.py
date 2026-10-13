@@ -347,6 +347,32 @@ mirror's job, not the assembler's: the mirror's tests seal
 value-level nonsense through this function to prove the mirror
 catches it, and the runner derives those values from validated
 inputs long before it seals.
+
+Unencodable sealed text (v1.97.0): the chain hashes UTF-8
+text, so a **lone surrogate** anywhere in a record's strings —
+reachable through a JSON ``\\ud800`` escape in the record file —
+made the hash recomputation itself raise
+``UnicodeEncodeError``: ``verify_chain`` crashed on exactly the
+forged records it exists to judge, and the CLI's except-backstop
+reported a usage error (exit 2) instead of CHAIN INVALID
+(exit 1). The same character in a spec name / check name /
+check command crashed ``build_record`` after the checks had
+run, and in a check *command* additionally made the spawn
+itself impossible, as does a NUL byte (which the structure
+check now also mirrors). ``verify_chain`` therefore scans the
+record — iteratively, keys included — for lone surrogates
+before hashing anything and returns ``False`` for one, and
+``build_record`` refuses to seal one with a ``ValueError``
+before the first hash is computed. Adapter-supplied commentary
+is sanitised on the sealing paths instead of rejected (see
+``runner.normalise_explanation``, :func:`normalise_usage_calls`,
+:func:`normalise_adapter_name`, ``tavily.normalise_references``):
+surrogates become U+FFFD, the same replacement check output
+already gets from ``errors="replace"`` decoding, because
+commentary must never cost a decided verdict its record. No
+genuine record is affected: everything VerifyGate seals is
+produced from validated specs and decoded output, neither of
+which can carry a lone surrogate.
 """
 
 from __future__ import annotations
@@ -361,6 +387,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
+from .jsonio import has_lone_surrogates, replace_lone_surrogates
 from .sandbox import MAX_OUTPUT_CHARS
 from .spec import (
     MAX_CHECK_COMMAND_CHARS,
@@ -456,9 +483,12 @@ def normalise_adapter_name(value, fallback: str) -> str:
     sealing paths (the runner's diagnosis entry, the repair loop's
     report) so a record VerifyGate emits always satisfies the
     structure check's name rule, whatever an adapter calls itself.
+    Lone surrogates become U+FFFD (v1.97.0): a self-reported name
+    is commentary, sanitised like every other adapter text, never
+    a reason to lose a record.
     """
     if isinstance(value, str) and value:
-        return value[:MAX_ADAPTER_NAME_CHARS]
+        return replace_lone_surrogates(value[:MAX_ADAPTER_NAME_CHARS])
     return fallback
 
 
@@ -499,8 +529,11 @@ def normalise_usage_calls(raw) -> list[dict]:
     neutral value the Token Factory adapter already records for an
     unusable reason); any other string value is truncated to
     ``MAX_CALL_FIELD_CHARS``; and each call's ``usage`` is rebuilt
-    by :func:`_normalise_usage_value`. First-party calls are far
-    below every cap and pass through unchanged in content.
+    by :func:`_normalise_usage_value`. Lone surrogates in keys and
+    string values become U+FFFD (v1.97.0) — adapter text is
+    commentary and is sanitised, never a reason to lose a record.
+    First-party calls are far below every cap and pass through
+    unchanged in content.
     """
     if not isinstance(raw, list):
         return []
@@ -514,19 +547,27 @@ def normalise_usage_calls(raw) -> list[dict]:
         for field, value in item.items():
             if len(call) >= MAX_CALL_KEYS:
                 break
+            if isinstance(field, str):
+                # Key text is adapter text too (v1.97.0): a lone
+                # surrogate in a key would crash sealing exactly
+                # like one in a value.
+                field = replace_lone_surrogates(field)
             if field == "usage":
                 call[field] = _normalise_usage_value(value)
             elif field == "finish_reason":
                 # Mirrors the Token Factory adapter's own rule: a
                 # string within the cap is kept, anything else —
                 # non-string or over-long — becomes None.
-                call[field] = value if isinstance(value, str) \
+                call[field] = replace_lone_surrogates(value) \
+                    if isinstance(value, str) \
                     and len(value) <= MAX_FINISH_REASON_CHARS else None
             elif field in _USAGE_TEXT_CAPS:
                 if isinstance(value, str):
-                    call[field] = value[:_USAGE_TEXT_CAPS[field]]
+                    call[field] = replace_lone_surrogates(
+                        value[:_USAGE_TEXT_CAPS[field]])
             elif isinstance(value, str):
-                call[field] = value[:MAX_CALL_FIELD_CHARS]
+                call[field] = replace_lone_surrogates(
+                    value[:MAX_CALL_FIELD_CHARS])
             elif isinstance(value, (dict, list, tuple, set)):
                 continue  # a container has no honest scalar form here
             else:
@@ -537,6 +578,30 @@ def normalise_usage_calls(raw) -> list[dict]:
 
 def _canonical(obj) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _contains_lone_surrogate(obj) -> bool:
+    """True when any string in ``obj`` holds a lone surrogate.
+
+    Iterative deep scan (v1.97.0), dict keys included: the chain
+    hashes the canonical encoding of every key and value, so a
+    surrogate in any of them is equally unhashable. Records are
+    depth-bounded by the loader, and the scan is iterative in
+    any case — a forged record cannot take the judge near the
+    recursion cliff either.
+    """
+    stack = [obj]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            if has_lone_surrogates(item):
+                return True
+        elif isinstance(item, dict):
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif isinstance(item, (list, tuple)):
+            stack.extend(item)
+    return False
 
 
 def _sha(text: str) -> str:
@@ -716,6 +781,18 @@ def build_record(
                     raise ValueError(
                         f"llm_usage token count {field!r} must be a "
                         "non-negative int or None")
+    if _contains_lone_surrogate((
+            spec_name, spec_hash, candidate_tree_hash, mode, verdict,
+            replay_command, check_results, diagnosis, llm_usage)):
+        # Unencodable text (v1.97.0): the chain hashes UTF-8, so
+        # a lone surrogate in anything about to be sealed would
+        # crash the first _sha below with a UnicodeEncodeError —
+        # one ValueError here, before anything is sealed, instead.
+        raise ValueError(
+            "record content contains lone surrogates — characters "
+            "that are not valid Unicode and cannot be encoded as "
+            "UTF-8 — so it can never be sealed into an evidence "
+            "record")
     # Tuples are accepted above but sealed as lists: the entries
     # carry the objects themselves, and the structure mirror
     # requires a list (notably the usage entry's ``calls``), so
@@ -1046,6 +1123,14 @@ def _check_entry_ok(entry: dict) -> bool:
     # shape build_record can emit from a real run.
     if len(entry["name"]) > MAX_CHECK_NAME_CHARS \
             or len(entry["command"]) > MAX_CHECK_COMMAND_CHARS:
+        return False
+    # The spawnability rule (v1.97.0), mirrored: a command carrying
+    # a NUL byte can never have been spawned (see
+    # spec.check_command_problem), so a record claiming it ran is
+    # not a shape a real run emits. (Lone surrogates need no mirror
+    # here: verify_chain's deep scan rejects them before the
+    # structure check is reached.)
+    if "\x00" in entry["command"]:
         return False
     if not _is_int(entry["duration_ms"]) or entry["duration_ms"] < 0 \
             or entry["duration_ms"] > MAX_DURATION_MS:
@@ -1442,6 +1527,13 @@ def _structure_ok(entries, verdict=_UNSPECIFIED) -> bool:
 def verify_chain(record: dict) -> bool:
     """Recompute the hash chain + signature; True iff the record is intact."""
     try:
+        # Unencodable text first (v1.97.0): a lone surrogate in
+        # any sealed string would make the hash recomputation
+        # below raise UnicodeEncodeError instead of judging the
+        # record — and a record carrying one is not a shape
+        # build_record can emit in any case.
+        if _contains_lone_surrogate(record):
+            return False
         entries = record["entries"]
         if not _structure_ok(entries, record.get("verdict")):
             return False

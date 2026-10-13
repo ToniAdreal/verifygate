@@ -350,6 +350,28 @@ raises. The repair loop and replay only ever pass prepared
 workspaces, so their behaviour is unchanged; directory
 creation *inside* a validated root (a new file in a new
 subdirectory) is unchanged too.
+
+Unencodable patch text (v1.97.0): two character shapes in a
+diff could never be applied, yet escaped as raw exceptions —
+not :class:`PatchError` — and killed the repair instead of
+being fed back. A target *path* containing a NUL byte (a model
+can emit one directly, or inside a git-quoted path as the
+``\\000`` octal escape) reached ``os.stat`` / ``open`` during
+staging and raised ``ValueError: embedded null byte``; no
+filesystem path can contain a NUL, so the diff names a file
+that can never exist. Diff text containing a *lone surrogate*
+(a ``\\ud800`` escape decoded from a model response) reached
+the applier's UTF-8 text writes and raised
+``UnicodeEncodeError`` the same way. Both are now rejected at
+parse time: the surrogate check runs over the whole diff text
+before any header is read, and :func:`_clean_path` /
+:func:`_clean_plain_path` reject a NUL in every cleaned path
+(``---`` / ``+++`` lines, ``diff --git`` lines, and the
+rename/copy headers alike) — before anything is staged or
+written, so the repair loop feeds the rejection back like any
+other inapplicable diff. NUL bytes in file *content* are
+untouched: a text file may legitimately contain them, and the
+checks judge the result as always.
 """
 
 from __future__ import annotations
@@ -361,6 +383,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import sandbox
+from .jsonio import has_lone_surrogates
 
 
 # The patch-proposal ceiling (v1.37.0): the largest patch text
@@ -463,6 +486,24 @@ def _unquote_git_path(path: str) -> str:
     return bytes(out).decode("utf-8", errors="surrogateescape")
 
 
+def _reject_nul_path(path: str) -> None:
+    """Reject a patch target path carrying a NUL byte (v1.97.0).
+
+    No filesystem path can contain one — paths cross the syscall
+    boundary as NUL-terminated strings — so the diff names a
+    file that can never exist, and every filesystem call on it
+    would raise a raw ``ValueError`` outside the PatchError
+    contract. The message names only the rule, never the path
+    (the path is model-supplied text carrying a control byte).
+    """
+    if "\x00" in path:
+        raise PatchError(
+            "patch names a target path containing a NUL byte; "
+            "no filesystem path can contain one, so the diff "
+            "names a file that can never exist — re-emit the "
+            "patch with a real path")
+
+
 def _clean_path(raw: str) -> str:
     # A header path runs to the end of the line or to a TAB, which
     # is how both git and GNU diff separate the timestamp that may
@@ -473,6 +514,7 @@ def _clean_path(raw: str) -> str:
     # target, and a creation silently wrote the wrong file.
     path = raw.strip().split("\t")[0].rstrip()
     path = _unquote_git_path(path)
+    _reject_nul_path(path)
     if path == "/dev/null":
         return path
     if path.startswith(("a/", "b/")):
@@ -487,9 +529,12 @@ def _clean_plain_path(raw: str) -> str:
     prefix, so only the TAB / end-of-line cut and the C-style
     unquoting of :func:`_clean_path` apply — never the prefix
     strip (a renamed file may legitimately live under ``a/``).
+    The NUL rejection applies here too (v1.97.0).
     """
     path = raw.strip().split("\t")[0].rstrip()
-    return _unquote_git_path(path)
+    path = _unquote_git_path(path)
+    _reject_nul_path(path)
+    return path
 
 
 def _split_git_paths(rest: str) -> tuple[str, str] | None:
@@ -611,6 +656,19 @@ def parse_patch(text: str) -> list[FilePatch]:
     if not isinstance(text, str):
         raise PatchError(
             f"patch text must be a string, not {type(text).__name__}")
+    if has_lone_surrogates(text):
+        # Unencodable text (v1.97.0): a patch is applied as UTF-8
+        # text, so a diff carrying lone surrogates — reachable via
+        # a \ud800 escape in a model response — could only crash
+        # the applier's writes with a UnicodeEncodeError, outside
+        # the PatchError contract. Rejected whole, before any
+        # header is read, so nothing is staged or written.
+        raise PatchError(
+            "patch text contains lone surrogates — characters "
+            "that are not valid Unicode and cannot be encoded as "
+            "UTF-8; a patch is applied as UTF-8 text, so such a "
+            "diff can never be applied — re-emit it with valid "
+            "text")
     if len(text) > MAX_PATCH_TEXT_CHARS:
         raise PatchError(
             f"patch text exceeds the maximum of {MAX_PATCH_TEXT_CHARS} "

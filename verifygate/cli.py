@@ -167,7 +167,12 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .jsonio import MAX_RECORD_FILE_BYTES, load_json_file, write_text_file
+from .jsonio import (
+    MAX_RECORD_FILE_BYTES,
+    load_json_file,
+    replace_lone_surrogates,
+    write_text_file,
+)
 from .mock_llm import MockLLMAdapter
 from .replay import replay_document, replay_ok
 from .repair import MAX_ROUNDS, run_repair
@@ -605,7 +610,12 @@ def main(argv: list[str] | None = None) -> int:
                   f"choose a different --out path", file=sys.stderr)
             return 2
         try:
-            html = render_document(data)
+            # A forged record can carry lone surrogates in its
+            # sealed text (v1.97.0): the page must still render —
+            # judging it is the view's whole job — so the rendered
+            # HTML is made writable (U+FFFD) before it is written,
+            # at this one write site, whatever field carried them.
+            html = replace_lone_surrogates(render_document(data))
         except (KeyError, TypeError, ValueError, AttributeError) as exc:
             print(f"record error: cannot render this record: {exc}",
                   file=sys.stderr)

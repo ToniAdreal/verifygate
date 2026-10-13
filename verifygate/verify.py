@@ -301,6 +301,7 @@ from .evidence import (
     validate_binding_hash,
     verify_chain,
 )
+from .jsonio import replace_lone_surrogates
 from .repair import MAX_PATCH_ERROR_CHARS, MAX_PATCH_TEXT_CHARS, MAX_ROUNDS
 from .sandbox import (
     MAX_CANDIDATE_DIR_CHARS,
@@ -370,6 +371,18 @@ def collect_records(data) -> list[tuple[str, dict]]:
     if "entries" in data:
         return [("record", data)]
     raise ValueError("not a VerifyGate record (no entries or attempts)")
+
+
+def _display_text(value):
+    """A record text field made printable (v1.97.0).
+
+    Strings pass through with lone surrogates replaced by
+    U+FFFD; anything else is returned as-is (the shape rules
+    judge it, the display copy merely must not crash a print).
+    """
+    if isinstance(value, str):
+        return replace_lone_surrogates(value)
+    return value
 
 
 def header_of(record: dict) -> dict:
@@ -897,10 +910,16 @@ def check_record(
     validate_binding_hash(candidate_hash, "candidate_hash")
     validate_binding_hash(spec_hash, "spec_hash")
     header = header_of(record)
+    # The three text fields are display copies (v1.97.0): callers
+    # print them, and a forged record can carry a lone surrogate
+    # in any of them — unprintable on a UTF-8 stream, it would
+    # crash the judge's own report line. Sanitised here, at the
+    # one construction site; the chain verdict beside them is
+    # computed from the original record, untouched.
     result = {
-        "verdict": record.get("verdict"),
-        "mode": header.get("mode"),
-        "spec_name": header.get("spec_name"),
+        "verdict": _display_text(record.get("verdict")),
+        "mode": _display_text(header.get("mode")),
+        "spec_name": _display_text(header.get("spec_name")),
         "chain_ok": verify_chain(record),
         "candidate_match": None,
         "spec_match": None,

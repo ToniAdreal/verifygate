@@ -217,7 +217,11 @@ from .evidence import (
     validate_label,
     validate_mode,
 )
-from .jsonio import validate_file_path, write_text_file
+from .jsonio import (
+    replace_lone_surrogates,
+    validate_file_path,
+    write_text_file,
+)
 from .llm import LLMAdapter, drain_calls_safely, validate_llm
 from .sandbox import prepare_workspace, remove_tree, validate_candidate_dir
 from .spec import TaskSpec, validate_spec
@@ -248,11 +252,18 @@ def normalise_explanation(text: str) -> str:
     ``TypeError`` from ``len()`` — the runner's call site checks
     the adapter's return before calling this, but the sealing
     helper judges its own input like every other one.
+
+    Lone surrogates become U+FFFD before the cap is applied
+    (v1.97.0): an explanation is model commentary — it can carry
+    a ``\\ud800`` escape decoded from an API response — and
+    commentary is sanitised on the sealing path, never a reason
+    to lose a decided verdict's record to an unencodable hash.
     """
     if not isinstance(text, str):
         raise ValueError(
             "explanation must be a string, got "
             f"{type(text).__name__}")
+    text = replace_lone_surrogates(text)
     if len(text) <= MAX_EXPLANATION_CHARS:
         return text
     marker = (
@@ -284,7 +295,11 @@ def _cap_error(value):
     if value is None:
         return None
     if isinstance(value, str):
-        return value[:MAX_ERROR_CHARS]
+        # Lone surrogates become U+FFFD (v1.97.0): an error note is
+        # adapter/lookup text — it can quote an exception message
+        # carrying an unencodable character — and is sanitised on
+        # the sealing path like every other commentary field.
+        return replace_lone_surrogates(value[:MAX_ERROR_CHARS])
     return (f"malformed error note discarded "
             f"(got {type(value).__name__})")
 

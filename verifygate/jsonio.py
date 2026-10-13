@@ -178,6 +178,19 @@ range (``1e999``) decodes to ``inf`` without passing through
 scanned — iteratively — for a non-finite float. No genuine
 document is affected: every document VerifyGate writes is
 standard JSON with small ints and no floats.
+
+Unencodable text (v1.97.0): a JSON ``\\uXXXX`` escape can decode
+to a **lone surrogate** — half of a surrogate pair, which is not
+valid Unicode and cannot be encoded as UTF-8 at all — and a path
+string can carry a NUL byte, which no filesystem path can
+contain (paths cross the syscall boundary as NUL-terminated
+strings). Both used to surface as raw ``UnicodeEncodeError`` /
+``ValueError: embedded null byte`` from deep inside the code
+that consumed them. This module now owns the two text helpers
+every layer shares — :func:`has_lone_surrogates` and
+:func:`replace_lone_surrogates` — and :func:`validate_file_path`
+rejects a NUL-bearing path as the same :class:`JsonFileError` as
+any other invalid path, before any ``stat`` / ``open`` is tried.
 """
 
 from __future__ import annotations
@@ -195,6 +208,39 @@ MAX_JSON_DEPTH = 100  # containers; genuine documents nest ~10
 
 class JsonFileError(ValueError):
     """A JSON input file is oversize, undecodable, or malformed."""
+
+
+def has_lone_surrogates(text) -> bool:
+    """True when ``text`` holds a lone surrogate (v1.97.0).
+
+    A lone surrogate (U+D800..U+DFFF unpaired) is not valid
+    Unicode: it cannot be encoded as UTF-8, hashed, spawned, or
+    written — yet JSON text can carry one (a ``\\ud800`` escape
+    decodes happily), so every boundary that consumes JSON text
+    has to judge it. Non-strings hold no surrogates.
+    """
+    if not isinstance(text, str):
+        return False
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return True
+    return False
+
+
+def replace_lone_surrogates(text: str) -> str:
+    """Return ``text`` with each lone surrogate replaced by U+FFFD.
+
+    The sanitising counterpart to :func:`has_lone_surrogates`,
+    for adapter-supplied commentary on the sealing paths: the
+    replacement character is what UTF-8 decoding with
+    ``errors="replace"`` already produces for check output, so a
+    degraded explanation reads exactly like degraded output —
+    and commentary never costs a decided verdict its record.
+    """
+    return "".join(
+        "\ufffd" if 0xD800 <= ord(ch) <= 0xDFFF else ch
+        for ch in text)
 
 
 def validate_file_path(path, name: str = "path") -> Path:
@@ -226,6 +272,16 @@ def validate_file_path(path, name: str = "path") -> Path:
         raise JsonFileError(
             f"{name} must be a non-empty file path string "
             f"(got {type(path).__name__})")
+    if "\x00" in value:
+        # NUL in a path (v1.97.0): no filesystem path can contain
+        # one — the path crosses the syscall boundary as a
+        # NUL-terminated string — so the stat/open below could
+        # only raise a raw ValueError ("embedded null byte") from
+        # outside this module's error contract.
+        raise JsonFileError(
+            f"{name} must not contain a NUL byte: no filesystem "
+            "path can, so the path names no file that can be "
+            "opened")
     return Path(value)
 
 

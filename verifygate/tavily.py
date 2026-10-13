@@ -98,6 +98,8 @@ import os
 import urllib.request
 from abc import ABC, abstractmethod
 
+from .jsonio import replace_lone_surrogates
+
 TAVILY_URL = "https://api.tavily.com/search"
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024  # bounded response read (v1.80.0)
 MAX_REFERENCES = 3
@@ -179,7 +181,10 @@ def normalise_reference(item) -> dict | None:
     a dict/list has no honest string form here). Scalar field values
     (numbers, booleans) are coerced with ``str``; missing/None fields
     become "". Extra keys are dropped: the evidence record seals
-    exactly this shape and nothing else.
+    exactly this shape and nothing else. Lone surrogates — which a
+    JSON ``\\ud800`` escape in a lookup response can carry — become
+    U+FFFD (v1.97.0): reference text is sealed commentary, sanitised
+    on this path like every other adapter text.
     """
     if not isinstance(item, dict):
         return None
@@ -196,7 +201,7 @@ def normalise_reference(item) -> dict | None:
             return None
         else:
             text = str(value)
-        ref[field] = text[:limit]
+        ref[field] = replace_lone_surrogates(text[:limit])
     return ref
 
 

@@ -604,39 +604,39 @@ MIT — see `LICENSE`.
 
 ## Version
 
-1.96.0 — A numbered hunk is held
-to the counts its header declares:
-the parser read a hunk's body only
-up to the declared counts and never
-checked a shortfall, so a hunk
-declaring five old and five new
-lines but carrying one of each
-applied as if it had declared one,
-and a corrupt line inside a hunk
-silently ended it mid-body —
-dropping the rest of its lines,
-additions included — while the
-partial change applied. A numbered
-hunk whose body ends short of its
-declared counts now raises a clean
-``PatchError`` at parse time, so
-the whole diff fails atomically
-and the repair loop feeds the
-rejection back. Lines beyond the
-counts stay tolerated by design
-(a committed real-mode patch
-carries a trailing context line
-beyond its counts, and replay
-reconstructs the counted hunk),
-and bare ``@@`` hunks (no counts
-declared) and stale start numbers
-are unchanged. Two first-party
-fixtures whose headers had declared
-counts their bodies never carried
-(the scaffold's modify diff and
-the mock's slugify diff) were
-corrected to the true counts.
-10 new tests (2375 total).
+1.97.0 — Text that can never cross
+its boundary is rejected before
+any work: a check command carrying
+a NUL byte could never be spawned
+(commands reach the OS as
+NUL-terminated strings), yet the
+spec accepted it, ran the checks
+before it, and died mid-run with
+no record for their verdicts; a
+lone surrogate — a ``\ud800``
+escape decoded from JSON — is not
+valid Unicode and cannot be
+encoded as UTF-8, so it crashed
+evidence sealing after the checks
+ran, and crashed the chain
+verifier itself on a forged
+record (a usage error instead of
+CHAIN INVALID). Spec, sandbox,
+and evidence now enforce and
+mirror the same rules up front;
+adapter commentary carrying such
+characters is sanitised to U+FFFD
+rather than costing a decided
+verdict its record; a patch
+naming a NUL-bearing target path,
+or carrying surrogates in its
+text, is a clean ``PatchError``
+the repair loop feeds back; and
+a forged record's rendered view
+still renders, the unencodable
+character degraded, because
+judging it is the view's job.
+36 new tests (2411 total).
 
 1.95.0 — A binary patch block is a
 clean rejection, never a silent
