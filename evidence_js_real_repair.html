@@ -196,7 +196,7 @@ Make the change, re‑run `node --test` and `node repro.js`. Both should now pas
 <div class="card"><p>Patch from previous attempt applied to: <strong>cart.js</strong></p></div>
 <div class="verdict-banner pass"><span class="big">VERDICT: PASS</span><br>spec: cart-total-tax-fix · mode: real · created: 2026-10-10T19:36:11.210719+00:00</div>
 <div class="chain-ok">Hash chain verified at render time — this record is intact and tamper-evident.</div>
-<div class="card"><h3>Replay</h3><p class="mono">python3 -m verifygate run --spec samples-js/spec.json --candidate /tmp/verifygate-i1dxo6u2 --mode real</p><p class="mono">spec hash: f9c36f2a2918c790004ce548874522d08990927bd12c4d1f0baa85d36539c1b7<br>candidate tree hash: e13787416362ddb2a5f1a4ba6e662100b2da60e27ac014fe7c3b6b32254516fc<br>record hash: 51e0d72c66795709c7699d78aec6bb5558d6e80004cdd0408b559f2e5e6411f4<br>signature: 514563e74df596c8ace76ebebecb30c5…</p>
+<div class="card"><h3>Replay</h3><p class="mono">python3 -m verifygate replay --record samples-js/evidence_real_repair.json --spec samples-js/spec.json --candidate samples-js/failing --mode real  # attempt 1: patched copy, reconstructed from the report&#x27;s recorded patch</p><p class="mono">spec hash: f9c36f2a2918c790004ce548874522d08990927bd12c4d1f0baa85d36539c1b7<br>candidate tree hash: e13787416362ddb2a5f1a4ba6e662100b2da60e27ac014fe7c3b6b32254516fc<br>record hash: 51e0d72c66795709c7699d78aec6bb5558d6e80004cdd0408b559f2e5e6411f4<br>signature: 514563e74df596c8ace76ebebecb30c5…</p>
 <p>Signed with the labelled public development key (demonstrates the mechanism; not production key management).</p>
 </div>
 <div class="card">
