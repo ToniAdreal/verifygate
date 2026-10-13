@@ -700,7 +700,12 @@ def signing_key() -> str:
     dev key. A *set* value is validated before it is used, at
     sealing and at verification alike: it must be a string of
     ``MIN_SIGNING_KEY_CHARS..MAX_SIGNING_KEY_CHARS`` characters,
-    not whitespace-only, and contain no control characters.
+    not whitespace-only, contain no control characters, and be
+    encodable as UTF-8 (v1.98.0: a value carrying lone
+    surrogates — which is how ``os.environ`` decodes non-UTF-8
+    bytes set by another process — passed every check above and
+    then crashed the HMAC ``.encode()`` at sealing and at
+    verification alike, instead of the one ``ValueError``).
     Before this, a set-but-empty variable (the ``os.environ.get``
     default applies only when the variable is absent) silently
     became an empty HMAC key whose records nonetheless disclosed
@@ -716,11 +721,13 @@ def signing_key() -> str:
     if not isinstance(raw, str) \
             or not MIN_SIGNING_KEY_CHARS <= len(raw) <= MAX_SIGNING_KEY_CHARS \
             or not raw.strip() \
+            or has_lone_surrogates(raw) \
             or any(ord(ch) < 32 or ord(ch) == 127 for ch in raw):
         raise ValueError(
             "VERIFYGATE_SIGNING_KEY must be "
             f"{MIN_SIGNING_KEY_CHARS}..{MAX_SIGNING_KEY_CHARS} characters, "
-            "not whitespace-only, and free of control characters "
+            "not whitespace-only, free of control characters, and "
+            "encodable as UTF-8 "
             f"(got length {len(raw) if isinstance(raw, str) else 'n/a'})")
     return raw
 

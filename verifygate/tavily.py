@@ -98,7 +98,7 @@ import os
 import urllib.request
 from abc import ABC, abstractmethod
 
-from .jsonio import replace_lone_surrogates
+from .jsonio import has_lone_surrogates, replace_lone_surrogates
 
 TAVILY_URL = "https://api.tavily.com/search"
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024  # bounded response read (v1.80.0)
@@ -341,11 +341,12 @@ class TavilyReferenceLookup(ReferenceLookup):
         resolved_key = api_key if api_key is not None else os.environ.get(
             "TAVILY_API_KEY", "")
         if not isinstance(resolved_key, str) \
-                or len(resolved_key) > MAX_API_KEY_CHARS:
+                or len(resolved_key) > MAX_API_KEY_CHARS \
+                or has_lone_surrogates(resolved_key):
             raise ValueError(
                 "Tavily api_key must be a string of at most "
-                f"{MAX_API_KEY_CHARS} characters or None "
-                f"(got {type(resolved_key).__name__})")
+                f"{MAX_API_KEY_CHARS} characters or None, encodable "
+                f"as UTF-8 (got {type(resolved_key).__name__})")
         self.api_key = resolved_key
         self.timeout_s = validate_timeout_s(timeout_s)
         # transport(body: dict) -> decoded JSON response dict. Tests

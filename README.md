@@ -604,6 +604,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.98.0 — The three values resolved
+from the environment — the HMAC
+signing key, the Tavily API key,
+and the configured Token Factory
+model id — are now judged
+encodable as UTF-8 at the same
+validation that already judged
+their type and length.
+``os.environ`` decodes a
+variable's bytes with
+surrogateescape, so a variable set
+by another process from non-UTF-8
+bytes arrived holding lone
+surrogates while still being a
+string of legal length: the
+signing key passed validation and
+then crashed the HMAC encode at
+sealing and at verification alike,
+the Tavily key was interpolated
+into a header that cannot be
+encoded, and the model id went
+into the request body as escapes
+no API issued. Each is now the one
+``ValueError`` at resolution,
+whichever route it arrived by.
+10 new tests (2421 total).
+
 1.97.0 — Text that can never cross
 its boundary is rejected before
 any work: a check command carrying

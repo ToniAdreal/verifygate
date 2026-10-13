@@ -153,6 +153,7 @@ import sys
 import urllib.request
 
 from .evidence import MAX_FINISH_REASON_CHARS, MAX_MODEL_CHARS
+from .jsonio import has_lone_surrogates
 from .llm import (
     LLMAdapter,
     validate_brief,
@@ -268,10 +269,12 @@ class TokenFactoryAdapter(LLMAdapter):
         # itself (v1.35.0): reject a non-string, empty, or over-long
         # id here instead of sealing a self-failing record later.
         if not isinstance(self.model, str) or not self.model \
-                or len(self.model) > MAX_MODEL_CHARS:
+                or len(self.model) > MAX_MODEL_CHARS \
+                or has_lone_surrogates(self.model):
             raise ValueError(
                 "Token Factory model id must be a non-empty string "
-                f"of at most {MAX_MODEL_CHARS} characters")
+                f"of at most {MAX_MODEL_CHARS} characters, encodable "
+                "as UTF-8")
         # The remaining constructor arguments are validated the
         # same way (v1.44.0, see the module docstring): a malformed
         # timeout or transport is a usage error here, not a socket
