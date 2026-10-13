@@ -604,6 +604,39 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.93.0 — A patch can rename or copy
+a file: git ``rename from`` /
+``rename to`` and ``copy from`` /
+``copy to`` headers were previously
+ignored entirely, so a pure rename or
+copy diff produced no file patch at
+all ("no unified diff found"), and a
+rename with content changes was
+applied as a modification of the
+*new* path — which still lives at
+the old path — and rejected with
+"cannot modify <new>: not a file".
+Renames and copies are now parsed
+(from the git headers, flushed as
+hunk-less file patches like
+mode-only diffs, and from a
+``---``/``+++`` pair naming two
+different files) and applied in
+staging: hunks apply against the
+source content, the destination
+inherits the source's
+trailing-newline state, line-ending
+style, and permission bits (a mode
+line still overrides), a rename
+stages the source as deleted, and
+the destination must be free under
+the same rules as a creation. A
+rename whose hunks do not match, or
+whose destination is occupied, is a
+clean ``PatchError`` with the tree
+untouched. 17 new tests
+(2342 total).
+
 1.92.0 — A patch's git mode line must
 name a regular file: any octal value
 was previously masked with ``& 0o777``

@@ -108,6 +108,36 @@ shape it replaced halfway. Atomicity is unchanged: every
 judgement happens in staging, before a single byte is written,
 and a deletion that fails to stage fails the whole diff.
 
+Rename and copy support (since v1.93.0): git ``rename from`` /
+``rename to`` and ``copy from`` / ``copy to`` headers were
+ignored entirely, and a ``---``/``+++`` pair naming two
+different files was applied as a modification of the *new*
+path. A pure rename or copy diff (no hunks, no mode line)
+produced no file patch at all and failed as "no unified diff
+found"; a rename with content changes was rejected with
+"cannot modify <new>: not a file", because the file still
+lives at its old path; and a rename carrying a mode change
+failed the same way. The patched tree could therefore never
+be the tree a rename/copy diff specified, although such diffs
+are ordinary ``git diff`` output (and an ordinary repair a
+model may propose for a badly named file). Renames and copies
+are now parsed — from the git headers, flushed as hunk-less
+file patches exactly like mode-only diffs, and from a
+``---``/``+++`` pair that names two different files — and
+applied in staging: the source file's lines, trailing-newline
+state, line-ending style, and permission bits move (rename)
+or are duplicated (copy) to the destination, any hunks apply
+against the *source* content, the destination must be free
+(judged with the same rules as a creation, including the
+file/directory replacement exemptions), and a rename stages
+the source as deleted so the phased commit unlinks it before
+writing the destination. Atomicity is unchanged: a rename
+whose hunks do not match the source, or whose destination is
+occupied, is a clean :class:`PatchError` with the tree
+untouched, and the repair loop feeds it back like any other
+inapplicable diff. Replay reconstructs a renamed attempt from
+the recorded patch text exactly as it does any other.
+
 File-type mode validation (since v1.92.0): a git mode line was
 honoured for its permission bits only — any octal value was
 masked with ``& 0o777`` at commit — so a mode naming a
@@ -297,6 +327,8 @@ class FilePatch:
     new_path: str  # "/dev/null" for a file deletion
     hunks: list[Hunk] = field(default_factory=list)
     new_mode: int | None = None  # permission bits from a git mode line
+    is_rename: bool = False  # git rename headers seen (v1.93.0)
+    is_copy: bool = False  # git copy headers seen (v1.93.0)
 
 
 _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
@@ -375,6 +407,18 @@ def _clean_path(raw: str) -> str:
     if path.startswith(("a/", "b/")):
         path = path[2:]
     return path
+
+
+def _clean_plain_path(raw: str) -> str:
+    """Clean a ``rename from`` / ``copy to`` style path (v1.93.0).
+
+    Those git headers carry the path with no ``a/``/``b/``
+    prefix, so only the TAB / end-of-line cut and the C-style
+    unquoting of :func:`_clean_path` apply — never the prefix
+    strip (a renamed file may legitimately live under ``a/``).
+    """
+    path = raw.strip().split("\t")[0].rstrip()
+    return _unquote_git_path(path)
 
 
 def _split_git_paths(rest: str) -> tuple[str, str] | None:
@@ -511,10 +555,37 @@ def parse_patch(text: str) -> list[FilePatch]:
     git_paths: tuple[str, str] | None = None
     pending_mode: int | None = None
     pending_create = False
+    # Git rename/copy headers since the last file patch (v1.93.0):
+    # a rename or copy with no ---/+++ pair (a pure rename, or a
+    # rename carrying only a mode change) is flushed as a
+    # hunk-less FilePatch at the next boundary, exactly like a
+    # mode-only diff.
+    pending_rename: tuple[str, str] | None = None
+    pending_rename_from: str | None = None
+    pending_copy: tuple[str, str] | None = None
+    pending_copy_from: str | None = None
 
     def flush_mode_only() -> None:
         nonlocal git_paths, pending_mode, pending_create
-        if git_paths is not None and pending_mode is not None:
+        nonlocal pending_rename, pending_rename_from
+        nonlocal pending_copy, pending_copy_from
+        if pending_rename is not None:
+            patches.append(FilePatch(
+                old_path=pending_rename[0],
+                new_path=pending_rename[1],
+                hunks=[],
+                new_mode=pending_mode,
+                is_rename=True,
+            ))
+        elif pending_copy is not None:
+            patches.append(FilePatch(
+                old_path=pending_copy[0],
+                new_path=pending_copy[1],
+                hunks=[],
+                new_mode=pending_mode,
+                is_copy=True,
+            ))
+        elif git_paths is not None and pending_mode is not None:
             patches.append(FilePatch(
                 old_path="/dev/null" if pending_create else git_paths[0],
                 new_path=git_paths[1],
@@ -524,6 +595,10 @@ def parse_patch(text: str) -> list[FilePatch]:
         git_paths = None
         pending_mode = None
         pending_create = False
+        pending_rename = None
+        pending_rename_from = None
+        pending_copy = None
+        pending_copy_from = None
 
     i = 0
     while i < len(lines):
@@ -541,16 +616,59 @@ def parse_patch(text: str) -> list[FilePatch]:
             pending_mode = _mode_value(lines[i])
             i += 1
             continue
+        if lines[i].startswith("rename from "):
+            pending_rename_from = _clean_plain_path(
+                lines[i][len("rename from "):])
+            i += 1
+            continue
+        if lines[i].startswith("rename to "):
+            if pending_rename_from is not None:
+                pending_rename = (
+                    pending_rename_from,
+                    _clean_plain_path(lines[i][len("rename to "):]),
+                )
+            i += 1
+            continue
+        if lines[i].startswith("copy from "):
+            pending_copy_from = _clean_plain_path(
+                lines[i][len("copy from "):])
+            i += 1
+            continue
+        if lines[i].startswith("copy to "):
+            if pending_copy_from is not None:
+                pending_copy = (
+                    pending_copy_from,
+                    _clean_plain_path(lines[i][len("copy to "):]),
+                )
+            i += 1
+            continue
         if lines[i].startswith("--- ") and i + 1 < len(lines) \
                 and lines[i + 1].startswith("+++ "):
+            # A pending rename/copy whose paths are NOT this
+            # header pair's is a separate, earlier file patch
+            # (a pure rename block followed by a modification of
+            # the new name, as a model may emit): flush it first
+            # so the patches stay in emission order (v1.93.0).
+            pair = (_clean_path(lines[i][4:]),
+                    _clean_path(lines[i + 1][4:]))
+            if (pending_rename is not None and pending_rename != pair) \
+                    or (pending_copy is not None
+                        and pending_copy != pair):
+                flush_mode_only()
             fp = FilePatch(
                 old_path=_clean_path(lines[i][4:]),
                 new_path=_clean_path(lines[i + 1][4:]),
                 new_mode=pending_mode,
+                is_rename=pending_rename is not None,
+                is_copy=pending_copy is not None,
             )
             git_paths = None
             pending_mode = None
             pending_create = False
+            pending_rename = None
+            pending_rename_from = None
+            pending_copy = None
+            pending_copy_from = None
             i += 2
             while i < len(lines):
                 m = _HUNK_RE.match(lines[i])
@@ -1069,6 +1187,74 @@ def apply_patch(
             state.lines = []
             state.mode = None
             changed.append(fp.old_path)
+        elif fp.old_path != fp.new_path or fp.is_rename or fp.is_copy:
+            # Rename or copy (v1.93.0): the content lives at the
+            # OLD path. Before this, every such patch was applied
+            # as a modification of the new path and rejected with
+            # "not a file", and a pure rename/copy produced no
+            # file patch at all. The source is loaded, the hunks
+            # (if any) apply against its content, and the result
+            # is staged at the destination — which must be free,
+            # judged exactly as a creation is, including the
+            # file/directory replacement exemptions. A rename
+            # additionally stages the source as deleted; a copy
+            # leaves it untouched. The destination inherits the
+            # source's trailing-newline state, line-ending style,
+            # and permission bits unless a mode line overrides
+            # the bits.
+            source = _safe_target(root, fp.old_path)
+            dest = _safe_target(root, fp.new_path)
+            verb = "copy" if fp.is_copy else "rename"
+            if source == dest:
+                state = load(dest, fp.new_path, "modify")
+                if fp.hunks:
+                    state.lines, eof_no_newline = _apply_hunks(
+                        state.lines, fp)
+                    if eof_no_newline is not None:
+                        state.trailing_newline = not eof_no_newline
+                if fp.new_mode is not None:
+                    state.mode = fp.new_mode
+                changed.append(fp.new_path)
+                continue
+            source_state = load(source, fp.old_path, verb)
+            existing_dest = staged.get(dest)
+            if existing_dest is not None:
+                if existing_dest.exists:
+                    raise PatchError(
+                        f"cannot {verb} to {fp.new_path}: already exists")
+            elif _beneath_deleted_ancestor(dest):
+                pass  # freed by a deletion in this same diff
+            elif _is_dir(dest) and not dest.is_symlink():
+                if not _directory_replaced(dest):
+                    raise PatchError(
+                        f"cannot {verb} to {fp.new_path}: already exists")
+            elif _exists(dest, fp.new_path):
+                raise PatchError(
+                    f"cannot {verb} to {fp.new_path}: already exists")
+            source_mode = source_state.mode
+            if source_mode is None:
+                try:
+                    source_mode = stat.S_IMODE(source.lstat().st_mode)
+                except OSError:
+                    source_mode = None
+            new_lines, eof_no_newline = _apply_hunks(
+                list(source_state.lines), fp)
+            staged[dest] = _Staged(
+                exists=True,
+                lines=new_lines,
+                trailing_newline=not eof_no_newline
+                if eof_no_newline is not None
+                else source_state.trailing_newline,
+                mode=fp.new_mode if fp.new_mode is not None
+                else source_mode,
+                line_ending=source_state.line_ending,
+            )
+            if not fp.is_copy:
+                source_state.exists = False
+                source_state.lines = []
+                source_state.mode = None
+                changed.append(fp.old_path)
+            changed.append(fp.new_path)
         else:  # modification (possibly mode-only: no hunks)
             target = _safe_target(root, fp.new_path)
             state = load(target, fp.new_path, "modify")
