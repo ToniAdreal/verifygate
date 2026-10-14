@@ -14,7 +14,10 @@ Exit code: run/repair — 0 when the (final) verdict is PASS, 1 when
 FAIL, 2 on usage/spec errors (the evidence record is written either
 way — a FAIL record is a deliverable, not an error); verify/replay —
 0 when the record is intact / every verdict reproduces, 1 when not,
-2 on usage errors.
+2 on usage errors. An operator interrupt (SIGINT, or SIGTERM
+converted to the same path) is none of these: the running check's
+process group is swept, no record is written, one line is printed,
+and the exit code is 130 (v1.105.0).
 
 Record files are loaded through the bounded JSON loader
 (``jsonio.load_json_file``, ``MAX_RECORD_FILE_BYTES``; v1.36.0): a
@@ -162,6 +165,7 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import stat
 import sys
 from pathlib import Path
@@ -409,7 +413,7 @@ def _empty_supplied(value, flag: str) -> str | None:
     return None
 
 
-def main(argv: list[str] | None = None) -> int:
+def _dispatch(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="verifygate")
     parser.add_argument("--version", action="version",
                         version=f"verifygate {__version__}")
@@ -837,6 +841,43 @@ def main(argv: list[str] | None = None) -> int:
               f"({report['stopped_reason']})  ->  {out}")
         return 0 if report["final_verdict"] == "PASS" else 1
     return 2
+
+
+def _raise_keyboard_interrupt(signum, frame) -> None:
+    raise KeyboardInterrupt
+
+
+def main(argv: list[str] | None = None) -> int:
+    # Operator interrupts are a first-class exit, not a crash
+    # (v1.105.0). SIGINT arrives as KeyboardInterrupt on its own;
+    # SIGTERM — how CI runners and supervisors stop a process —
+    # is converted to the same exception for the duration of the
+    # dispatch, so both take the identical path: the sandbox
+    # sweeps the running check's process group as the exception
+    # unwinds (see sandbox.run_command), no record is written for
+    # a run that never decided a verdict, and the CLI reports one
+    # line and exits 130 (128 + SIGINT, the shell convention)
+    # instead of dying with an unhandled traceback. Before this,
+    # an interrupted run printed a full KeyboardInterrupt stack
+    # and left its check running in its deleted workspace.
+    previous_term = None
+    try:
+        previous_term = signal.signal(
+            signal.SIGTERM, _raise_keyboard_interrupt)
+    except (ValueError, OSError):
+        previous_term = None  # not the main thread: leave SIGTERM alone
+    try:
+        return _dispatch(argv)
+    except KeyboardInterrupt:
+        print("error: interrupted before completion; nothing "
+              "was written", file=sys.stderr)
+        return 130
+    finally:
+        if previous_term is not None:
+            try:
+                signal.signal(signal.SIGTERM, previous_term)
+            except (ValueError, OSError):
+                pass
 
 
 if __name__ == "__main__":

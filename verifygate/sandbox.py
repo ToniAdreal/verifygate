@@ -223,6 +223,18 @@ hung check cannot hang the harness. Hardening rules, each pinned by tests:
   already are; the spec layer rejects the same commands before
   any workspace is prepared.
 
+* **Interrupt sweep** — an abnormal exit out of the check loop
+  (v1.105.0), above all an operator interrupt, sweeps the check's
+  process group exactly as the leader-exit and timeout paths do.
+  Before this, a ``KeyboardInterrupt`` raised inside
+  :func:`run_command`'s drain loop propagated past both sweeps:
+  the harness died promptly and its ``finally`` blocks removed the
+  workspace, but the check itself — a shell and its children —
+  kept running unsupervised inside the deleted directory until it
+  ended on its own (probed against v1.104.0: an interrupted
+  ``sleep 60`` check was found alive in its deleted workspace for
+  the rest of its minute). A stopped run now stops its check.
+
 This is a local/CI-grade sandbox (temp dir + timeout + scrubbed env),
 not a multi-tenant security boundary — see CONCEPT.md risks.
 """
@@ -787,6 +799,22 @@ def run_command(command: str, cwd: Path, timeout_s: int) -> CommandResult:
                     buffers[stream].append(chunk)  # type: ignore[index]
                 else:
                     selector.unregister(stream)
+    except BaseException:
+        # An abnormal exit out of the loop — above all an operator
+        # interrupt (KeyboardInterrupt, raised by the CLI for
+        # SIGINT/SIGTERM) — must not leave the check running
+        # unsupervised (v1.105.0): the leader-exit and timeout paths
+        # sweep the process group, and until now an interrupt
+        # skipped both, orphaning the check inside its
+        # about-to-be-deleted workspace until it ended on its own.
+        # Sweep the group, reap the leader, and let the exception
+        # propagate unchanged.
+        _kill_process_group(proc)
+        try:
+            proc.wait()
+        except Exception:
+            pass
+        raise
     finally:
         selector.close()
     if not swept:

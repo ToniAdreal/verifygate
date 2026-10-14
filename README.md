@@ -608,6 +608,17 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.105.0 — An operator interrupt
+stops the check, not just the
+harness: SIGINT/SIGTERM during a
+check now sweep the check's whole
+process group (before, the CLI
+died promptly but left the check
+running unsupervised inside its
+deleted workspace), no record is
+written, one line is printed, and
+the exit code is 130 instead of
+an unhandled traceback.
 1.104.0 — The hosted demo's legacy
 chain-v1 evidence pages are
 re-rendered: they went stale when
