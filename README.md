@@ -608,6 +608,19 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.106.0 — Real mode finds its
+credential helper again: the
+adapter pinned the helper module's
+original directory, which the
+connector-setup skill has since
+moved, so every real-mode call
+failed "helpers unavailable" while
+direct CLI smokes (run with an
+explicit PYTHONPATH) kept passing
+and masked it. Discovery now tries
+an ordered candidate list — the
+documented current location first,
+its mirror, the legacy pin last.
 1.105.0 — An operator interrupt
 stops the check, not just the
 harness: SIGINT/SIGTERM during a

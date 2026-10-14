@@ -141,6 +141,23 @@ total, and the patch error is truncated to
 produces are byte-identical: its snapshot and feedback already
 satisfy every cap.
 
+Credential-helper discovery (v1.106.0): the helper module was
+located through one pinned directory,
+``/opt/hatch/skills/skill-creator/bin`` — the location it had when
+the adapter was first wired (Oct 10). That directory no longer
+exists on this machine: the connector-setup skill now keeps the
+module at ``/opt/muse/skills/custom-connector-setup/bin`` (with a
+mirror under ``/opt/hatch/workflow-skills/``), so every real-mode
+call failed with "connector helpers are unavailable" even though
+the credential and the API were healthy — the direct CLI smokes
+still passed only because they were run with an explicit
+``PYTHONPATH`` prepend, which masked the breakage in the app's own
+path for several checkpoint rounds. Discovery is now a candidate
+list tried in order — an already-importable module first (a
+caller's ``PYTHONPATH`` wins), then the current documented
+location, its mirror, and the legacy pin last — and the clean
+``ValueError`` remains for a machine with the module nowhere.
+
 Nothing in here can affect a verdict; it only produces advisory text.
 """
 
@@ -168,7 +185,15 @@ CREDENTIAL_NAME = "custom.nebius-token-factory"
 # Nano is the fast/cheap reasoning model used for development and the
 # default for the repair loop; override with NEBIUS_MODEL or --model.
 DEFAULT_MODEL = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
-_DYNAMIC_CREDENTIALS_DIR = "/opt/hatch/skills/skill-creator/bin"
+# Candidate locations for the connector helper module, tried in
+# order (v1.106.0, see the module docstring): the connector-setup
+# skill's current bin directory, its on-machine mirror, and the
+# original Oct 10 pin (kept last so an older layout still works).
+_DYNAMIC_CREDENTIALS_DIRS = (
+    "/opt/muse/skills/custom-connector-setup/bin",
+    "/opt/hatch/workflow-skills/custom-connector-setup/bin",
+    "/opt/hatch/skills/skill-creator/bin",
+)
 
 # Nemotron 3 Nano is a reasoning model: a tight max_tokens budget can be
 # consumed entirely by reasoning before any answer text appears, so the
@@ -230,17 +255,36 @@ def _load_credential_helpers():
     Only the surrogate helper is imported (v1.81.0): the body is
     read bounded in ``_post_chat`` itself, so the helper's
     unbounded ``read_json_response`` is no longer used here.
+
+    Discovery (v1.106.0): an already-importable module wins (a
+    caller's ``PYTHONPATH`` is respected), then each candidate
+    directory in :data:`_DYNAMIC_CREDENTIALS_DIRS` is added to
+    ``sys.path`` and tried in turn. A single pinned directory was
+    the v1.106.0 bug: the skill moved the module and real mode
+    broke while direct CLI smokes (run with an explicit
+    ``PYTHONPATH``) kept passing.
     """
-    if _DYNAMIC_CREDENTIALS_DIR not in sys.path:
-        sys.path.insert(0, _DYNAMIC_CREDENTIALS_DIR)
     try:
         from dynamic_credentials import add_surrogate_to_request
-    except ImportError as exc:
-        raise ValueError(
-            "Nebius connector helpers are unavailable on this machine; "
-            "use --mode judge for a zero-key run"
-        ) from exc
-    return add_surrogate_to_request
+        return add_surrogate_to_request
+    except ImportError:
+        pass
+    for directory in _DYNAMIC_CREDENTIALS_DIRS:
+        if directory not in sys.path:
+            sys.path.insert(0, directory)
+        try:
+            from dynamic_credentials import add_surrogate_to_request
+            return add_surrogate_to_request
+        except ImportError:
+            # A candidate whose module lacks the helper (or fails
+            # partway) must not shadow a later candidate through
+            # the module cache.
+            sys.modules.pop("dynamic_credentials", None)
+            continue
+    raise ValueError(
+        "Nebius connector helpers are unavailable on this machine; "
+        "use --mode judge for a zero-key run"
+    )
 
 
 class TokenFactoryAdapter(LLMAdapter):
