@@ -608,6 +608,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.113.0 — The patch prompt can now
+see generic '.conf' config files:
+the candidate snapshot omitted
+them, so on the first live
+candidate whose fix landed in a
+.conf rate card the model named the
+right file from the brief,
+invented its contents, and had
+every diff rightly rejected
+(patch_not_applicable, 4 real
+calls). With the file visible,
+Super repaired the same task
+FAIL -> PASS in one round (Nano
+fixed one of the two values and
+stayed honestly FAIL).
 1.112.0 — The patch prompt can now
 see env-style config files
 ('rates.env', and a file named

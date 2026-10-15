@@ -244,6 +244,12 @@ _TEXT_SUFFIXES = {
     # the brief, invented its contents, and had every diff correctly
     # rejected (patch_not_applicable).
     ".env",
+    # Generic config files (v1.113.0): a candidate whose fix lands
+    # in a '.conf' rate/config card was invisible to the patch
+    # prompt -- on the first live .conf candidate the model named
+    # the right file from the brief, invented its contents, and
+    # had every diff correctly rejected (patch_not_applicable).
+    ".conf",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
