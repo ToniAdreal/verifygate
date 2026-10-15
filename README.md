@@ -608,6 +608,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.112.0 — The patch prompt can now
+see env-style config files
+('rates.env', and a file named
+exactly '.env', which carries no
+suffix): the candidate snapshot
+omitted them, so on the first live
+candidate whose fix landed in an
+env rate card the model named the
+right file from the brief,
+invented its contents, and had
+every diff rightly rejected
+(patch_not_applicable, 4 real
+calls). With the file visible,
+the same task repaired FAIL ->
+PASS in one round.
 1.111.0 — The patch prompt can now
 see Java-style '.properties'
 config files: the candidate

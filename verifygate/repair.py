@@ -236,6 +236,14 @@ _TEXT_SUFFIXES = {
     # named the right file from the brief, invented its contents, and
     # had every diff correctly rejected (patch_not_applicable).
     ".properties",
+    # Env-style configuration (v1.112.0): a candidate whose fix lands
+    # in an env rate/config card ('rates.env', or a file named exactly
+    # '.env' -- carried in _TEXT_BASENAMES below, since a leading-dot
+    # name has no suffix) was invisible to the patch prompt -- on the
+    # first live .env candidate the model named the right file from
+    # the brief, invented its contents, and had every diff correctly
+    # rejected (patch_not_applicable).
+    ".env",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
@@ -246,6 +254,9 @@ _TEXT_SUFFIXES = {
 _TEXT_BASENAMES = {
     "Makefile", "makefile", "GNUmakefile", "Dockerfile", "Rakefile",
     "Gemfile", "Jenkinsfile", "Vagrantfile", "Procfile", "CMakeLists.txt",
+    # '.env' (v1.112.0): a leading-dot filename carries no suffix, so
+    # only exact-basename membership can ever include it.
+    ".env",
 }
 _MAX_FILE_CHARS = 4000
 _MAX_TOTAL_CHARS = 12000
