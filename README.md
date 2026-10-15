@@ -608,6 +608,24 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.115.0 — The patch prompt can now
+see JavaScript / TypeScript module
+variant files ('.mjs' / '.cjs' /
+'.mts' / '.cts'): '.js' / '.ts'
+were whitelisted but the snapshot
+matches the full suffix, so a
+'discount.mjs' module never
+reached the model — on the first
+live candidate whose fix landed
+in a .mjs module the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff
+rightly rejected
+(patch_not_applicable, 5 real
+calls). With the file visible,
+Nano repaired the same task
+FAIL -> PASS in one round.
 1.114.0 — The patch prompt can now
 see JSON Lines data files
 ('.jsonl' / '.ndjson'): '.json'

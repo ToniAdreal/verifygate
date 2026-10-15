@@ -259,6 +259,15 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".jsonl", ".ndjson",
+    # JavaScript / TypeScript module variants (v1.115.0): a candidate
+    # whose fix lands in a '.mjs' / '.cjs' (or '.mts' / '.cts') module
+    # was invisible to the patch prompt -- '.js' / '.ts' are
+    # whitelisted but the snapshot matches the full suffix, so a
+    # 'discount.mjs' never reached the model; on the first live .mjs
+    # candidate the model named the right file from the brief,
+    # invented its contents as a file creation, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".mjs", ".cjs", ".mts", ".cts",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
