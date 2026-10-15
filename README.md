@@ -608,6 +608,26 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.109.0 — The patch prompt can now
+see SQL and other data/query text
+files: the candidate snapshot's
+suffix whitelist omitted '.sql',
+'.csv', '.tsv', '.xml', '.graphql',
+'.proto', '.lua', '.pl', '.swift',
+'.kt', '.kts', '.scala', and
+'.groovy', so on the first live SQL
+candidate the file to be fixed
+never reached the prompt — both
+real models diagnosed the bug
+correctly, invented the file's
+contents, and had every diff
+rightly rejected. With the file
+visible, the same task repaired
+FAIL -> PASS in two rounds (the
+first applied patch put WHERE
+before JOIN and still failed; the
+feedback loop's second patch moved
+the condition into the JOIN).
 1.108.0 — The patch prompt learns
 the mode-only form: it taught the
 modification, create, and delete

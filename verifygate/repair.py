@@ -219,6 +219,15 @@ _TEXT_SUFFIXES = {
     ".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".md", ".txt", ".toml",
     ".yaml", ".yml", ".cfg", ".ini", ".sh", ".go", ".rs", ".java", ".c",
     ".h", ".cpp", ".rb", ".php", ".html", ".css",
+    # Data / query / markup text formats (v1.109.0): a candidate whose
+    # fix lands in one of these was previously invisible to the patch
+    # prompt -- the snapshot silently omitted the very file to be
+    # patched, so a real model had to invent its contents and every
+    # proposed diff was correctly rejected (proven live on a .sql
+    # candidate: Nano and Super both failed patch_not_applicable
+    # while their diagnoses were correct).
+    ".sql", ".csv", ".tsv", ".xml", ".graphql", ".proto",
+    ".lua", ".pl", ".swift", ".kt", ".kts", ".scala", ".groovy",
 }
 _MAX_FILE_CHARS = 4000
 _MAX_TOTAL_CHARS = 12000
