@@ -228,6 +228,18 @@ _TEXT_SUFFIXES = {
     # while their diagnoses were correct).
     ".sql", ".csv", ".tsv", ".xml", ".graphql", ".proto",
     ".lua", ".pl", ".swift", ".kt", ".kts", ".scala", ".groovy",
+    # Build-system fragments (v1.110.0).
+    ".mk",
+}
+# Extensionless text files (v1.110.0): the build/ops files a fix most
+# often lands in carry no suffix at all, so the suffix whitelist alone
+# silently omitted them from the snapshot -- on the first live Makefile
+# candidate the model named the right file from the brief but had never
+# seen its contents, and every proposed hunk missed the file on disk
+# (patch_not_applicable). Membership is by exact basename.
+_TEXT_BASENAMES = {
+    "Makefile", "makefile", "GNUmakefile", "Dockerfile", "Rakefile",
+    "Gemfile", "Jenkinsfile", "Vagrantfile", "Procfile", "CMakeLists.txt",
 }
 _MAX_FILE_CHARS = 4000
 _MAX_TOTAL_CHARS = 12000
@@ -260,7 +272,8 @@ def _candidate_files(root: str | Path) -> dict[str, str]:
     # Sandbox containment traversal: a candidate symlink pointing at a
     # host file must never leak that file's contents into an LLM prompt.
     for rel, source in iter_candidate_files(root):
-        if Path(rel).suffix.lower() not in _TEXT_SUFFIXES:
+        if (Path(rel).suffix.lower() not in _TEXT_SUFFIXES
+                and Path(rel).name not in _TEXT_BASENAMES):
             continue
         try:
             with source.open(encoding="utf-8") as handle:

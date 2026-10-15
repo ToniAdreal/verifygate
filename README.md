@@ -608,6 +608,27 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.110.0 — The patch prompt can now
+see extensionless build files:
+the candidate snapshot decided
+inclusion by suffix alone, so a
+'Makefile', 'Dockerfile', and the
+other extensionless text files a
+fix most often lands in never
+reached the prompt — on the first
+live Makefile candidate the model
+named the right file from the brief
+but invented its contents, and
+every diff was rightly rejected.
+Inclusion is now also by exact
+basename for the known build/ops
+files (plus the '.mk' suffix);
+unlisted extensionless and binary
+files are still skipped. With the
+Makefile visible, Super repaired
+the same task FAIL -> PASS in two
+rounds (one diff rightly rejected
+for a short hunk first).
 1.109.0 — The patch prompt can now
 see SQL and other data/query text
 files: the candidate snapshot's
