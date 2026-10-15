@@ -608,6 +608,27 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.108.0 — The patch prompt learns
+the mode-only form: it taught the
+modification, create, and delete
+forms, so on the first live task
+whose fix was a permission change
+alone (a correct script missing
+its executable bit, direct runs
+failing with exit 126) Nano spent
+three rounds on content edits —
+including a chmod line inside the
+script, which can never run because
+the missing permission is what
+prevents the script from running.
+The prompt now teaches the
+mode-only diff ('diff --git' plus
+'old mode'/'new mode', no hunks)
+and that a content edit never
+changes a file's mode; the next
+live run repaired the task
+FAIL -> PASS in one round with
+exactly that diff.
 1.107.0 — The patch prompt learns
 the file forms: it taught only a
 small modification hunk, so on a
