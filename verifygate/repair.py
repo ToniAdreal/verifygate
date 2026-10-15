@@ -250,6 +250,15 @@ _TEXT_SUFFIXES = {
     # the right file from the brief, invented its contents, and
     # had every diff correctly rejected (patch_not_applicable).
     ".conf",
+    # JSON Lines data files (v1.114.0): a candidate whose fix lands
+    # in a '.jsonl' tier/data table was invisible to the patch
+    # prompt -- '.json' is whitelisted but the snapshot matches the
+    # full suffix, so 'tiers.jsonl' (and its '.ndjson' alias) never
+    # reached the model; on the first live .jsonl candidate the
+    # model named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".jsonl", ".ndjson",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
