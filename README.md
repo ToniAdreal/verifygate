@@ -608,6 +608,23 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.107.0 — The patch prompt learns
+the file forms: it taught only a
+small modification hunk, so on a
+live task whose fix was deleting a
+shadowing statistics.py stub, both
+Nano and Super escaped the quotes
+of the docstring line in their
+whole-file deletion diffs and the
+byte-exact applier rightly rejected
+them (Super then emptied the file,
+which is not a deletion). The
+prompt now teaches the create and
+delete forms explicitly — the
+/dev/null header side, a deletion's
+removed lines are the whole file,
+docstring included, copied verbatim
+and never escaped.
 1.106.0 — Real mode finds its
 credential helper again: the
 adapter pinned the helper module's
