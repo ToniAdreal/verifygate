@@ -230,6 +230,12 @@ _TEXT_SUFFIXES = {
     ".lua", ".pl", ".swift", ".kt", ".kts", ".scala", ".groovy",
     # Build-system fragments (v1.110.0).
     ".mk",
+    # Java-style configuration (v1.111.0): a candidate whose fix lands
+    # in a .properties rate/config card was invisible to the patch
+    # prompt -- on the first live .properties candidate the model
+    # named the right file from the brief, invented its contents, and
+    # had every diff correctly rejected (patch_not_applicable).
+    ".properties",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

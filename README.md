@@ -608,6 +608,20 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.111.0 — The patch prompt can now
+see Java-style '.properties'
+config files: the candidate
+snapshot's suffix whitelist omitted
+them, so on the first live
+candidate whose fix landed in a
+properties rate card the model
+named the right file from the
+brief, invented its contents, and
+had every diff rightly rejected
+(patch_not_applicable, 4 real
+calls). With the file visible,
+the same task repaired FAIL ->
+PASS in one round.
 1.110.0 — The patch prompt can now
 see extensionless build files:
 the candidate snapshot decided
