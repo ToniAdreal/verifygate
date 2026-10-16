@@ -407,6 +407,14 @@ _TEXT_SUFFIXES = {
     # brief, invented its contents as a file creation, and had
     # every diff correctly rejected (patch_not_applicable).
     ".exs",
+    # F# programs (v1.134.0): a candidate whose fix lands in a
+    # '.fs' program was invisible to the patch prompt -- no F#
+    # suffix was whitelisted at all, so a 'rates.fs' rate card
+    # never reached the model; on the first live .fs candidate
+    # the model named the right file from the brief, invented
+    # its contents as a file creation, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".fs",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
