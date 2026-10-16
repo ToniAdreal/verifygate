@@ -608,6 +608,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.135.0 — The patch prompt can now
+see F# script files ('.fsx'):
+'.fs' is whitelisted but the
+snapshot matches the full suffix,
+so a 'rates.fsx' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .fsx file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff
+rightly rejected
+(patch_not_applicable, 4 real
+calls / 22,643 tokens). A first
+post-fix run ended
+generation_failed on an empty
+completion (3 calls / 20,963
+tokens, recorded as-is); with the
+file visible, Nano then repaired
+the same task FAIL -> PASS in two
+rounds (4 calls / 23,485 tokens
+sealed, report INTACT, replay
+MATCHED, one hunk rightly
+rejected on the way).
 1.134.0 — The patch prompt can now
 see F# files ('.fs'): no F#
 suffix was whitelisted at all, so

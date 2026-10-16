@@ -415,6 +415,14 @@ _TEXT_SUFFIXES = {
     # its contents as a file creation, and had every diff
     # correctly rejected (patch_not_applicable).
     ".fs",
+    # F# scripts (v1.135.0): a candidate whose fix lands in a
+    # '.fsx' script was invisible to the patch prompt -- '.fs' is
+    # whitelisted but the snapshot matches the full suffix, so a
+    # 'rates.fsx' rate card never reached the model; on the first
+    # live .fsx candidate the model named the right file from the
+    # brief, invented its contents as a file creation, and had
+    # every diff correctly rejected (patch_not_applicable).
+    ".fsx",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
