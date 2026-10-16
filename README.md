@@ -608,6 +608,25 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.123.0 — The patch prompt can now
+see Tcl program files ('.tcl'):
+no Tcl suffix was whitelisted
+at all (the '.exp' entry covers
+Expect scripts, not plain Tcl),
+so a 'rates.tcl' program never
+reached the model — on the first
+live candidate whose fix landed
+in a .tcl file the model named
+the right file from the brief,
+invented its contents, and had
+every diff rightly rejected
+(patch_not_applicable, 4 real
+calls). With the file visible,
+Nano repaired the same task
+FAIL -> PASS in two rounds
+(23,341 tokens sealed in the
+uncommitted report; one proposal
+rightly rejected on the way).
 1.122.0 — The patch prompt can now
 see Expect program files ('.exp'):
 no Expect suffix was whitelisted
