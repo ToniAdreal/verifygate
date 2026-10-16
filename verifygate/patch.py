@@ -228,6 +228,19 @@ first excess line ended the file's hunk loop and every
 later hunk of that file was silently dropped with it — and
 bare hunks are unchanged.
 
+Context-only hunks (since v1.139.0): a hunk whose body carries
+no ``-``/``+`` change line at all — every line context — can
+never be a real change, yet it satisfied its declared counts
+and applied as a no-op that still reported the file as changed.
+The live case is a file whose own lines begin with ``-`` (an
+Erlang ``-define`` header): both live models space-prefixed
+every line instead of doubling the marker (``--define...``
+for a removal, ``+-define...`` for an addition), so the
+counted reader saw only context, the patched tree stayed
+byte-identical, and the loop burned its rounds. A hunk with
+no change lines is now a clean :class:`PatchError` at parse
+time, fed back like any other inapplicable diff.
+
 File-type mode validation (since v1.92.0): a git mode line was
 honoured for its permission bits only — any octal value was
 masked with ``& 0o777`` at commit — so a mode naming a
@@ -999,6 +1012,24 @@ def parse_patch(text: str) -> list[FilePatch]:
                         1 for k, _ in hunk.lines if k in (" ", "+"))
                     if not hunk.lines:
                         break
+                # Context-only hunk (v1.139.0): a hunk carrying
+                # no '-'/'+' line changes nothing, yet it used to
+                # satisfy its counts and apply as a no-op that
+                # reported the file as changed -- see the module
+                # docstring. Reject it at parse time so the
+                # repair loop can feed the rejection back.
+                if hunk.lines and not any(
+                        k in ("-", "+") for k, _ in hunk.lines):
+                    raise PatchError(
+                        f"{fp.new_path}: corrupt patch: hunk "
+                        f"@@ -{hunk.old_start},{hunk.old_count} "
+                        f"+{hunk.new_start},{hunk.new_count} @@ "
+                        "carries no change lines (every line is "
+                        "context), so it would change nothing; "
+                        "lines to remove must start with '-' and "
+                        "lines to add with '+' (a file line that "
+                        "itself starts with '-' is removed as "
+                        "'--...')")
                 fp.hunks.append(hunk)
             if fp.hunks or fp.new_mode is not None or pair_is_delete \
                     or fp.old_path == "/dev/null" \

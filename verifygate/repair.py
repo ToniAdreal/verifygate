@@ -451,6 +451,15 @@ _TEXT_SUFFIXES = {
     # creation, and had every diff correctly rejected
     # (patch_not_applicable).
     ".mli",
+    # Erlang header files (v1.139.0): a candidate whose fix lands
+    # in a '.hrl' header file was invisible to the patch prompt --
+    # '.erl' is whitelisted but the snapshot matches the full
+    # suffix, so a 'rates.hrl' rate card never reached the model;
+    # on the first live .hrl candidate the model named the right
+    # file from the brief, invented its contents as a file
+    # creation, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".hrl",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

@@ -608,6 +608,37 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.139.0 — The patch prompt can now
+see Erlang header files ('.hrl'):
+'.erl' is whitelisted but the
+snapshot matches the full suffix,
+so a 'rates.hrl' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .hrl file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff
+correctly rejected
+(patch_not_applicable, 5 real
+calls / 27,338 tokens). The same
+candidate then exposed a second
+gap: a file whose lines begin
+with '-' (-define macros) made
+both live models space-prefix
+every diff line, producing
+context-only hunks that applied
+as no-ops while reporting the
+file changed. Context-only hunks
+are now rejected at parse time
+and fed back; with both fixes,
+Super repaired the same task
+FAIL -> PASS in two rounds (3
+calls / 12,774 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.138.0 — The patch prompt can now
 see OCaml interface files
 ('.mli'): '.ml' is whitelisted but
