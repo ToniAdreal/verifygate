@@ -351,6 +351,14 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".dart",
+    # R programs (v1.127.0): a candidate whose fix lands in a
+    # '.r' program was invisible to the patch prompt -- no R
+    # suffix was whitelisted at all, so a 'rates.r' rate card
+    # never reached the model; on the first live .r candidate
+    # the model named the right file from the brief, invented
+    # its contents as a file creation, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".r",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
