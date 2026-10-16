@@ -442,6 +442,15 @@ _TEXT_SUFFIXES = {
     # invented its contents, and had every diff correctly
     # rejected (patch_not_applicable).
     ".fsscript",
+    # OCaml interface files (v1.138.0): a candidate whose fix
+    # lands in a '.mli' interface file was invisible to the patch
+    # prompt -- '.ml' is whitelisted but the snapshot matches the
+    # full suffix, so a 'rates.mli' rate card never reached the
+    # model; on the first live .mli candidate the model named the
+    # right file from the brief, invented its contents as a file
+    # creation, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".mli",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

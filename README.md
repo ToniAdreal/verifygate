@@ -608,6 +608,31 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.138.0 — The patch prompt can now
+see OCaml interface files
+('.mli'): '.ml' is whitelisted but
+the snapshot matches the full
+suffix, so a 'rates.mli' rate card
+never reached the model — on the
+first live candidate whose fix
+landed in a .mli file the model
+named the right file from the
+brief, invented its contents as a
+file creation, and had every diff
+correctly rejected
+(patch_not_applicable, 4 real
+calls / 20,957 tokens). A first
+post-fix run ended
+generation_failed on an empty
+completion (4 calls / 28,115
+tokens); with the file visible,
+Nano then repaired the same task
+FAIL -> PASS in one round (2 calls
+/ 7,103 tokens sealed in the
+uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.137.0 — The patch prompt can now
 see F# script files in their long
 form ('.fsscript'): '.fs' and
