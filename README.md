@@ -608,6 +608,22 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.117.0 — The patch prompt can now
+see C++ variant files ('.hpp' /
+'.cc' / '.cxx' / '.hxx'): '.cpp' /
+'.h' were whitelisted but the
+snapshot matches the full suffix,
+so a 'rates.hpp' header never
+reached the model — on the first
+live candidate whose fix landed
+in a .hpp file the model named
+the right file from the brief,
+invented its contents, and had
+every diff rightly rejected
+(patch_not_applicable, 5 real
+calls). With the file visible,
+Nano repaired the same task
+FAIL -> PASS in two rounds.
 1.116.0 — The patch prompt can now
 see shell variant files ('.bash' /
 '.zsh'): '.sh' was whitelisted but
