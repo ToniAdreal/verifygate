@@ -608,6 +608,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.141.0 — The patch prompt can now
+see Clojure files ('.clj'): no
+Clojure suffix was whitelisted at
+all, so a 'rates.clj' rate card
+never reached the model — on the
+first live candidate whose fix
+landed in a .clj file the model
+named the right file from the
+brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable, 5 real
+calls / 29,669 tokens). With the
+file visible, Nano's proposals
+were context-only hunks (rightly
+rejected by the v1.139.0 rule:
+5 calls / 32,085 tokens, FAIL),
+and Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 4,021 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.140.0 — The patch prompt can now
 see Literate Haskell files
 ('.lhs'): '.hs' is whitelisted but

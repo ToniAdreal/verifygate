@@ -469,6 +469,14 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".lhs",
+    # Clojure programs (v1.141.0): a candidate whose fix lands
+    # in a '.clj' program was invisible to the patch prompt --
+    # no Clojure suffix was whitelisted at all, so a 'rates.clj'
+    # rate card never reached the model; on the first live .clj
+    # candidate the model named the right file from the brief,
+    # invented its contents, and had every diff correctly
+    # rejected (patch_not_applicable).
+    ".clj",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
