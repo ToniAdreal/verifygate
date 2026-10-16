@@ -608,6 +608,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.118.0 — The patch prompt can now
+see Perl module files ('.pm'):
+'.pl' was whitelisted but the
+snapshot matches the full suffix,
+so a 'Rates.pm' module never
+reached the model — on the first
+live candidate whose fix landed
+in a .pm file the model named
+the right file from the brief,
+invented its contents, and had
+every diff rightly rejected
+(patch_not_applicable, 4 real
+calls). With the file visible,
+Nano repaired the same task
+FAIL -> PASS in one round.
 1.117.0 — The patch prompt can now
 see C++ variant files ('.hpp' /
 '.cc' / '.cxx' / '.hxx'): '.cpp' /
