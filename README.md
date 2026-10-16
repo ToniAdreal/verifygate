@@ -608,6 +608,19 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.125.0 — The patch prompt now
+teaches the context-line marker
+on tab-indented files: a context
+line is one space (the diff
+marker), then the file's own
+tab indentation as content,
+never the tab as the line's
+first character. This closes
+the shape of Nano's v1.124.0
+plist failure — right contents,
+hunks prefixed with the file's
+tab instead of a space, every
+hunk rightly rejected.
 1.124.0 — The patch prompt can now
 see XML property list files
 ('.plist'): no plist suffix was
