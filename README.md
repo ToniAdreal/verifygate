@@ -608,6 +608,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.122.0 — The patch prompt can now
+see Expect program files ('.exp'):
+no Expect suffix was whitelisted
+at all, so a 'rates.exp' program
+never reached the model — on the
+first live candidate whose fix
+landed in a .exp file the model
+named the right file from the
+brief, invented its contents, and
+had every diff rightly rejected
+(patch_not_applicable, 4 real
+calls). With the file visible,
+Nano repaired the same task
+FAIL -> PASS in one round
+(5,367 tokens sealed).
 1.121.0 — The patch prompt can now
 see sed program files ('.sed'): no
 sed suffix was whitelisted at all,
