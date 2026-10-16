@@ -608,6 +608,23 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.128.0 — The patch prompt can now
+see Julia files ('.jl'): no Julia
+suffix was whitelisted at all, so
+a 'rates.jl' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .jl file the model named
+the right file from the brief,
+invented its contents, and had
+every diff rightly rejected
+(patch_not_applicable, 5 real
+calls / 30,524 tokens). With the
+file visible, Nano repaired the
+same task FAIL -> PASS in one
+round (3 calls / 16,314 tokens
+sealed, report INTACT, replay
+MATCHED).
 1.127.0 — The patch prompt can now
 see R files ('.r'): no R
 suffix was whitelisted at all, so
