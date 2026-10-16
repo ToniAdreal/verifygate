@@ -608,6 +608,28 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.129.0 — The patch prompt can now
+see Haskell files ('.hs'): no Haskell
+suffix was whitelisted at all, so
+a 'rates.hs' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .hs file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff rightly
+rejected (patch_not_applicable, 4 real
+calls / 12,049 tokens). With the
+file visible, Nano repaired the
+same task FAIL -> PASS in 2 rounds
+(4 calls / 23,075 tokens sealed,
+report INTACT, replay MATCHED) —
+after a first post-fix run ended
+generation_failed on an empty
+completion (3 calls / 20,976 tokens,
+recorded as-is) and a round-1
+corrupt hunk was rightly rejected
+on the successful run.
 1.128.0 — The patch prompt can now
 see Julia files ('.jl'): no Julia
 suffix was whitelisted at all, so
