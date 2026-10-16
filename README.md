@@ -608,6 +608,23 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.132.0 — The patch prompt can now
+see Elixir files ('.ex'): no Elixir
+suffix was whitelisted at all, so
+a 'rates.ex' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .ex file the model named
+the right file from the brief,
+invented its contents, and had
+every diff rightly rejected
+(patch_not_applicable, 6 real
+calls / 38,603 tokens). With the
+file visible, Nano repaired the
+same task FAIL -> PASS in one
+round (2 calls / 5,038 tokens
+sealed, report INTACT, replay
+MATCHED).
 1.131.0 — The patch prompt can now
 see Erlang files ('.erl'): no Erlang
 suffix was whitelisted at all, so
