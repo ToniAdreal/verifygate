@@ -608,6 +608,23 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.120.0 — The patch prompt can now
+see jq program files ('.jq'): no
+jq suffix was whitelisted at all,
+so a 'rates.jq' program never
+reached the model — on the first
+live candidate whose fix landed
+in a .jq file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff
+rightly rejected
+(patch_not_applicable, 4 real
+calls). With the file visible,
+Nano repaired the same task
+FAIL -> PASS in two rounds
+(one diff rightly rejected for a
+short hunk first).
 1.119.0 — The patch prompt can now
 see AWK program files ('.awk'): no
 AWK suffix was whitelisted at all,
