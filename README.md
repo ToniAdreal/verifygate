@@ -608,6 +608,26 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.133.0 — The patch prompt can now
+see Elixir script files ('.exs'):
+'.ex' is whitelisted but the
+snapshot matches the full suffix,
+so a 'rates.exs' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .exs file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff
+rightly rejected
+(patch_not_applicable, 4 real
+calls / 18,433 tokens). With the
+file visible, Nano repaired the
+same task FAIL -> PASS in two
+rounds (3 calls / 14,908 tokens
+sealed, report INTACT, replay
+MATCHED, one corrupt hunk rightly
+rejected on the way).
 1.132.0 — The patch prompt can now
 see Elixir files ('.ex'): no Elixir
 suffix was whitelisted at all, so

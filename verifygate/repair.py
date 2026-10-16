@@ -399,6 +399,14 @@ _TEXT_SUFFIXES = {
     # its contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".ex",
+    # Elixir scripts (v1.133.0): a candidate whose fix lands in a
+    # '.exs' script was invisible to the patch prompt -- '.ex' is
+    # whitelisted but the snapshot matches the full suffix, so a
+    # 'rates.exs' rate card never reached the model; on the first
+    # live .exs candidate the model named the right file from the
+    # brief, invented its contents as a file creation, and had
+    # every diff correctly rejected (patch_not_applicable).
+    ".exs",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
