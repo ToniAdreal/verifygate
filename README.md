@@ -608,6 +608,32 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.140.0 — The patch prompt can now
+see Literate Haskell files
+('.lhs'): '.hs' is whitelisted but
+the snapshot matches the full
+suffix, so a 'rates.lhs' rate card
+never reached the model — on the
+first live candidate whose fix
+landed in a .lhs file the model
+named the right file from the
+brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 24,371 tokens). With the
+file visible, Nano twice garbled
+the bird-track lines (an extra
+space after the '-'/'+' markers,
+rightly rejected: 4 calls /
+18,451 and 5 calls / 28,956
+tokens, both FAIL), and Super
+repaired the same task FAIL ->
+PASS in three rounds (4 calls /
+13,649 tokens sealed in the
+uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.139.0 — The patch prompt can now
 see Erlang header files ('.hrl'):
 '.erl' is whitelisted but the
