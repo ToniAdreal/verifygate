@@ -608,6 +608,23 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.130.0 — The patch prompt can now
+see OCaml files ('.ml'): no OCaml
+suffix was whitelisted at all, so
+a 'rates.ml' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .ml file the model named
+the right file from the brief,
+invented its contents, and had
+every diff rightly rejected
+(patch_not_applicable, 4 real
+calls / 18,463 tokens). With the
+file visible, Nano repaired the
+same task FAIL -> PASS in one
+round (2 calls / 8,129 tokens
+sealed, report INTACT, replay
+MATCHED).
 1.129.0 — The patch prompt can now
 see Haskell files ('.hs'): no Haskell
 suffix was whitelisted at all, so
