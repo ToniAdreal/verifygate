@@ -423,6 +423,16 @@ _TEXT_SUFFIXES = {
     # brief, invented its contents as a file creation, and had
     # every diff correctly rejected (patch_not_applicable).
     ".fsx",
+    # F# signature files (v1.136.0): a candidate whose fix lands in a
+    # '.fsi' signature file was invisible to the patch prompt --
+    # '.fs' is whitelisted but the snapshot matches the full suffix,
+    # so a 'rates.fsi' rate card never reached the model; on the
+    # first live .fsi candidate the model named the right file from
+    # the brief, invented its contents as a file creation, and had
+    # every diff correctly rejected (patch_not_applicable). With
+    # the file visible its diffs then exposed the hunk over-count
+    # bug closed in patch.py in the same release.
+    ".fsi",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

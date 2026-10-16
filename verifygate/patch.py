@@ -209,6 +209,25 @@ exactly as before, and stale *start* numbers in a numbered
 header are still tolerated — content is verified against
 disk, never numbers (see :func:`_apply_hunks`).
 
+Hunk over-count (since v1.136.0): the tolerance above covered
+*any* line beyond the declared counts, but only a trailing
+*context* line is benign. When a header under-declares — the
+live case declared ``@@ -4,1 +4,1 @@`` over a body of one
+context line plus the ``-``/``+`` pair that was the entire
+change — the counted reader stopped at the context line and
+the change lines beyond the counts were silently dropped:
+the fragment applied as a no-op, the file was still reported
+as changed, the patched tree was byte-identical to the
+original (same tree hash), and the repair loop burned its
+rounds re-verifying an unchanged candidate while the model
+believed its fix had landed. Change lines beyond a numbered
+hunk's declared counts are now a clean :class:`PatchError`
+at parse time, like a shortfall; trailing context lines
+remain tolerated — and are now consumed, where before the
+first excess line ended the file's hunk loop and every
+later hunk of that file was silently dropped with it — and
+bare hunks are unchanged.
+
 File-type mode validation (since v1.92.0): a git mode line was
 honoured for its permission bits only — any octal value was
 masked with ``& 0o777`` at commit — so a mode naming a
@@ -894,6 +913,63 @@ def parse_patch(text: str) -> list[FilePatch]:
                     _note_no_newline_marker(hunk)
                     i += 1
                 if not bare:
+                    # Hunk over-count (v1.136.0): change lines
+                    # arriving *after* the declared counts are met
+                    # are not a trailing context line — they are
+                    # the change itself, and the header has
+                    # under-declared it. The counted reader above
+                    # stops at the counts, so those lines were
+                    # silently dropped while the counted fragment
+                    # (context only, in the live case) applied as
+                    # a no-op that still reported the file as
+                    # changed: the repaired tree was byte-identical
+                    # to the original, its tree hash unchanged,
+                    # and the repair loop burned its rounds
+                    # re-verifying an unchanged candidate. Peek at
+                    # the body-like lines that follow (structural
+                    # lines — the next hunk, the next file's
+                    # ---/+++ pair, a diff --git header — end the
+                    # peek): any '-'/'+' line among them rejects
+                    # the whole diff at parse time, exactly like a
+                    # shortfall. Trailing context lines carry no
+                    # change and stay tolerated, as before.
+                    excess_old = excess_new = 0
+                    j = i
+                    while j < len(lines):
+                        peek = lines[j]
+                        if peek.startswith(("--- ", "+++ ", "@@",
+                                            "diff --git ")):
+                            break
+                        if peek.startswith("\\"):
+                            j += 1
+                            continue
+                        kind = peek[0] if peek else " "
+                        if kind not in (" ", "-", "+"):
+                            break
+                        if kind == "-":
+                            excess_old += 1
+                        elif kind == "+":
+                            excess_new += 1
+                        j += 1
+                    if excess_old or excess_new:
+                        raise PatchError(
+                            f"{fp.new_path}: corrupt patch: hunk "
+                            f"@@ -{hunk.old_start},{hunk.old_count} "
+                            f"+{hunk.new_start},{hunk.new_count} @@ "
+                            f"declares {hunk.old_count} old and "
+                            f"{hunk.new_count} new lines, but its "
+                            f"body carries {excess_old} more old "
+                            f"and {excess_new} more new change "
+                            "lines beyond the declared counts")
+                    # Context-only excess: consume it. Before
+                    # this, the unparsed excess line ended the
+                    # file's hunk loop, so every later hunk of
+                    # the same file was silently dropped too —
+                    # the same silent-drop shape, one level up.
+                    # The excess context itself is still not
+                    # applied; the counted hunk above is the
+                    # whole change, exactly as before.
+                    i = j
                     # Hunk integrity (v1.96.0): a numbered header's
                     # declared counts are the hunk's contract. A
                     # body that ends short of them — at the end of

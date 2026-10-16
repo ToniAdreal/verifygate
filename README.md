@@ -608,6 +608,43 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.136.0 — The patch prompt can now
+see F# signature files ('.fsi'),
+and an under-declared hunk header
+can no longer silently drop its
+own change: on the first live
+candidate whose fix landed in a
+'rates.fsi' signature file the
+snapshot omitted the file, the
+model invented its contents, and
+every diff was rightly rejected
+(patch_not_applicable, 4 real
+calls / 18,189 tokens). With the
+file visible, Nano's diffs twice
+declared fewer lines than their
+bodies carried ('@@ -4,1 +4,1 @@'
+over a context line plus the -/+
+pair that was the entire change):
+the counted reader stopped at the
+counts, the change lines were
+silently dropped, and the fragment
+applied as a no-op — file reported
+changed, tree byte-identical, same
+tree hash — and two such runs
+burned 14 calls / 64,136 tokens
+re-verifying an unchanged
+candidate. Change lines beyond a
+numbered hunk's declared counts
+are now a clean PatchError fed
+back to the model (trailing
+context lines stay tolerated and
+are consumed, so later hunks of
+the same file are no longer
+dropped with them). With both
+fixes, Nano repaired the same
+task FAIL -> PASS in one round
+(3 calls / 15,791 tokens sealed,
+report INTACT, replay MATCHED).
 1.135.0 — The patch prompt can now
 see F# script files ('.fsx'):
 '.fs' is whitelisted but the
