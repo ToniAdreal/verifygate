@@ -608,6 +608,27 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.131.0 — The patch prompt can now
+see Erlang files ('.erl'): no Erlang
+suffix was whitelisted at all, so
+a 'rates.erl' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .erl file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff rightly
+rejected (patch_not_applicable, 4 real
+calls / 18,646 tokens). With the
+file visible, two Nano runs ended
+generation_failed on empty
+completions (4 calls / 27,448 and
+5 calls / 33,010 tokens, recorded
+as-is), and Super 120B repaired
+the same task FAIL -> PASS in one
+round (2 calls / 4,437 tokens
+sealed, report INTACT, replay
+MATCHED).
 1.130.0 — The patch prompt can now
 see OCaml files ('.ml'): no OCaml
 suffix was whitelisted at all, so
