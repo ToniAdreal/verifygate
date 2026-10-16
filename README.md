@@ -608,6 +608,21 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.119.0 — The patch prompt can now
+see AWK program files ('.awk'): no
+AWK suffix was whitelisted at all,
+so a 'rates.awk' program never
+reached the model — on the first
+live candidate whose fix landed
+in a .awk file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff
+rightly rejected
+(patch_not_applicable, 5 real
+calls). With the file visible,
+Nano repaired the same task
+FAIL -> PASS in one round.
 1.118.0 — The patch prompt can now
 see Perl module files ('.pm'):
 '.pl' was whitelisted but the
