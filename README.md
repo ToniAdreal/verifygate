@@ -608,6 +608,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.137.0 — The patch prompt can now
+see F# script files in their long
+form ('.fsscript'): '.fs' and
+'.fsx' are whitelisted but the
+snapshot matches the full suffix,
+so a 'rates.fsscript' rate card
+never reached the model — on the
+first live candidate whose fix
+landed in a .fsscript file the
+model named the right file from
+the brief, invented its contents,
+and had every diff correctly
+rejected (patch_not_applicable,
+4 real calls / 19,633 tokens).
+With the file visible, Nano
+repaired the same task FAIL ->
+PASS in two rounds (5 calls /
+33,499 tokens sealed in the
+uncommitted run-logs report, one
+hunk rightly rejected on the way,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.136.0 — The patch prompt can now
 see F# signature files ('.fsi'),
 and an under-declared hunk header
