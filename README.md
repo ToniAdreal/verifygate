@@ -608,6 +608,28 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.124.0 — The patch prompt can now
+see XML property list files
+('.plist'): no plist suffix was
+whitelisted at all (the '.xml'
+entry matches the full suffix, not
+the content), so a 'rates.plist'
+rate card never reached the model
+— on the first live candidate
+whose fix landed in a .plist file
+the model named the right file
+from the brief, invented its
+contents, and had every diff
+rightly rejected
+(patch_not_applicable, 5 real
+calls). With the file visible,
+Nano's contents were right but
+its hunks misused the file's tab
+indentation as the diff prefix;
+Super repaired the same task
+FAIL -> PASS in one round
+(5,244 tokens sealed in the
+uncommitted report).
 1.123.0 — The patch prompt can now
 see Tcl program files ('.tcl'):
 no Tcl suffix was whitelisted
