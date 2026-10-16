@@ -608,6 +608,24 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.126.0 — The patch prompt can now
+see Dart files ('.dart'): no Dart
+suffix was whitelisted at all, so
+a 'rates.dart' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .dart file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff
+rightly rejected
+(patch_not_applicable, 5 real
+calls / 29,529 tokens). With the
+file visible, Nano repaired the
+same task FAIL -> PASS in one
+round (2 calls / 7,308 tokens
+sealed, report INTACT, replay
+MATCHED).
 1.125.0 — The patch prompt now
 teaches the context-line marker
 on tab-indented files: a context
