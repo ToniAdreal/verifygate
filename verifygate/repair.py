@@ -309,6 +309,14 @@ _TEXT_SUFFIXES = {
     # a file creation, and had every diff correctly rejected
     # (patch_not_applicable).
     ".jq",
+    # sed programs (v1.121.0): a candidate whose fix lands in a
+    # '.sed' program was invisible to the patch prompt -- no sed
+    # suffix was whitelisted at all, so a 'rates.sed' program never
+    # reached the model; on the first live .sed candidate the model
+    # named the right file from the brief, invented its contents as
+    # a file creation, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".sed",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

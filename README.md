@@ -608,6 +608,24 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.121.0 — The patch prompt can now
+see sed program files ('.sed'): no
+sed suffix was whitelisted at all,
+so a 'rates.sed' program never
+reached the model — on the first
+live candidate whose fix landed
+in a .sed file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff
+rightly rejected
+(patch_not_applicable, 4 real
+calls). With the file visible,
+Nano repaired the same task
+FAIL -> PASS in three rounds
+(25,030 tokens sealed; two
+proposals rightly rejected on
+the way).
 1.120.0 — The patch prompt can now
 see jq program files ('.jq'): no
 jq suffix was whitelisted at all,
