@@ -608,6 +608,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.162.0 — The patch prompt can now
+see Dhall configuration files
+('.dhall'): no Dhall suffix was
+whitelisted at all, so a
+'rates.dhall' rate card (a Dhall
+record) never reached the
+model — on the first live
+candidate whose fix landed in a
+.dhall file Nano named the right
+file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable, 4 real
+calls / 22,013 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (7 calls / 56,309
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in three rounds (4
+calls / 12,244 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS; its first two diffs were
+rightly rejected and its round-3
+diff changed exactly the two
+wrong rates).
 1.161.0 — The patch prompt can now
 see Nix expression files
 ('.nix'): no Nix suffix was
