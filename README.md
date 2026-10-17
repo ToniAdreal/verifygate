@@ -608,6 +608,41 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.166.0 — The patch prompt can now
+see Elm files ('.elm'): no Elm
+suffix was whitelisted at all, so
+a 'rates.elm' rate card (an Elm
+discounts list) never reached the
+model — on the first live
+candidate whose fix landed in a
+.elm file Nano named the right
+file from the brief, invented its
+contents as a file creation, and
+had every diff correctly rejected
+(patch_not_applicable, 5 calls /
+30,469 tokens), and Super named
+the right file, invented its
+contents, and had every diff
+correctly rejected as well
+(patch_not_applicable, 4 calls /
+12,782 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Nano repaired the same task FAIL
+-> PASS in one round (3 calls /
+18,441 tokens sealed in the
+uncommitted run-logs report; its
+diff set both rates correctly but
+also dropped the two interleaved
+extra entries, recorded as-is),
+and Super repaired it FAIL ->
+PASS in one round as well (2
+calls / 5,170 tokens sealed in
+the uncommitted run-logs report;
+its applied diff changed exactly
+the two wrong rates; both reports
+INTACT, replay MATCHED, patched
+candidates independently PASS).
 1.165.0 — The patch prompt can now
 see HOCON configuration files
 ('.hocon'): no HOCON suffix was

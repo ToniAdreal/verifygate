@@ -679,6 +679,14 @@ _TEXT_SUFFIXES = {
     # file from the brief, invented its contents, and had every
     # diff correctly rejected (patch_not_applicable).
     ".hocon",
+    # Elm programs (v1.166.0): a candidate whose fix lands in a
+    # '.elm' file was invisible to the patch prompt -- no Elm
+    # suffix was whitelisted at all, so a 'rates.elm' rate card
+    # (an Elm discounts list) never reached the model; on the
+    # first live .elm candidate both models named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".elm",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
