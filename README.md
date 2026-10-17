@@ -608,6 +608,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.154.0 — The patch prompt can now
+see Stylus files ('.styl'):
+'.css' / '.scss' / '.sass' /
+'.less' are whitelisted but the
+snapshot matches the full
+suffix, and no '.styl' suffix
+was whitelisted at all, so a
+'rates.styl' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .styl file Nano named the
+right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 20,303 tokens). With the
+file visible, Nano repaired the
+same task FAIL -> PASS in one
+round (3 calls / 16,448 tokens
+sealed in the uncommitted
+run-logs report, report INTACT,
+replay MATCHED), and Super
+repaired it too in one round (2
+calls / 4,882 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.153.0 — The patch prompt can now
 see Less files ('.less'): '.css' /
 '.scss' / '.sass' are whitelisted

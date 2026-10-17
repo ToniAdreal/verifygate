@@ -578,6 +578,15 @@ _TEXT_SUFFIXES = {
     # brief, invented its contents as a file creation, and had every
     # diff correctly rejected (patch_not_applicable).
     ".less",
+    # Stylus stylesheets (v1.154.0): a candidate whose fix lands in a
+    # '.styl' file was invisible to the patch prompt -- '.css' /
+    # '.scss' / '.sass' / '.less' are whitelisted but the snapshot
+    # matches the full suffix, and no Stylus suffix was whitelisted
+    # at all, so a 'rates.styl' rate card never reached the model;
+    # on the first live .styl candidate the model named the right
+    # file from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".styl",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
