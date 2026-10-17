@@ -608,6 +608,32 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.161.0 — The patch prompt can now
+see Nix expression files
+('.nix'): no Nix suffix was
+whitelisted at all, so a
+'rates.nix' rate card (a Nix
+attribute set) never reached the
+model — on the first live
+candidate whose fix landed in a
+.nix file Nano named the right
+file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable, 4 real
+calls / 16,245 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,574
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 4,671 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS; its applied diff changed
+exactly the two wrong rates).
 1.160.0 — The patch prompt can now
 see HCL configuration files
 ('.hcl'): '.tf' / '.tfvars' are

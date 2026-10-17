@@ -638,6 +638,14 @@ _TEXT_SUFFIXES = {
     # right file from the brief, invented its contents, and had
     # every diff correctly rejected (patch_not_applicable).
     ".hcl",
+    # Nix expressions (v1.161.0): a candidate whose fix lands in a
+    # '.nix' file was invisible to the patch prompt -- no Nix suffix
+    # was whitelisted at all, so a 'rates.nix' rate card (a Nix
+    # attribute set) never reached the model; on the first live
+    # .nix candidate the model named the right file from the brief,
+    # invented its contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".nix",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
