@@ -608,6 +608,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.158.0 — The patch prompt can now
+see Terraform variable files
+('.tfvars'): no Terraform suffix
+was whitelisted at all, so a
+'rates.tfvars' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .tfvars file Nano named the
+right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 18,092 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,608
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 4,326 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.157.0 — The patch prompt can now
 see fish shell files ('.fish'):
 '.sh' / '.bash' / '.zsh' are
