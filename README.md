@@ -608,6 +608,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.147.0 — The patch prompt can now
+see Vue single-file components
+('.vue'): no Vue suffix was
+whitelisted at all, so a
+'rates.vue' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .vue file Super named the
+right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 17,702 tokens; two Nano
+runs also failed to repair,
+ending generation_failed on
+empty completions). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (6 calls / 46,387
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in two rounds (3
+calls / 9,787 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.146.0 — The patch prompt can now
 see Nim files ('.nim'): no Nim
 suffix was whitelisted at all, so
