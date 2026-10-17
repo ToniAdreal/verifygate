@@ -608,6 +608,31 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.157.0 — The patch prompt can now
+see fish shell files ('.fish'):
+'.sh' / '.bash' / '.zsh' are
+whitelisted but no fish suffix was
+whitelisted at all, so a
+'rates.fish' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .fish file Nano named the
+right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 5 real
+calls / 27,953 tokens). With the
+file visible, Nano repaired the
+same task FAIL -> PASS in one
+round (3 calls / 18,980 tokens
+sealed in the uncommitted
+run-logs report), and Super
+repaired it FAIL -> PASS in one
+round too (2 calls / 4,291 tokens
+sealed in the uncommitted
+run-logs report, report INTACT,
+replay MATCHED, patched candidate
+independently PASS).
 1.156.0 — The patch prompt can now
 see PowerShell files ('.ps1'): no
 PowerShell suffix was whitelisted
