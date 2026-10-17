@@ -608,6 +608,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.156.0 — The patch prompt can now
+see PowerShell files ('.ps1'): no
+PowerShell suffix was whitelisted
+at all, so a 'rates.ps1' rate card
+never reached the model — on the
+first live candidate whose fix
+landed in a .ps1 file Nano named
+the right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 18,592 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,499
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 3,721 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.155.0 — The patch prompt can now
 see C# files ('.cs'): no C#
 suffix was whitelisted at all,
