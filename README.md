@@ -608,6 +608,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.143.0 — The patch prompt can now
+see ClojureScript files ('.cljs'):
+'.clj' is whitelisted but the
+snapshot matches the full suffix,
+so a 'rates.cljs' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .cljs file the model named
+the right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 5 real
+calls / 33,954 tokens). With the
+file visible, Nano's hunks were
+corrupt and rightly rejected
+(patch_not_applicable, 5 calls /
+33,013 tokens), and Super
+repaired the
+same task FAIL -> PASS in one
+round (2 calls / 7,487 tokens
+sealed in the uncommitted
+run-logs report, report INTACT,
+replay MATCHED, patched
+candidate independently PASS).
 1.142.0 — The patch prompt can now
 see EDN data files ('.edn'): no
 EDN suffix was whitelisted at all
