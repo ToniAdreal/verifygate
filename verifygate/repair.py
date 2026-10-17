@@ -552,6 +552,15 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".mdx",
+    # SCSS stylesheets (v1.151.0): a candidate whose fix lands in a
+    # '.scss' file was invisible to the patch prompt -- '.css' is
+    # whitelisted but the snapshot matches the full suffix, and no
+    # SCSS suffix was whitelisted at all, so a 'rates.scss' rate
+    # card never reached the model; on the first live .scss
+    # candidate the model named the right file from the brief,
+    # invented its contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".scss",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

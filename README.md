@@ -608,6 +608,36 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.151.0 — The patch prompt can now
+see SCSS files ('.scss'): '.css' is
+whitelisted but the snapshot
+matches the full suffix, and no
+SCSS suffix was whitelisted at
+all, so a 'rates.scss' rate card
+never reached the model — on the
+first live candidate whose fix
+landed in a .scss file Nano named
+the right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(pre-fix Nano first ended
+generation_failed on an empty
+completion, 3 calls / 20,308
+tokens; pre-fix Super then showed
+the invention shape,
+patch_not_applicable, 4 real
+calls / 14,830 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (4 calls / 30,547
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 5,164 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.150.0 — The patch prompt can now
 see MDX files ('.mdx'): '.md' is
 whitelisted but the snapshot
