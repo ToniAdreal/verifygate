@@ -608,6 +608,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.155.0 — The patch prompt can now
+see C# files ('.cs'): no C#
+suffix was whitelisted at all,
+so a 'rates.cs' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .cs file Nano named the
+right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 5 real
+calls / 28,702 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,754
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 4,287 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.154.0 — The patch prompt can now
 see Stylus files ('.styl'):
 '.css' / '.scss' / '.sass' /

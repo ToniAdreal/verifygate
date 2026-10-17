@@ -587,6 +587,14 @@ _TEXT_SUFFIXES = {
     # file from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".styl",
+    # C# programs (v1.155.0): a candidate whose fix lands in a
+    # '.cs' program was invisible to the patch prompt -- no C#
+    # suffix was whitelisted at all, so a 'rates.cs' rate card
+    # never reached the model; on the first live .cs candidate
+    # the model named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".cs",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
