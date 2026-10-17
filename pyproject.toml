@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "verifygate"
-version = "1.162.0"
+version = "1.163.0"
 description = "A pre-delivery verification harness for coding agents: AI proposes, deterministic checks dispose, the evidence record proves it."
 requires-python = ">=3.11"
 license = { text = "MIT" }

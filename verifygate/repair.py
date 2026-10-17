@@ -654,6 +654,15 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".dhall",
+    # CUE configuration files (v1.163.0): a candidate whose fix
+    # lands in a '.cue' file was invisible to the patch prompt --
+    # no CUE suffix was whitelisted at all, so a 'rates.cue'
+    # rate card (a CUE struct) never reached the model; on the
+    # first live .cue candidate the model named the right file
+    # from the brief, invented its contents as a file creation,
+    # and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".cue",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

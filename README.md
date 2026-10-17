@@ -608,6 +608,32 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.163.0 — The patch prompt can now
+see CUE configuration files
+('.cue'): no CUE suffix was
+whitelisted at all, so a
+'rates.cue' rate card (a CUE
+struct) never reached the
+model — on the first live
+candidate whose fix landed in a
+.cue file Nano named the right
+file from the brief, invented
+its contents as a file creation,
+and had every diff correctly
+rejected (patch_not_applicable,
+5 real calls / 32,300 tokens).
+With the file visible, Nano
+ended generation_failed on an
+empty completion (3 calls /
+20,625 tokens, recorded as-is),
+and Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 4,505 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS; its applied diff changed
+exactly the two wrong rates).
 1.162.0 — The patch prompt can now
 see Dhall configuration files
 ('.dhall'): no Dhall suffix was
