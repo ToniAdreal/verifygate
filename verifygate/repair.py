@@ -628,6 +628,16 @@ _TEXT_SUFFIXES = {
     # a file creation, and had every diff correctly rejected
     # (patch_not_applicable).
     ".tf",
+    # HCL configuration files (v1.160.0): a candidate whose fix
+    # lands in a '.hcl' file was invisible to the patch prompt --
+    # '.tf' / '.tfvars' are whitelisted but the snapshot matches
+    # the full suffix, and no '.hcl' suffix was whitelisted at all,
+    # so a 'rates.hcl' rate card (standalone HCL, as used by
+    # Nomad / Packer / Vault-style configs) never reached the
+    # model; on the first live .hcl candidate the model named the
+    # right file from the brief, invented its contents, and had
+    # every diff correctly rejected (patch_not_applicable).
+    ".hcl",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

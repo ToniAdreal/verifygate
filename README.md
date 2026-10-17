@@ -608,6 +608,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.160.0 — The patch prompt can now
+see HCL configuration files
+('.hcl'): '.tf' / '.tfvars' are
+whitelisted but the snapshot
+matches the full suffix, and no
+'.hcl' suffix was whitelisted at
+all, so a 'rates.hcl' rate card
+never reached the model — on the
+first live candidate whose fix
+landed in an .hcl file Nano named
+the right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 21,293 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,553
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 3,833 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS; its applied diff changed
+exactly the two wrong rates).
 1.159.0 — The patch prompt can now
 see Terraform configuration files
 ('.tf'): '.tfvars' is whitelisted
