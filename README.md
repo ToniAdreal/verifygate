@@ -608,6 +608,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.150.0 — The patch prompt can now
+see MDX files ('.mdx'): '.md' is
+whitelisted but the snapshot
+matches the full suffix, so a
+'rates.mdx' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .mdx file Nano named the
+right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 21,929 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (5 calls / 37,398
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 5,318 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.149.0 — The patch prompt can now
 see Astro components
 ('.astro'): no Astro suffix was
