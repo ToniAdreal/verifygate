@@ -608,6 +608,37 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.165.0 — The patch prompt can now
+see HOCON configuration files
+('.hocon'): no HOCON suffix was
+whitelisted at all, so a
+'rates.hocon' rate card (a HOCON
+rates block) never reached the
+model — on the first live
+candidate whose fix landed in a
+.hocon file both Nano and Super
+named the right file from the
+brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable, 4 calls /
+19,739 tokens Nano; 4 calls /
+12,356 tokens Super). With the
+file visible, Nano repaired the
+same task FAIL -> PASS in one
+round (3 calls / 16,651 tokens
+sealed in the uncommitted
+run-logs report; its diff set
+both rates correctly but also
+dropped the two interleaved extra
+entries), and Super repaired it
+FAIL -> PASS in three rounds
+(4 calls / 11,948 tokens sealed
+in the uncommitted run-logs
+report; its applied diff changed
+exactly the two wrong rates; both
+reports INTACT, replay MATCHED,
+patched candidates independently
+PASS).
 1.164.0 — The patch prompt can now
 see Jsonnet configuration files
 ('.jsonnet'): no Jsonnet suffix
