@@ -608,6 +608,29 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.146.0 — The patch prompt can now
+see Nim files ('.nim'): no Nim
+suffix was whitelisted at all, so
+a 'rates.nim' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .nim file the model named
+the right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 5 real
+calls / 30,848 tokens). With the
+file visible, Nano twice ended
+generation_failed on an empty
+completion (3 calls / 20,551 and
+4 calls / 25,601 tokens, recorded
+as-is), and Super repaired the
+same task FAIL -> PASS in one
+round (2 calls / 4,326 tokens
+sealed in the uncommitted
+run-logs report, report INTACT,
+replay MATCHED, patched
+candidate independently PASS).
 1.145.0 — The patch prompt can now
 see Zig files ('.zig'): no Zig
 suffix was whitelisted at all, so

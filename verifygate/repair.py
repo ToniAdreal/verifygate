@@ -512,6 +512,14 @@ _TEXT_SUFFIXES = {
     # its contents as a file creation, and had every diff
     # correctly rejected (patch_not_applicable).
     ".zig",
+    # Nim programs (v1.146.0): a candidate whose fix lands in a
+    # '.nim' program was invisible to the patch prompt -- no Nim
+    # suffix was whitelisted at all, so a 'rates.nim' rate card
+    # never reached the model; on the first live .nim candidate
+    # the model named the right file from the brief, invented
+    # its contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".nim",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
