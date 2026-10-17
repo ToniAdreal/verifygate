@@ -608,6 +608,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.144.0 — The patch prompt can now
+see Clojure common files ('.cljc'):
+'.clj' / '.cljs' are whitelisted but
+the snapshot matches the full suffix,
+so a 'rates.cljc' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .cljc file the model named
+the right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 20,699 tokens). With the
+file visible, Nano twice ended
+generation_failed on an empty
+completion (3 calls / 20,609 and
+3 calls / 20,672 tokens, recorded
+as-is), and Super repaired the
+same task FAIL -> PASS in three
+rounds (4 calls / 16,330 tokens
+sealed in the uncommitted
+run-logs report, report INTACT,
+replay MATCHED, patched
+candidate independently PASS).
 1.143.0 — The patch prompt can now
 see ClojureScript files ('.cljs'):
 '.clj' is whitelisted but the
