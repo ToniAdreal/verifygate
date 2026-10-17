@@ -608,6 +608,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.149.0 — The patch prompt can now
+see Astro components
+('.astro'): no Astro suffix was
+whitelisted at all, so a
+'rates.astro' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .astro file Nano named the
+right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 23,868 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,549
+tokens, recorded as-is), a first
+Super run's corrupt hunks were
+rightly rejected (4 calls /
+15,008 tokens), and Super then
+repaired the same task
+FAIL -> PASS in one round (2
+calls / 4,286 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.148.0 — The patch prompt can now
 see Svelte components
 ('.svelte'): no Svelte suffix was
