@@ -663,6 +663,14 @@ _TEXT_SUFFIXES = {
     # and had every diff correctly rejected
     # (patch_not_applicable).
     ".cue",
+    # Jsonnet configuration files (v1.164.0): a candidate whose fix
+    # lands in a '.jsonnet' file was invisible to the patch prompt --
+    # no Jsonnet suffix was whitelisted at all, so a 'rates.jsonnet'
+    # rate card (a Jsonnet object) never reached the model; on the
+    # first live .jsonnet candidate the model named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".jsonnet",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

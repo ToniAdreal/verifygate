@@ -608,6 +608,36 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.164.0 — The patch prompt can now
+see Jsonnet configuration files
+('.jsonnet'): no Jsonnet suffix
+was whitelisted at all, so a
+'rates.jsonnet' rate card (a
+Jsonnet object) never reached
+the model — on the first live
+candidate whose fix landed in a
+.jsonnet file Nano ended
+generation_failed on an empty
+completion (3 calls / 20,206
+tokens, recorded as-is), and
+Super named the right file from
+the brief, invented its contents,
+and had every diff correctly
+rejected (patch_not_applicable,
+4 calls / 12,855 tokens). With
+the file visible, Nano repaired
+the same task FAIL -> PASS in
+one round (2 calls / 8,866 tokens
+sealed in the uncommitted
+run-logs report), and Super
+repaired it FAIL -> PASS in one
+round as well (2 calls / 5,650
+tokens sealed in the uncommitted
+run-logs report; both reports
+INTACT, replay MATCHED, patched
+candidate independently PASS;
+the applied diff changed exactly
+the two wrong rates).
 1.163.0 — The patch prompt can now
 see CUE configuration files
 ('.cue'): no CUE suffix was
