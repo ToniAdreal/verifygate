@@ -608,6 +608,30 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.148.0 — The patch prompt can now
+see Svelte components
+('.svelte'): no Svelte suffix was
+whitelisted at all, so a
+'rates.svelte' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .svelte file Nano named the
+right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 24,569 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (5 calls / 40,131
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 4,515 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.147.0 — The patch prompt can now
 see Vue single-file components
 ('.vue'): no Vue suffix was
