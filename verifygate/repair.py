@@ -477,6 +477,16 @@ _TEXT_SUFFIXES = {
     # invented its contents, and had every diff correctly
     # rejected (patch_not_applicable).
     ".clj",
+    # EDN data files (v1.142.0): a candidate whose fix lands
+    # in a '.edn' data file was invisible to the patch prompt --
+    # no EDN suffix was whitelisted at all ('.clj' covers Clojure
+    # source, not the EDN data notation a rate card is usually
+    # written in), so a 'rates.edn' rate card never reached the
+    # model; on the first live .edn candidate the model named
+    # the right file from the brief, invented its contents as a
+    # file creation, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".edn",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

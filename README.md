@@ -608,6 +608,36 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.142.0 — The patch prompt can now
+see EDN data files ('.edn'): no
+EDN suffix was whitelisted at all
+('.clj' covers Clojure source, not
+the EDN data notation), so a
+'rates.edn' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .edn file the model named
+the right file from the brief,
+invented its contents as a file
+creation, and had every diff
+correctly rejected
+(patch_not_applicable, 4 real
+calls / 18,208 tokens). With the
+file visible, Nano's runs ended
+generation_failed on an empty
+completion (3 calls / 21,104
+tokens) and patch_not_applicable
+after an applied-but-insufficient
+patch plus a rightly rejected
+context-only hunk (7 calls /
+43,738 tokens), and Super
+repaired the same task
+FAIL -> PASS in one round (2
+calls / 5,593 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.141.0 — The patch prompt can now
 see Clojure files ('.clj'): no
 Clojure suffix was whitelisted at
