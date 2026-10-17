@@ -608,6 +608,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.153.0 — The patch prompt can now
+see Less files ('.less'): '.css' /
+'.scss' / '.sass' are whitelisted
+but the snapshot matches the full
+suffix, and no '.less' suffix was
+whitelisted at all, so a
+'rates.less' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .less file Nano named the
+right file from the brief,
+invented its contents as a file
+creation, and had every diff
+correctly rejected
+(patch_not_applicable, 4 real
+calls / 16,447 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,582
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 4,623 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.152.0 — The patch prompt can now
 see Sass files ('.sass'): '.scss'
 is whitelisted but the snapshot
