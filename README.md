@@ -608,6 +608,31 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.152.0 — The patch prompt can now
+see Sass files ('.sass'): '.scss'
+is whitelisted but the snapshot
+matches the full suffix, and no
+'.sass' suffix was whitelisted at
+all, so a 'rates.sass' rate card
+never reached the model — on the
+first live candidate whose fix
+landed in a .sass file Nano named
+the right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 real
+calls / 23,707 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,593
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in one round (2
+calls / 4,504 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS).
 1.151.0 — The patch prompt can now
 see SCSS files ('.scss'): '.css' is
 whitelisted but the snapshot

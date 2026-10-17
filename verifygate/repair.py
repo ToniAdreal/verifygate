@@ -561,6 +561,14 @@ _TEXT_SUFFIXES = {
     # invented its contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".scss",
+    # Sass stylesheets, indented syntax (v1.152.0): a candidate whose
+    # fix lands in a '.sass' file was invisible to the patch prompt --
+    # '.scss' is whitelisted but the snapshot matches the full suffix,
+    # so a 'rates.sass' rate card never reached the model; on the
+    # first live .sass candidate the model named the right file from
+    # the brief, invented its contents, and had every diff correctly
+    # rejected (patch_not_applicable).
+    ".sass",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
