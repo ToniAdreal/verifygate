@@ -608,6 +608,36 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.159.0 — The patch prompt can now
+see Terraform configuration files
+('.tf'): '.tfvars' is whitelisted
+but the snapshot matches the full
+suffix, and no '.tf' suffix was
+whitelisted at all, so a
+'rates.tf' rate card never
+reached the model — on the first
+live candidate whose fix landed
+in a .tf file Nano named the
+right file from the brief,
+invented its contents as a file
+creation, and had every diff
+correctly rejected
+(patch_not_applicable, 4 real
+calls / 17,201 tokens). With the
+file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,671
+tokens, recorded as-is), and
+Super repaired the same task
+FAIL -> PASS in two rounds (3
+calls / 8,222 tokens sealed in
+the uncommitted run-logs report,
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS; its round-1 diff was
+rightly rejected and its round-2
+diff changed exactly the two
+wrong rates).
 1.158.0 — The patch prompt can now
 see Terraform variable files
 ('.tfvars'): no Terraform suffix
