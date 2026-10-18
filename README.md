@@ -608,6 +608,37 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.172.0 — The patch prompt can now see
+ReScript files ('.res'): no ReScript
+suffix was whitelisted at all, so a
+'rates.res' rate card (a ReScript
+discounts list) never reached the
+model — on the first live candidate
+whose fix landed in a .res file Nano
+named the right file from the brief,
+invented its contents as a file
+creation, and had every diff correctly
+rejected (patch_not_applicable, 4 calls
+/ 23,971 tokens), and Super named the
+right file, invented its contents, and
+had every diff correctly rejected as
+well (patch_not_applicable, 4 calls /
+19,001 tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Nano repaired
+the same task FAIL -> PASS in one
+round (2 calls / 5,838 tokens sealed
+in the uncommitted run-logs report;
+its diff set both rates correctly but
+also dropped the two interleaved extra
+entries, recorded as-is), and Super
+repaired it FAIL -> PASS in one round
+as well (2 calls / 4,468 tokens sealed
+in the uncommitted run-logs report):
+its applied diff changed exactly the
+two wrong rates; both reports INTACT,
+replay MATCHED, patched candidate
+independently PASS.
 1.171.0 — The patch prompt can now see
 Haxe files ('.hx'): no Haxe
 suffix was whitelisted at all, so a
