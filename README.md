@@ -608,6 +608,35 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.178.0 — The patch prompt can now see
+Clarity files ('.clar'): no Clarity
+suffix was whitelisted at all, so a
+'rates.clar' rate card (a Clarity
+define-constant rate card) never
+reached the model — on the first live
+candidate whose fix landed in a .clar
+file Super named the right file from
+the brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable: Super 4 calls /
+11,970 tokens; original candidate
+byte-unchanged, report INTACT), while
+Nano's patch generation failed on an
+empty completion (generation_failed,
+5 calls / 35,076 tokens, report
+INTACT). With the file visible, Super
+repaired the same task FAIL -> PASS in
+one round (2 calls / 4,016 tokens
+sealed in the uncommitted run-logs
+report): its applied diff changed
+exactly the two wrong rates; report
+INTACT, replay MATCHED, patched
+candidate independently PASS. Nano's
+patch generation failed on an empty
+completion again (generation_failed,
+5 calls / 35,978 tokens sealed in the
+uncommitted run-logs report, recorded
+as-is).
 1.177.0 — The patch prompt can now see
 Cairo files ('.cairo'): no Cairo
 suffix was whitelisted at all, so a

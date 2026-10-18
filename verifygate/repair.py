@@ -778,6 +778,15 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".cairo",
+    # Clarity programs (v1.178.0): a candidate whose fix lands in a
+    # '.clar' file was invisible to the patch prompt -- no Clarity
+    # suffix was whitelisted at all, so a 'rates.clar' rate card
+    # (a Clarity define-constant rate card) never reached the model;
+    # on the first live .clar candidate Super named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable), while Nano's
+    # generation failed on an empty completion.
+    ".clar",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
