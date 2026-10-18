@@ -608,6 +608,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.167.0 — The patch prompt can now see
+Crystal files ('.cr'): no Crystal
+suffix was whitelisted at all, so a
+'rates.cr' rate card (a Crystal RATES
+hash) never reached the model — on the
+first live candidate whose fix landed
+in a .cr file Nano named the right
+file from the brief, invented its
+contents, and had every diff correctly
+rejected (patch_not_applicable, 4
+calls / 17,191 tokens), and Super
+named the right file, invented its
+contents, and had every diff correctly
+rejected as well
+(patch_not_applicable, 4 calls /
+12,087 tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Nano ended
+generation_failed on an empty
+completion (4 calls / 29,942 tokens,
+recorded as-is), and Super repaired
+the same task FAIL -> PASS in one
+round (2 calls / 4,369 tokens sealed
+in the uncommitted run-logs report):
+its applied diff changed exactly the
+two wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS.
 1.166.0 — The patch prompt can now
 see Elm files ('.elm'): no Elm
 suffix was whitelisted at all, so

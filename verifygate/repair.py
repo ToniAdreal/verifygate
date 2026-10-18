@@ -687,6 +687,14 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".elm",
+    # Crystal programs (v1.167.0): a candidate whose fix lands in a
+    # '.cr' file was invisible to the patch prompt -- no Crystal
+    # suffix was whitelisted at all, so a 'rates.cr' rate card
+    # (a Crystal RATES hash) never reached the model; on the
+    # first live .cr candidate both models named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".cr",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
