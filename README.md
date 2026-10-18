@@ -608,6 +608,41 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.185.0 — The patch prompt can now see
+GLSL files ('.glsl'): no
+GLSL suffix was whitelisted at
+all, so a 'rates.glsl' rate card (a
+GLSL const int rate card) never
+reached the model — on the first live
+candidate whose fix landed in a
+.glsl file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls /
+11,173 tokens, Nano 4 calls / 23,970
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super repaired
+the same task FAIL -> PASS in 1 round
+(2 calls / 4,014 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the two
+wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano's first
+post-fix attempt failed
+patch_not_applicable (4 calls /
+28,165 tokens, its diffs rightly
+rejected); on retry Nano repaired it
+FAIL -> PASS in 1 round
+(2 calls / 7,369 tokens sealed in the
+uncommitted run-logs report): its
+applied diff set both rates correctly
+but also dropped an interleaved extra
+entry, recorded as-is; report INTACT,
+replay MATCHED, patched candidate
+independently PASS.
 1.184.0 — The patch prompt can now see
 GDScript files ('.gd'): no
 GDScript suffix was whitelisted at

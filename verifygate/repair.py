@@ -839,6 +839,15 @@ _TEXT_SUFFIXES = {
     # invented its contents, and had every diff correctly
     # rejected (patch_not_applicable).
     ".gd",
+    # GLSL files (v1.185.0): a candidate whose fix lands
+    # in a '.glsl' file was invisible to the patch prompt -- no
+    # GLSL suffix was whitelisted at all, so a
+    # 'rates.glsl' rate card (a GLSL const int rate card)
+    # never reached the model; on the first live .glsl
+    # candidate both models named the right file from the brief,
+    # invented its contents, and had every diff correctly
+    # rejected (patch_not_applicable).
+    ".glsl",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
