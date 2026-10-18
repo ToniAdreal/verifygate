@@ -608,6 +608,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.179.0 — The patch prompt can now see
+Vyper files ('.vy'): no Vyper
+suffix was whitelisted at all, so a
+'rates.vy' rate card (a Vyper
+constant rate card) never
+reached the model — on the first live
+candidate whose fix landed in a .vy
+file both models named the right file
+from the brief, invented its contents,
+and had every diff correctly rejected
+(patch_not_applicable: Super 4 calls /
+10,926 tokens; Nano 4 calls / 18,075
+tokens; both reports INTACT, original
+candidate byte-unchanged). With the
+file visible, Super repaired the same
+task FAIL -> PASS in 2 rounds (3
+calls / 7,769 tokens sealed in the
+uncommitted run-logs report; one diff
+rightly rejected on the way): its
+applied diff changed exactly the two
+wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano's patch
+generation failed on an empty
+completion (generation_failed,
+3 calls / 20,496 tokens sealed in the
+uncommitted run-logs report, recorded
+as-is).
 1.178.0 — The patch prompt can now see
 Clarity files ('.clar'): no Clarity
 suffix was whitelisted at all, so a

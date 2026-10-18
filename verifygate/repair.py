@@ -787,6 +787,14 @@ _TEXT_SUFFIXES = {
     # correctly rejected (patch_not_applicable), while Nano's
     # generation failed on an empty completion.
     ".clar",
+    # Vyper programs (v1.179.0): a candidate whose fix lands in a
+    # '.vy' file was invisible to the patch prompt -- no Vyper
+    # suffix was whitelisted at all, so a 'rates.vy' rate card
+    # (a Vyper constant rate card) never reached the model; on the
+    # first live .vy candidate both models named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".vy",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
