@@ -795,6 +795,14 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".vy",
+    # Sway programs (v1.180.0): a candidate whose fix lands in a
+    # '.sw' file was invisible to the patch prompt -- no Sway
+    # suffix was whitelisted at all, so a 'rates.sw' rate card
+    # (a Sway pub const rate card) never reached the model; on
+    # the first live .sw candidate both models named the right
+    # file from the brief, invented its contents, and had every
+    # diff correctly rejected (patch_not_applicable).
+    ".sw",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

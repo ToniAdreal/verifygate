@@ -608,6 +608,35 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.180.0 — The patch prompt can now see
+Sway files ('.sw'): no Sway
+suffix was whitelisted at all, so a
+'rates.sw' rate card (a Sway
+pub const rate card) never
+reached the model — on the first live
+candidate whose fix landed in a .sw
+file both models named the right file
+from the brief, invented its contents,
+and had every diff correctly rejected
+(patch_not_applicable: Super 4 calls /
+11,677 tokens, Nano 5 calls / 29,593
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super
+repaired the same task FAIL -> PASS in
+1 round (2 calls / 4,036 tokens
+sealed in the uncommitted run-logs
+report) and Nano repaired it
+FAIL -> PASS in 3 rounds (5 calls /
+30,121 tokens sealed in the
+uncommitted run-logs report, with
+rejected diffs on the way): both
+applied diffs set the two wrong rates
+correctly but also dropped the two
+interleaved extra entries (recorded
+as-is); both reports INTACT, replay
+MATCHED, patched candidates
+independently PASS.
 1.179.0 — The patch prompt can now see
 Vyper files ('.vy'): no Vyper
 suffix was whitelisted at all, so a
