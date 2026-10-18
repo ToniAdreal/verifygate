@@ -735,6 +735,15 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".res",
+    # Odin programs (v1.173.0): a candidate whose fix lands in a
+    # '.odin' file was invisible to the patch prompt -- no Odin
+    # suffix was whitelisted at all, so a 'rates.odin' rate card
+    # (an Odin discounts map) never reached the model; on the
+    # first live .odin candidate Super named the right file from
+    # the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable), while Nano's
+    # generation failed on an empty completion.
+    ".odin",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

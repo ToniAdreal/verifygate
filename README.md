@@ -608,6 +608,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.173.0 — The patch prompt can now see
+Odin files ('.odin'): no Odin
+suffix was whitelisted at all, so a
+'rates.odin' rate card (an Odin
+discounts map) never reached the
+model — on the first live candidate
+whose fix landed in a .odin file
+Super named the right file from the
+brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable, 4 calls /
+11,581 tokens), while Nano's patch
+generation failed on an empty
+completion (generation_failed, 3 calls
+/ 20,272 tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Nano repaired
+the same task FAIL -> PASS in two
+rounds (4 calls / 23,968 tokens sealed
+in the uncommitted run-logs report;
+one diff rightly rejected on the way),
+and Super repaired it FAIL -> PASS in
+one round (2 calls / 4,661 tokens
+sealed in the uncommitted run-logs
+report): both applied diffs changed
+exactly the two wrong rates; both
+reports INTACT, replay MATCHED,
+patched candidates independently PASS.
 1.172.0 — The patch prompt can now see
 ReScript files ('.res'): no ReScript
 suffix was whitelisted at all, so a
