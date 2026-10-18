@@ -608,6 +608,36 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.184.0 — The patch prompt can now see
+GDScript files ('.gd'): no
+GDScript suffix was whitelisted at
+all, so a 'rates.gd' rate card (a
+GDScript const rate card) never
+reached the model — on the first live
+candidate whose fix landed in a
+.gd file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls /
+10,137 tokens, Nano 5 calls / 28,684
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super repaired
+the same task FAIL -> PASS in 1 round
+(2 calls / 3,977 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the two
+wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano repaired it
+FAIL -> PASS in 1 round as well
+(2 calls / 4,302 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the two
+wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS.
 1.183.0 — The patch prompt can now see
 CoffeeScript files ('.coffee'): no
 CoffeeScript suffix was whitelisted at
