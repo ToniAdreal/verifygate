@@ -608,6 +608,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.169.0 — The patch prompt can now see
+PureScript files ('.purs'): no
+PureScript suffix was whitelisted at
+all, so a 'rates.purs' rate card (a
+PureScript RateCard module) never
+reached the model — on the first live
+candidate whose fix landed in a .purs
+file Nano named the right file from
+the brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable, 5 calls /
+29,464 tokens), and Super named the
+right file, invented its contents, and
+had every diff correctly rejected as
+well (patch_not_applicable, 4 calls /
+15,188 tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,840 tokens,
+recorded as-is), and Super repaired
+the same task FAIL -> PASS in one
+round (2 calls / 5,224 tokens sealed
+in the uncommitted run-logs report):
+its applied diff changed exactly the
+two wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS.
 1.168.0 — The patch prompt can now see
 Solidity files ('.sol'): no Solidity
 suffix was whitelisted at all, so a

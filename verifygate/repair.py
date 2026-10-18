@@ -703,6 +703,14 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".sol",
+    # PureScript programs (v1.169.0): a candidate whose fix lands in a
+    # '.purs' file was invisible to the patch prompt -- no PureScript
+    # suffix was whitelisted at all, so a 'rates.purs' rate card
+    # (a PureScript RateCard module) never reached the model; on the
+    # first live .purs candidate both models named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".purs",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
