@@ -719,6 +719,14 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".gleam",
+    # Haxe programs (v1.171.0): a candidate whose fix lands in a
+    # '.hx' file was invisible to the patch prompt -- no Haxe
+    # suffix was whitelisted at all, so a 'rates.hx' rate card
+    # (a Haxe Map<String, Float> discounts map) never reached the
+    # model; on the first live .hx candidate both models named
+    # the right file from the brief, invented its contents, and
+    # had every diff correctly rejected (patch_not_applicable).
+    ".hx",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

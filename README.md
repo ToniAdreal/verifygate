@@ -608,6 +608,35 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.171.0 — The patch prompt can now see
+Haxe files ('.hx'): no Haxe
+suffix was whitelisted at all, so a
+'rates.hx' rate card (a Haxe
+Map<String, Float> discounts map)
+never reached the model — on the
+first live candidate whose fix
+landed in a .hx file Nano named the
+right file from the brief, invented
+its contents as a file creation, and
+had every diff correctly rejected
+(patch_not_applicable, 4 calls /
+16,573 tokens), and Super named the
+right file, invented its contents,
+and had every diff correctly rejected
+as well (patch_not_applicable, 4 calls
+/ 18,728 tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Nano ended
+generation_failed on an empty
+completion (5 calls / 36,796 tokens,
+recorded as-is), and Super repaired
+the same task FAIL -> PASS in one
+round (2 calls / 4,575 tokens sealed
+in the uncommitted run-logs report):
+its applied diff changed exactly the
+two wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS.
 1.170.0 — The patch prompt can now see
 Gleam files ('.gleam'): no Gleam
 suffix was whitelisted at all, so a
