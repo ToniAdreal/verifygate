@@ -821,6 +821,15 @@ _TEXT_SUFFIXES = {
     # Nano's patch generation failed on an empty completion
     # (generation_failed).
     ".bzl",
+    # CoffeeScript files (v1.183.0): a candidate whose fix lands
+    # in a '.coffee' file was invisible to the patch prompt -- no
+    # CoffeeScript suffix was whitelisted at all, so a
+    # 'rates.coffee' rate card (a CoffeeScript RATES object)
+    # never reached the model; on the first live .coffee
+    # candidate both models named the right file from the brief,
+    # invented its contents, and had every diff correctly
+    # rejected (patch_not_applicable).
+    ".coffee",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

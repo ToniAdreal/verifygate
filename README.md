@@ -608,6 +608,38 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.183.0 — The patch prompt can now see
+CoffeeScript files ('.coffee'): no
+CoffeeScript suffix was whitelisted at
+all, so a 'rates.coffee' rate card (a
+CoffeeScript RATES object) never
+reached the model — on the first live
+candidate whose fix landed in a
+.coffee file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls /
+12,717 tokens, Nano 4 calls / 22,325
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super repaired
+the same task FAIL -> PASS in 1 round
+(2 calls / 4,375 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the two
+wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano repaired it
+FAIL -> PASS in 2 rounds (4 calls /
+26,641 tokens sealed in the
+uncommitted run-logs report; one diff
+rightly rejected on the way): its
+applied diff set both rates correctly
+but also dropped the two interleaved
+extra entries, recorded as-is; report
+INTACT, replay MATCHED, patched
+candidate independently PASS.
 1.182.0 — The patch prompt can now see
 Bazel / Starlark files ('.bzl'): no
 Bazel suffix was whitelisted at all,
