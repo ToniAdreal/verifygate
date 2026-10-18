@@ -619,19 +619,19 @@ file both models named the right file
 from the brief, invented its contents,
 and had every diff correctly rejected
 (patch_not_applicable: Super 4 calls /
-10,926 tokens; Nano 4 calls / 18,075
-tokens; both reports INTACT, original
-candidate byte-unchanged). With the
-file visible, Super repaired the same
-task FAIL -> PASS in 2 rounds (3
-calls / 7,769 tokens sealed in the
-uncommitted run-logs report; one diff
-rightly rejected on the way): its
-applied diff changed exactly the two
-wrong rates; report INTACT, replay
-MATCHED, patched candidate
-independently PASS. Nano's patch
-generation failed on an empty
+10,926 tokens, Nano 4 calls / 18,075
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super
+repaired the same task FAIL -> PASS in
+2 rounds (3 calls / 7,769 tokens
+sealed in the uncommitted run-logs
+report, one diff correctly rejected
+on the way): its applied diff changed
+exactly the two wrong rates; report
+INTACT, replay MATCHED, patched
+candidate independently PASS. Nano's
+patch generation failed on an empty
 completion (generation_failed,
 3 calls / 20,496 tokens sealed in the
 uncommitted run-logs report, recorded
