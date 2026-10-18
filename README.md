@@ -608,6 +608,37 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.168.0 — The patch prompt can now see
+Solidity files ('.sol'): no Solidity
+suffix was whitelisted at all, so a
+'rates.sol' rate card (a Solidity
+RateCard contract) never reached the
+model — on the first live candidate
+whose fix landed in a .sol file Nano
+named the right file from the brief,
+invented its contents, and had every
+diff correctly rejected
+(patch_not_applicable, 5 calls /
+32,781 tokens), and Super named the
+right file, invented its contents, and
+had every diff correctly rejected as
+well (patch_not_applicable, 4 calls /
+12,604 tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Nano repaired
+the same task FAIL -> PASS in two
+rounds (5 calls / 31,427 tokens sealed
+in the uncommitted run-logs report;
+its diff set both rates correctly but
+also dropped the two interleaved extra
+entries, recorded as-is), and Super
+repaired it FAIL -> PASS in one round
+(2 calls / 4,614 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the two
+wrong rates; both reports INTACT,
+replay MATCHED, patched candidates
+independently PASS.
 1.167.0 — The patch prompt can now see
 Crystal files ('.cr'): no Crystal
 suffix was whitelisted at all, so a
