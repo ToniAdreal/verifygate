@@ -608,6 +608,36 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.174.0 — The patch prompt can now see
+V files ('.v'): no V
+suffix was whitelisted at all, so a
+'rates.v' rate card (a V
+discounts map) never reached the
+model — on the first live candidate
+whose fix landed in a .v file
+Super named the right file from the
+brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable, 4 calls /
+11,102 tokens), while Nano's patch
+generation failed on an empty
+completion (generation_failed, 5 calls
+/ 34,837 tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Nano repaired
+the same task FAIL -> PASS in three
+rounds (5 calls / 28,177 tokens sealed
+in the uncommitted run-logs report;
+its diff set both rates correctly but
+also dropped the two interleaved
+extra entries, recorded as-is), and
+Super repaired it FAIL -> PASS in
+one round (2 calls / 5,703 tokens
+sealed in the uncommitted run-logs
+report): its applied diff changed
+exactly the two wrong rates; both
+reports INTACT, replay MATCHED,
+patched candidates independently PASS.
 1.173.0 — The patch prompt can now see
 Odin files ('.odin'): no Odin
 suffix was whitelisted at all, so a
