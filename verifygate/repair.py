@@ -762,6 +762,14 @@ _TEXT_SUFFIXES = {
     # brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".prisma",
+    # Move programs (v1.176.0): a candidate whose fix lands in a
+    # '.move' file was invisible to the patch prompt -- no Move
+    # suffix was whitelisted at all, so a 'rates.move' rate card
+    # (a Move rate_card module) never reached the model; on the
+    # first live .move candidate the model named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".move",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

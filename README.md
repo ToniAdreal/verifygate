@@ -608,6 +608,32 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.176.0 — The patch prompt can now see
+Move files ('.move'): no Move
+suffix was whitelisted at all, so a
+'rates.move' rate card (a Move
+rate_card module) never reached the
+model — on the first live candidate
+whose fix landed in a .move file
+both models named the right file from
+the brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable: Super 4 calls /
+11,853 tokens, Nano 5 calls / 27,465
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super repaired
+the same task FAIL -> PASS in one
+round (2 calls / 4,555 tokens sealed
+in the uncommitted run-logs report)
+and Nano repaired it FAIL -> PASS in
+two rounds (4 calls / 26,534 tokens
+in the uncommitted run-logs report,
+one diff rightly rejected on the
+way): both applied diffs changed
+exactly the two wrong rates; both
+reports INTACT, replay MATCHED,
+patched candidates independently PASS.
 1.175.0 — The patch prompt can now see
 Prisma files ('.prisma'): no Prisma
 suffix was whitelisted at all, so a
