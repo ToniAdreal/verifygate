@@ -608,6 +608,34 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.170.0 — The patch prompt can now see
+Gleam files ('.gleam'): no Gleam
+suffix was whitelisted at all, so a
+'rates.gleam' rate card (a Gleam
+discounts list) never reached the
+model — on the first live candidate
+whose fix landed in a .gleam file
+Nano named the right file from the
+brief, invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable, 4 calls /
+20,022 tokens), and Super named the
+right file, invented its contents,
+and had every diff correctly rejected
+as well (patch_not_applicable, 4 calls
+/ 10,503 tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Nano ended
+generation_failed on an empty
+completion (3 calls / 20,778 tokens,
+recorded as-is), and Super repaired
+the same task FAIL -> PASS in one
+round (2 calls / 5,797 tokens sealed
+in the uncommitted run-logs report):
+its applied diff changed exactly the
+two wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS.
 1.169.0 — The patch prompt can now see
 PureScript files ('.purs'): no
 PureScript suffix was whitelisted at
