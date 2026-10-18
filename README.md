@@ -608,6 +608,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.177.0 — The patch prompt can now see
+Cairo files ('.cairo'): no Cairo
+suffix was whitelisted at all, so a
+'rates.cairo' rate card (a Cairo
+rate_card module) never reached the
+model — on the first live candidate
+whose fix landed in a .cairo file
+both models named the right file from
+the brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable: Super 4 calls /
+12,061 tokens, Nano 4 calls / 24,518
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super repaired
+the same task FAIL -> PASS in one
+round (2 calls / 4,789 tokens sealed
+in the uncommitted run-logs report):
+its applied diff changed exactly the
+two wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano's patch
+generation failed on an empty
+completion (generation_failed, 3 calls
+/ 20,458 tokens sealed in the
+uncommitted run-logs report, recorded
+as-is).
 1.176.0 — The patch prompt can now see
 Move files ('.move'): no Move
 suffix was whitelisted at all, so a

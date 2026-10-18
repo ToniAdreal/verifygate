@@ -770,6 +770,14 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".move",
+    # Cairo programs (v1.177.0): a candidate whose fix lands in a
+    # '.cairo' file was invisible to the patch prompt -- no Cairo
+    # suffix was whitelisted at all, so a 'rates.cairo' rate card
+    # (a Cairo rate_card module) never reached the model; on the
+    # first live .cairo candidate both models named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".cairo",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
