@@ -608,6 +608,35 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.181.0 — The patch prompt can now see
+Noir files ('.nr'): no Noir
+suffix was whitelisted at all, so a
+'rates.nr' rate card (a Noir
+global rate card) never
+reached the model — on the first live
+candidate whose fix landed in a .nr
+file both models named the right file
+from the brief, invented its contents,
+and had every diff correctly rejected
+(patch_not_applicable: Super 4 calls /
+10,486 tokens, Nano 4 calls / 15,001
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super
+repaired the same task FAIL -> PASS in
+1 round (2 calls / 4,055 tokens
+sealed in the uncommitted run-logs
+report): its applied diff changed
+exactly the two wrong rates. Nano
+repaired it FAIL -> PASS in 1 round
+as well (2 calls / 7,418 tokens
+sealed in the uncommitted run-logs
+report): its applied diff set both
+rates correctly but also dropped the
+two interleaved extra entries
+(recorded as-is). Both reports
+INTACT, replay MATCHED, patched
+candidates independently PASS.
 1.180.0 — The patch prompt can now see
 Sway files ('.sw'): no Sway
 suffix was whitelisted at all, so a

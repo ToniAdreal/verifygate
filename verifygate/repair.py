@@ -803,6 +803,14 @@ _TEXT_SUFFIXES = {
     # file from the brief, invented its contents, and had every
     # diff correctly rejected (patch_not_applicable).
     ".sw",
+    # Noir programs (v1.181.0): a candidate whose fix lands in a
+    # '.nr' file was invisible to the patch prompt -- no Noir
+    # suffix was whitelisted at all, so a 'rates.nr' rate card
+    # (a Noir global rate card) never reached the model; on the
+    # first live .nr candidate both models named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".nr",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
