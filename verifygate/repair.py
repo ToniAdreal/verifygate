@@ -811,6 +811,16 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".nr",
+    # Bazel / Starlark files (v1.182.0): a candidate whose fix
+    # lands in a '.bzl' file was invisible to the patch prompt --
+    # no Bazel suffix was whitelisted at all, so a 'rates.bzl'
+    # rate card (a Starlark RATES dict) never reached the model;
+    # on the first live .bzl candidate Super named the right
+    # file from the brief, invented its contents, and had every
+    # diff correctly rejected (patch_not_applicable), while
+    # Nano's patch generation failed on an empty completion
+    # (generation_failed).
+    ".bzl",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

@@ -608,6 +608,35 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.182.0 — The patch prompt can now see
+Bazel / Starlark files ('.bzl'): no
+Bazel suffix was whitelisted at all,
+so a 'rates.bzl' rate card (a Starlark
+RATES dict) never reached the model —
+on the first live candidate whose fix
+landed in a .bzl file Super named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls /
+14,741 tokens), while Nano's patch
+generation failed on an empty
+completion (generation_failed: Nano
+3 calls / 20,199 tokens; original
+candidate byte-unchanged, both
+reports INTACT). With the file
+visible, Super repaired the same task
+FAIL -> PASS in 1 round (2 calls /
+4,759 tokens sealed in the uncommitted
+run-logs report): its applied diff
+changed exactly the two wrong rates;
+report INTACT, replay MATCHED, patched
+candidate independently PASS. Nano's
+patch generation failed on an empty
+completion again in both post-fix
+attempts (generation_failed: 4 calls /
+26,459 tokens and 3 calls / 20,286
+tokens, recorded as-is).
 1.181.0 — The patch prompt can now see
 Noir files ('.nr'): no Noir
 suffix was whitelisted at all, so a
