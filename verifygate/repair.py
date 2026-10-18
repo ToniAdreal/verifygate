@@ -753,6 +753,15 @@ _TEXT_SUFFIXES = {
     # correctly rejected (patch_not_applicable), while Nano's
     # generation failed on an empty completion.
     ".v",
+    # Prisma schemas (v1.175.0): a candidate whose fix lands
+    # in a '.prisma' file was invisible to the patch prompt --
+    # no Prisma suffix was whitelisted at all, so a
+    # 'rates.prisma' rate card (a Prisma RateCard model)
+    # never reached the model; on the first live .prisma
+    # candidate both models named the right file from the
+    # brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".prisma",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

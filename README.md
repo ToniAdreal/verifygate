@@ -608,6 +608,33 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.175.0 — The patch prompt can now see
+Prisma files ('.prisma'): no Prisma
+suffix was whitelisted at all, so a
+'rates.prisma' rate card (a Prisma
+RateCard model) never reached the
+model — on the first live candidate
+whose fix landed in a .prisma file
+both models named the right file from
+the brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable: Super 4 calls /
+15,044 tokens, Nano 4 calls / 18,014
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super repaired
+the same task FAIL -> PASS in one
+round (2 calls / 4,176 tokens sealed
+in the uncommitted run-logs report):
+its applied diff changed exactly the
+two wrong rates; report INTACT,
+replay MATCHED, patched candidate
+independently PASS. Nano's patch
+generation failed on an empty
+completion (generation_failed, 4 calls
+/ 29,308 tokens sealed in the
+uncommitted run-logs report, recorded
+as-is).
 1.174.0 — The patch prompt can now see
 V files ('.v'): no V
 suffix was whitelisted at all, so a
