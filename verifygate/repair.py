@@ -932,6 +932,16 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".rkt",
+    # CMake files (v1.195.0): a candidate whose fix lands
+    # in a '.cmake' file was invisible to the patch prompt -- no
+    # CMake module suffix was whitelisted at all ('CMakeLists.txt'
+    # is covered as a basename, but the snapshot matches module
+    # files by suffix), so a 'rates.cmake' rate card (a CMake
+    # set() rate card) never reached the model; on the first
+    # live .cmake candidate both models named the right file
+    # from the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".cmake",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

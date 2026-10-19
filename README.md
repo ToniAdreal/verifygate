@@ -608,6 +608,42 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.195.0 — The patch prompt can now
+see CMake files ('.cmake'): no CMake
+module suffix was whitelisted at all
+('CMakeLists.txt' is covered as a
+basename, but the snapshot matches
+module files by suffix), so a
+'rates.cmake' rate card (a CMake
+set() rate card) never reached
+the model — on the first live
+candidate whose fix landed in a
+.cmake file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 10,596 tokens, Nano 5 calls /
+24,116 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Super repaired the same task FAIL ->
+PASS in 1 round (2 calls / 3,877
+tokens sealed in the uncommitted
+run-logs report): its applied diff
+changed exactly the two wrong rates
+and preserved the interleaved extra
+entries. Nano repaired it FAIL ->
+PASS in 1 round as well (3 calls /
+16,499 tokens sealed in the
+uncommitted run-logs report): its
+applied diff set both rates
+correctly but rewrote the card,
+dropping the interleaved extra
+entries, recorded as-is; both
+reports INTACT, replay MATCHED,
+patched candidates independently
+PASS.
 1.194.0 — The patch prompt can now
 see Racket files ('.rkt'): no Racket
 suffix was whitelisted at all ('.scm'
