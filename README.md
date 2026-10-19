@@ -608,6 +608,36 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.192.0 — The patch prompt can now
+see Scheme files ('.scm'): no Scheme
+suffix was whitelisted at all, so a
+'rates.scm' rate card (a Scheme
+association-list rate card) never
+reached the model — on the first
+live candidate whose fix landed in
+a .scm file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 10,497 tokens, Nano 4 calls /
+16,807 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Super repaired the same task FAIL ->
+PASS in 1 round (2 calls / 4,168
+tokens sealed in the uncommitted
+run-logs report): its applied diff
+changed exactly the two wrong rates
+and preserved the interleaved extra
+entries; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano's patch
+generation failed in both post-fix
+attempts (generation_failed: empty
+completions, 3 calls / 20,478 tokens
+and 3 calls / 20,629 tokens,
+recorded as-is).
 1.191.0 — The patch prompt can now
 see Starlark files ('.star'): no
 Starlark suffix was whitelisted at

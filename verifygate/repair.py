@@ -904,6 +904,15 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".star",
+    # Scheme files (v1.192.0): a candidate whose fix lands
+    # in a '.scm' file was invisible to the patch prompt -- no
+    # Scheme suffix was whitelisted at all, so a 'rates.scm'
+    # rate card (a Scheme association-list rate card) never
+    # reached the model; on the first live .scm candidate both
+    # models named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".scm",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
