@@ -608,6 +608,42 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.189.0 — The patch prompt can now
+see D files ('.d'): no D suffix was
+whitelisted at all, so a 'rates.d'
+rate card (a D enum rate card) never
+reached the model — on the first
+live candidate whose fix landed in a
+.d file Super named the right file
+from the brief, invented its
+contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 10,094 tokens; original candidate
+byte-unchanged, report INTACT), while
+Nano's patch generation failed on an
+empty completion (generation_failed:
+3 calls / 20,267 tokens; report
+INTACT). With the file visible, Super
+repaired the same task FAIL -> PASS
+in 1 round (2 calls / 5,091 tokens
+sealed in the uncommitted run-logs
+report): its applied diff changed
+exactly the two wrong rates and
+preserved the interleaved extra
+entries; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano repaired it
+FAIL -> PASS in 1 round as well (3
+calls / 17,742 tokens sealed in the
+uncommitted run-logs report, two
+generate_patch calls sealed for the
+one applied patch): its applied diff
+set both rates correctly but rewrote
+the card, dropping the interleaved
+extra entries, recorded as-is; report
+INTACT, replay MATCHED, patched
+candidate independently PASS.
 1.188.0 — The patch prompt can now see
 CUDA files ('.cu' / '.cuh'): no
 CUDA suffix was whitelisted at
