@@ -608,6 +608,48 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.202.0 — The patch prompt can now
+see Apache Avro schema files
+('.avsc'): no Avro suffix was
+whitelisted at all ('.proto' covers
+Protocol Buffers, '.thrift' covers
+Apache Thrift, '.capnp' covers
+Cap'n Proto, and '.fbs' covers
+FlatBuffers, but the snapshot
+matches the full suffix), so a
+'rates.avsc' rate card (an Avro
+schema field-default rate card)
+never reached the model — on the
+first live candidate whose fix
+landed in a .avsc file both models
+named the right file from the
+brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable: Super 4
+calls / 17,510 tokens, Nano 4
+calls / 20,866 tokens; original
+candidate byte-unchanged, all
+reports INTACT). With the file
+visible, Super repaired the same
+task FAIL -> PASS in 1 round on
+retry (2 calls / 10,092 tokens
+sealed in the uncommitted run-logs
+report), after its first post-fix
+attempt quoted the file verbatim
+but deliberated inside the reply
+and produced a hunk that did not
+match (patch_not_applicable, 4
+calls / 26,845 tokens, recorded
+as-is), and Nano repaired it FAIL
+-> PASS in 1 round (3 calls /
+17,755 tokens sealed in the
+uncommitted run-logs report): both
+applied diffs changed exactly the
+two wrong rates and preserved the
+interleaved extra entries and
+field docs; both reports INTACT,
+replay MATCHED, patched candidates
+independently PASS.
 1.201.0 — The patch prompt can now
 see GraphQL files written with the
 short extension ('.gql'): '.graphql'

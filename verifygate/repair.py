@@ -1001,6 +1001,17 @@ _TEXT_SUFFIXES = {
     # invented its contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".gql",
+    # Avro schema files (v1.202.0): a candidate whose fix lands
+    # in a '.avsc' file was invisible to the patch prompt -- no
+    # Avro suffix was whitelisted at all ('.proto' covers Protocol
+    # Buffers, '.thrift' covers Apache Thrift, '.capnp' covers
+    # Cap'n Proto, and '.fbs' covers FlatBuffers, but the snapshot
+    # matches the full suffix), so a 'rates.avsc' rate card (an
+    # Avro schema field-default rate card) never reached the
+    # model; on the first live .avsc candidate both models named
+    # the right file from the brief, invented its contents, and
+    # had every diff correctly rejected (patch_not_applicable).
+    ".avsc",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
