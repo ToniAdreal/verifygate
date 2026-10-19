@@ -608,6 +608,41 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.186.0 — The patch prompt can now see
+WGSL files ('.wgsl'): no
+WGSL suffix was whitelisted at
+all, so a 'rates.wgsl' rate card (a
+WGSL const rate card) never
+reached the model — on the first live
+candidate whose fix landed in a
+.wgsl file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls /
+12,646 tokens, Nano 4 calls / 14,779
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super repaired
+the same task FAIL -> PASS in 1 round
+(2 calls / 3,888 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the two
+wrong rates; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano's first
+post-fix attempt failed on an empty
+completion (generation_failed, 3 calls /
+20,729 tokens, recorded as-is); on
+retry Nano repaired it FAIL -> PASS
+in 3 rounds (4 calls / 19,749 tokens
+sealed in the uncommitted run-logs
+report, earlier diffs rightly
+rejected): its applied diff set both
+rates correctly and preserved the
+interleaved extra entries; report
+INTACT, replay MATCHED, patched
+candidate independently PASS.
 1.185.0 — The patch prompt can now see
 GLSL files ('.glsl'): no
 GLSL suffix was whitelisted at
