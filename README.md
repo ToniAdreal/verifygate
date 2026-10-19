@@ -608,6 +608,42 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.201.0 — The patch prompt can now
+see GraphQL files written with the
+short extension ('.gql'): '.graphql'
+is whitelisted but the snapshot
+matches the full suffix, so a
+'rates.gql' rate card (a GraphQL
+type-default rate card) never
+reached the model — on the first
+live candidate whose fix landed in
+a .gql file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 10,957 tokens, Nano 4 calls /
+19,821 tokens; original candidate
+byte-unchanged, all reports
+INTACT). With the file visible,
+Super repaired the same task FAIL
+-> PASS in 1 round (2 calls /
+4,476 tokens sealed in the
+uncommitted run-logs report) and
+Nano repaired it FAIL -> PASS in
+1 round on retry (2 calls / 5,259
+tokens sealed in the uncommitted
+run-logs report), after its first
+post-fix attempt ended
+generation_failed on empty
+completions (5 calls / 34,327
+tokens, recorded as-is): both
+applied diffs changed exactly the
+two wrong rates and preserved the
+interleaved extra entries and
+trailing comments; both reports
+INTACT, replay MATCHED, patched
+candidates independently PASS.
 1.200.0 — The patch prompt can now
 see FlatBuffers files ('.fbs'):
 no FlatBuffers suffix was
