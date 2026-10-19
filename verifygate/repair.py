@@ -980,6 +980,18 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".asm",
+    # FlatBuffers files (v1.200.0): a candidate whose fix lands
+    # in a '.fbs' file was invisible to the patch prompt -- no
+    # FlatBuffers suffix was whitelisted at all ('.proto' covers
+    # Protocol Buffers, '.thrift' covers Apache Thrift, and
+    # '.capnp' covers Cap'n Proto, but the snapshot matches
+    # the full suffix), so a 'rates.fbs' rate card (a
+    # FlatBuffers table-default rate card) never reached the
+    # model; on the first live .fbs candidate both models
+    # named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".fbs",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

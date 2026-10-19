@@ -608,6 +608,45 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.200.0 — The patch prompt can now
+see FlatBuffers files ('.fbs'):
+no FlatBuffers suffix was
+whitelisted at all ('.proto' covers
+Protocol Buffers, '.thrift' covers
+Apache Thrift, and '.capnp' covers
+Cap'n Proto, but the snapshot
+matches the full suffix), so a
+'rates.fbs' rate card (a FlatBuffers
+table-default rate card) never
+reached the model — on the first
+live candidate whose fix landed in
+a .fbs file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 11,397 tokens, Nano 5 calls /
+24,414 tokens on its retry, after a
+first Nano attempt ended
+generation_failed on a read timeout,
+2 calls / 5,433 tokens; original
+candidate byte-unchanged, all
+reports INTACT). With the file
+visible, Super repaired the same
+task FAIL -> PASS in 1 round
+(2 calls / 4,116 tokens sealed in
+the uncommitted run-logs report):
+its applied diff changed exactly
+the two wrong rates and preserved
+the interleaved extra entries and
+trailing comments; report INTACT,
+replay MATCHED, patched candidate
+independently PASS. Nano's patch
+generation failed on empty
+completions in both post-fix
+attempts (generation_failed, 4 calls
+/ 26,473 tokens and 5 calls /
+34,633 tokens, recorded as-is).
 1.199.0 — The patch prompt can now
 see assembly files ('.asm'):
 no assembly suffix was
