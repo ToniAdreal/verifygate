@@ -885,6 +885,15 @@ _TEXT_SUFFIXES = {
     # Nano's patch generation failed on an empty completion
     # (generation_failed).
     ".d",
+    # Vimscript files (v1.190.0): a candidate whose fix lands
+    # in a '.vim' file was invisible to the patch prompt -- no
+    # Vimscript suffix was whitelisted at all, so a 'rates.vim'
+    # rate card (a Vimscript let-assignment rate card) never
+    # reached the model; on the first live .vim candidate both
+    # models named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".vim",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

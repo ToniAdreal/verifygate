@@ -608,6 +608,36 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.190.0 — The patch prompt can now
+see Vimscript files ('.vim'): no
+Vimscript suffix was whitelisted at
+all, so a 'rates.vim' rate card (a
+Vimscript let-assignment rate card)
+never reached the model — on the
+first live candidate whose fix
+landed in a .vim file both models
+named the right file from the brief,
+invented its contents, and had every
+diff correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 11,762 tokens, Nano 4 calls /
+17,357 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Super repaired the same task FAIL ->
+PASS in 1 round (2 calls / 5,256
+tokens sealed in the uncommitted
+run-logs report): its applied diff
+changed exactly the two wrong rates
+and preserved the interleaved extra
+entries; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano's patch
+generation failed on an empty
+completion in both post-fix attempts
+(generation_failed: 3 calls / 20,623
+tokens and 4 calls / 30,691 tokens,
+recorded as-is).
 1.189.0 — The patch prompt can now
 see D files ('.d'): no D suffix was
 whitelisted at all, so a 'rates.d'
