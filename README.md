@@ -608,6 +608,38 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.191.0 — The patch prompt can now
+see Starlark files ('.star'): no
+Starlark suffix was whitelisted at
+all ('.bzl' was covered in v1.182.0,
+but the snapshot matches the full
+suffix), so a 'rates.star' rate card
+(a Starlark RATES dict rate card)
+never reached the model — on the
+first live candidate whose fix
+landed in a .star file both models
+named the right file from the brief,
+invented its contents, and had every
+diff correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 10,852 tokens, Nano 5 calls /
+30,740 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Super repaired the same task FAIL ->
+PASS in 1 round (2 calls / 4,221
+tokens sealed in the uncommitted
+run-logs report): its applied diff
+changed exactly the two wrong rates
+and preserved the interleaved extra
+entries; report INTACT, replay
+MATCHED, patched candidate
+independently PASS. Nano's patch
+generation failed in both post-fix
+attempts (generation_failed: a read
+timeout, 1 sealed call / 518 tokens,
+and an empty completion, 3 calls /
+20,523 tokens, recorded as-is).
 1.190.0 — The patch prompt can now
 see Vimscript files ('.vim'): no
 Vimscript suffix was whitelisted at
