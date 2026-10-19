@@ -913,6 +913,15 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".scm",
+    # Pkl files (v1.193.0): a candidate whose fix lands
+    # in a '.pkl' file was invisible to the patch prompt -- no
+    # Pkl suffix was whitelisted at all, so a 'rates.pkl'
+    # rate card (a Pkl assignment rate card) never
+    # reached the model; on the first live .pkl candidate both
+    # models named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".pkl",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

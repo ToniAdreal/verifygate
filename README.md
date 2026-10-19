@@ -608,6 +608,35 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.193.0 — The patch prompt can now
+see Pkl files ('.pkl'): no Pkl
+suffix was whitelisted at all, so a
+'rates.pkl' rate card (a Pkl
+assignment rate card) never reached
+the model — on the first live
+candidate whose fix landed in a .pkl
+file both models named the right
+file from the brief, invented its
+contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 10,616 tokens, Nano 4 calls /
+16,784 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Super repaired the same task FAIL ->
+PASS in 1 round (2 calls / 3,897
+tokens sealed in the uncommitted
+run-logs report) and Nano repaired
+it FAIL -> PASS in 2 rounds (5 calls
+/ 33,136 tokens, one corrupt patch
+rightly rejected on the way): both
+applied diffs changed exactly the
+two wrong rates and preserved the
+interleaved extra entries and
+trailing comments; both reports
+INTACT, replay MATCHED, patched
+candidates independently PASS.
 1.192.0 — The patch prompt can now
 see Scheme files ('.scm'): no Scheme
 suffix was whitelisted at all, so a
