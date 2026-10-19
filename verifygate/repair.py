@@ -857,6 +857,15 @@ _TEXT_SUFFIXES = {
     # invented its contents, and had every diff correctly
     # rejected (patch_not_applicable).
     ".wgsl",
+    # Metal files (v1.187.0): a candidate whose fix lands
+    # in a '.metal' file was invisible to the patch prompt -- no
+    # Metal suffix was whitelisted at all, so a
+    # 'rates.metal' rate card (a Metal constant int rate card)
+    # never reached the model; on the first live .metal
+    # candidate both models named the right file from the brief,
+    # invented its contents, and had every diff correctly
+    # rejected (patch_not_applicable).
+    ".metal",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

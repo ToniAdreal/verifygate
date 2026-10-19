@@ -608,6 +608,38 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.187.0 — The patch prompt can now see
+Metal files ('.metal'): no
+Metal suffix was whitelisted at
+all, so a 'rates.metal' rate card (a
+Metal constant int rate card) never
+reached the model — on the first live
+candidate whose fix landed in a
+.metal file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls /
+10,870 tokens, Nano 4 calls / 18,553
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super repaired
+the same task FAIL -> PASS in 1 round
+(2 calls / 4,047 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the two
+wrong rates and preserved the
+interleaved extra entries; report
+INTACT, replay MATCHED, patched
+candidate independently PASS. Nano
+repaired it FAIL -> PASS in 3 rounds
+(5 calls / 34,133 tokens sealed in the
+uncommitted run-logs report, earlier
+diffs rightly rejected): its applied
+diff likewise changed exactly the two
+wrong rates and preserved the extras;
+report INTACT, replay MATCHED, patched
+candidate independently PASS.
 1.186.0 — The patch prompt can now see
 WGSL files ('.wgsl'): no
 WGSL suffix was whitelisted at
