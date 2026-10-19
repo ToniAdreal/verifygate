@@ -3,4 +3,4 @@
 AI proposes. Deterministic checks dispose. The evidence record proves it.
 """
 
-__version__ = "1.196.0"
+__version__ = "1.197.0"

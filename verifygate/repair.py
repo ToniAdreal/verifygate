@@ -952,6 +952,14 @@ _TEXT_SUFFIXES = {
     # its contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".gradle",
+    # Apache Thrift files (v1.197.0): a candidate whose fix lands
+    # in a '.thrift' file was invisible to the patch prompt -- no
+    # Thrift suffix was whitelisted at all, so a 'rates.thrift' rate
+    # card (a Thrift const i32 rate card) never reached the model;
+    # on the first live .thrift candidate both models named the
+    # right file from the brief, invented its contents, and had
+    # every diff correctly rejected (patch_not_applicable).
+    ".thrift",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

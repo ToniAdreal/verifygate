@@ -608,6 +608,44 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.197.0 — The patch prompt can now
+see Apache Thrift files ('.thrift'):
+no Thrift suffix was whitelisted at
+all, so a 'rates.thrift' rate card
+(a Thrift const i32 rate card) never
+reached the model — on the first
+live candidate whose fix landed in
+a .thrift file both models named
+the right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 12,327 tokens, Nano 4 calls /
+18,699 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Super repaired the same task FAIL ->
+PASS in 1 round (2 calls / 4,144
+tokens sealed in the uncommitted
+run-logs report): its applied diff
+changed exactly the two wrong rates
+and preserved the interleaved extra
+entries. Nano's first post-fix
+attempt quoted the file verbatim
+but added a spurious leading space
+to every diff line, so its diffs
+were correctly rejected
+(patch_not_applicable, 4 calls /
+18,284 tokens); on retry it repaired
+the task FAIL -> PASS in 3 rounds
+(4 calls / 21,616 tokens sealed in
+the uncommitted run-logs report),
+its applied diff likewise changing
+exactly the two wrong rates and
+preserving the extras; both passing
+reports INTACT, replay MATCHED,
+patched candidates independently
+PASS.
 1.196.0 — The patch prompt can now
 see Gradle files ('.gradle'): no
 Gradle suffix was whitelisted at all
