@@ -608,6 +608,40 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.188.0 — The patch prompt can now see
+CUDA files ('.cu' / '.cuh'): no
+CUDA suffix was whitelisted at
+all, so a 'rates.cu' rate card (a
+CUDA __constant__ int rate card) never
+reached the model — on the first live
+candidate whose fix landed in a
+.cu file both models named the
+right file from the brief, invented
+its contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4 calls /
+11,145 tokens, Nano 4 calls / 17,906
+tokens; original candidate
+byte-unchanged, both reports INTACT).
+With the file visible, Super repaired
+the same task FAIL -> PASS in 1 round
+(2 calls / 5,414 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the two
+wrong rates and preserved the
+interleaved extra entries; report
+INTACT, replay MATCHED, patched
+candidate independently PASS. Nano
+repaired it FAIL -> PASS in 2 rounds
+(3 calls / 18,831 tokens sealed in the
+uncommitted run-logs report, one
+corrupt diff rightly rejected on the
+way): its applied diff set both rates
+correctly but rewrote the card,
+dropping the interleaved extra
+entries, recorded as-is; report
+INTACT, replay MATCHED, patched
+candidate independently PASS.
 1.187.0 — The patch prompt can now see
 Metal files ('.metal'): no
 Metal suffix was whitelisted at
