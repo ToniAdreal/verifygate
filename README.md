@@ -608,6 +608,48 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.199.0 — The patch prompt can now
+see assembly files ('.asm'):
+no assembly suffix was
+whitelisted at all, so a
+'rates.asm' rate card (an assembly
+equ rate card) never reached the
+model — on the first live
+candidate whose fix landed in a
+.asm file both models named the
+right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 10,139 tokens, Nano 4 calls /
+19,410 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Super repaired the same task FAIL ->
+PASS in 1 round (2 calls / 3,837
+tokens sealed in the uncommitted
+run-logs report): its applied diff
+changed exactly the two wrong rates
+and preserved the interleaved extra
+entries and trailing comments;
+report INTACT, replay MATCHED,
+patched candidate independently
+PASS. Nano's first post-fix attempt
+quoted the file verbatim but
+produced a corrupt hunk whose
+declared counts mismatched its
+body, so its diffs were correctly
+rejected (patch_not_applicable,
+5 calls / 35,029 tokens); on retry
+it repaired the task FAIL -> PASS
+in 3 rounds (6 calls / 38,534
+tokens sealed in the uncommitted
+run-logs report), its applied diff
+likewise changing exactly the two
+wrong rates and preserving the
+extras; report INTACT, replay
+MATCHED, patched candidate
+independently PASS.
 1.198.0 — The patch prompt can now
 see Cap'n Proto files ('.capnp'):
 no Cap'n Proto suffix was

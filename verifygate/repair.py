@@ -971,6 +971,15 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".capnp",
+    # Assembly files (v1.199.0): a candidate whose fix lands
+    # in a '.asm' file was invisible to the patch prompt -- no
+    # assembly suffix was whitelisted at all, so a 'rates.asm'
+    # rate card (an assembly equ rate card) never reached
+    # the model; on the first live .asm candidate both models
+    # named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".asm",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
