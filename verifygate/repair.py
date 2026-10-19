@@ -922,6 +922,16 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".pkl",
+    # Racket files (v1.194.0): a candidate whose fix lands
+    # in a '.rkt' file was invisible to the patch prompt -- no
+    # Racket suffix was whitelisted at all ('.scm' covers Scheme,
+    # but the snapshot matches the full suffix), so a
+    # 'rates.rkt' rate card (a Racket define rate card) never
+    # reached the model; on the first live .rkt candidate both
+    # models named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".rkt",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
