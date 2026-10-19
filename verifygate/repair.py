@@ -1012,6 +1012,19 @@ _TEXT_SUFFIXES = {
     # the right file from the brief, invented its contents, and
     # had every diff correctly rejected (patch_not_applicable).
     ".avsc",
+    # XML Schema files (v1.203.0): a candidate whose fix lands
+    # in a '.xsd' file was invisible to the patch prompt -- no
+    # XML Schema suffix was whitelisted at all ('.xml' covers XML
+    # documents, '.proto' covers Protocol Buffers, '.thrift'
+    # covers Apache Thrift, '.capnp' covers Cap'n Proto, '.fbs'
+    # covers FlatBuffers, and '.avsc' covers Avro schemas, but
+    # the snapshot matches the full suffix), so a 'rates.xsd'
+    # rate card (an XML Schema attribute-default rate card)
+    # never reached the model; on the first live .xsd candidate
+    # both models named the right file from the brief, invented
+    # its contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".xsd",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

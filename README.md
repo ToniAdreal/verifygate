@@ -608,6 +608,48 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.203.0 — The patch prompt can now
+see XML Schema files ('.xsd'): no
+XML Schema suffix was whitelisted
+at all ('.xml' covers XML
+documents, '.proto' covers Protocol
+Buffers, '.thrift' covers Apache
+Thrift, '.capnp' covers Cap'n
+Proto, '.fbs' covers FlatBuffers,
+and '.avsc' covers Avro schemas,
+but the snapshot matches the full
+suffix), so a 'rates.xsd' rate
+card (an XML Schema
+attribute-default rate card) never
+reached the model — on the first
+live candidate whose fix landed in
+a .xsd file Super named the right
+file from the brief, invented its
+contents, and had every diff
+correctly rejected
+(patch_not_applicable, 4 calls /
+13,693 tokens, report INTACT),
+while Nano's patch generation
+failed on empty completions in
+both pre-fix runs (4 calls /
+26,737 tokens; pristine-tree retry
+3 calls / 20,395 tokens, both
+reports INTACT; original candidate
+byte-unchanged). With the file
+visible, Super repaired the same
+task FAIL -> PASS in 1 round (2
+calls / 5,250 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the
+two wrong rates and preserved the
+interleaved extra entries; report
+INTACT, replay MATCHED, patched
+candidate independently PASS.
+Nano's patch generation failed on
+empty completions in both post-fix
+attempts (3 calls / 20,710 tokens
+and 3 calls / 20,735 tokens,
+recorded as-is).
 1.202.0 — The patch prompt can now
 see Apache Avro schema files
 ('.avsc'): no Avro suffix was
