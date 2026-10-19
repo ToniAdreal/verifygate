@@ -960,6 +960,17 @@ _TEXT_SUFFIXES = {
     # right file from the brief, invented its contents, and had
     # every diff correctly rejected (patch_not_applicable).
     ".thrift",
+    # Cap'n Proto files (v1.198.0): a candidate whose fix lands
+    # in a '.capnp' file was invisible to the patch prompt -- no
+    # Cap'n Proto suffix was whitelisted at all ('.proto' covers
+    # Protocol Buffers and '.thrift' covers Apache Thrift, but
+    # the snapshot matches the full suffix), so a 'rates.capnp'
+    # rate card (a Cap'n Proto const rate card) never reached
+    # the model; on the first live .capnp candidate both models
+    # named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".capnp",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone

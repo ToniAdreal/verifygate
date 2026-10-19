@@ -608,6 +608,39 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.198.0 — The patch prompt can now
+see Cap'n Proto files ('.capnp'):
+no Cap'n Proto suffix was
+whitelisted at all ('.proto' covers
+Protocol Buffers and '.thrift'
+covers Apache Thrift, but the
+snapshot matches the full suffix),
+so a 'rates.capnp' rate card (a
+Cap'n Proto const rate card) never
+reached the model — on the first
+live candidate whose fix landed in
+a .capnp file both models named
+the right file from the brief,
+invented its contents, and had
+every diff correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 11,311 tokens, Nano 4 calls /
+16,423 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Super repaired the same task FAIL ->
+PASS in 1 round (2 calls / 4,043
+tokens sealed in the uncommitted
+run-logs report) and Nano repaired
+it FAIL -> PASS in 1 round as well
+(2 calls / 7,554 tokens sealed in
+the uncommitted run-logs report):
+both applied diffs changed exactly
+the two wrong rates and preserved
+the interleaved extra entries and
+trailing comments; both reports
+INTACT, replay MATCHED, patched
+candidates independently PASS.
 1.197.0 — The patch prompt can now
 see Apache Thrift files ('.thrift'):
 no Thrift suffix was whitelisted at
