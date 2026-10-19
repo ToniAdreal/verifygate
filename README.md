@@ -608,6 +608,37 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.196.0 — The patch prompt can now
+see Gradle files ('.gradle'): no
+Gradle suffix was whitelisted at all
+('.groovy' covers Groovy sources, but
+the snapshot matches the full
+suffix), so a 'rates.gradle' rate
+card (a Gradle ext-assignment rate
+card) never reached the model — on
+the first live candidate whose fix
+landed in a .gradle file both models
+named the right file from the brief,
+invented its contents, and had every
+diff correctly rejected
+(patch_not_applicable: Super 4 calls
+/ 11,034 tokens, Nano 4 calls /
+14,683 tokens; original candidate
+byte-unchanged, both reports
+INTACT). With the file visible,
+Super repaired the same task FAIL ->
+PASS in 1 round (2 calls / 3,735
+tokens sealed in the uncommitted
+run-logs report) and Nano repaired
+it FAIL -> PASS in 1 round as well
+(2 calls / 5,426 tokens sealed in
+the uncommitted run-logs report):
+both applied diffs changed exactly
+the two wrong rates and preserved
+the interleaved extra entries; both
+reports INTACT, replay MATCHED,
+patched candidates independently
+PASS.
 1.195.0 — The patch prompt can now
 see CMake files ('.cmake'): no CMake
 module suffix was whitelisted at all

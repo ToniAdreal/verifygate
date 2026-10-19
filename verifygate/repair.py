@@ -942,6 +942,16 @@ _TEXT_SUFFIXES = {
     # from the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".cmake",
+    # Gradle files (v1.196.0): a candidate whose fix lands
+    # in a '.gradle' file was invisible to the patch prompt -- no
+    # Gradle suffix was whitelisted at all ('.groovy' covers Groovy
+    # sources, but the snapshot matches the full suffix), so a
+    # 'rates.gradle' rate card (a Gradle ext-assignment rate card)
+    # never reached the model; on the first live .gradle candidate
+    # both models named the right file from the brief, invented
+    # its contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".gradle",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
