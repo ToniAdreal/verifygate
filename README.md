@@ -608,6 +608,44 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.204.0 — The patch prompt can now
+see Apache Avro IDL files
+('.avdl'): no Avro IDL suffix was
+whitelisted at all ('.avsc' covers
+Avro JSON schemas, '.proto' covers
+Protocol Buffers, '.thrift' covers
+Apache Thrift, '.capnp' covers
+Cap'n Proto, '.fbs' covers
+FlatBuffers, and '.xsd' covers XML
+Schema, but the snapshot matches
+the full suffix), so a
+'rates.avdl' rate card (an Avro
+IDL record field-default rate
+card) never reached the model — on
+the first live candidate whose fix
+landed in a .avdl file both models
+named the right file from the
+brief, invented its contents, and
+had every diff correctly rejected
+(patch_not_applicable: Super 4
+calls / 11,446 tokens, Nano 4
+calls / 18,945 tokens; both
+reports INTACT, original candidate
+byte-unchanged). With the file
+visible, Super repaired the same
+task FAIL -> PASS in 1 round (2
+calls / 3,728 tokens sealed in the
+uncommitted run-logs report) and
+Nano repaired it FAIL -> PASS in 1
+round as well (3 calls / 17,537
+tokens sealed in the uncommitted
+run-logs report): both applied
+diffs changed exactly the two
+wrong rates and preserved the
+interleaved extra entries; both
+reports INTACT, replay MATCHED,
+patched candidates independently
+PASS.
 1.203.0 — The patch prompt can now
 see XML Schema files ('.xsd'): no
 XML Schema suffix was whitelisted

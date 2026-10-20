@@ -1025,6 +1025,19 @@ _TEXT_SUFFIXES = {
     # its contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".xsd",
+    # Avro IDL files (v1.204.0): a candidate whose fix lands
+    # in a '.avdl' file was invisible to the patch prompt -- no
+    # Avro IDL suffix was whitelisted at all ('.avsc' covers
+    # Avro JSON schemas, '.proto' covers Protocol Buffers,
+    # '.thrift' covers Apache Thrift, '.capnp' covers Cap'n
+    # Proto, '.fbs' covers FlatBuffers, and '.xsd' covers XML
+    # Schema, but the snapshot matches the full suffix), so a
+    # 'rates.avdl' rate card (an Avro IDL record field-default
+    # rate card) never reached the model; on the first live
+    # .avdl candidate both models named the right file from
+    # the brief, invented its contents, and had every diff
+    # correctly rejected (patch_not_applicable).
+    ".avdl",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
