@@ -1071,6 +1071,17 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".ron",
+    # KDL files (v1.208.0): a candidate whose fix lands
+    # in a '.kdl' file was invisible to the patch prompt -- no
+    # KDL suffix was whitelisted at all ('.cue' / '.dhall' /
+    # '.pkl' / '.ron' cover other document/config notations,
+    # but the snapshot matches the full suffix), so a
+    # 'rates.kdl' rate card (a KDL node rate card) never
+    # reached the model; on the first live .kdl candidate
+    # both models named the right file from the brief,
+    # invented its contents, and had every diff correctly
+    # rejected (patch_not_applicable).
+    ".kdl",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
