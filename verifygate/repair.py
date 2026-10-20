@@ -1060,6 +1060,17 @@ _TEXT_SUFFIXES = {
     # contents, and had every diff correctly rejected
     # (patch_not_applicable).
     ".bicep",
+    # RON files (v1.207.0): a candidate whose fix lands
+    # in a '.ron' file was invisible to the patch prompt -- no
+    # RON suffix was whitelisted at all ('.json' / '.toml' cover
+    # other data notations, but the snapshot matches the full
+    # suffix), so a 'rates.ron' rate card (a RON - Rusty Object
+    # Notation - struct rate card) never reached the
+    # model; on the first live .ron candidate both models
+    # named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".ron",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
