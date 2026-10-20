@@ -608,6 +608,42 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.205.0 — The patch prompt can now
+see JSON5 files ('.json5'): no
+JSON5 suffix was whitelisted at all
+('.json' covers JSON, '.jsonl'
+covers JSON Lines, and '.jsonnet'
+covers Jsonnet, but the snapshot
+matches the full suffix), so a
+'rates.json5' rate card (a JSON5
+rate card) never reached the model
+— on the first live candidate whose
+fix landed in a .json5 file both
+models named the right file from
+the brief, invented its contents,
+and had every diff correctly
+rejected (patch_not_applicable:
+Super 4 calls / 13,670 tokens, Nano
+4 calls / 20,414 tokens; both
+reports INTACT, original candidate
+byte-unchanged). With the file
+visible, Super repaired the same
+task FAIL -> PASS in 2 rounds (3
+calls / 8,623 tokens sealed in the
+uncommitted run-logs report): its
+applied diff changed exactly the
+two wrong rates and preserved the
+interleaved extra entries; Nano
+repaired it FAIL -> PASS in 1
+round as well (2 calls / 5,450
+tokens sealed in the uncommitted
+run-logs report): its applied diff
+changed the two wrong rates but
+dropped the interleaved extra
+entries, which the checks do not
+parse; both reports INTACT, replay
+MATCHED, patched candidates
+independently PASS.
 1.204.0 — The patch prompt can now
 see Apache Avro IDL files
 ('.avdl'): no Avro IDL suffix was

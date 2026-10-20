@@ -1038,6 +1038,17 @@ _TEXT_SUFFIXES = {
     # the brief, invented its contents, and had every diff
     # correctly rejected (patch_not_applicable).
     ".avdl",
+    # JSON5 files (v1.205.0): a candidate whose fix lands
+    # in a '.json5' file was invisible to the patch prompt -- no
+    # JSON5 suffix was whitelisted at all ('.json' covers JSON,
+    # '.jsonl' covers JSON Lines, and '.jsonnet' covers Jsonnet,
+    # but the snapshot matches the full suffix), so a
+    # 'rates.json5' rate card (a JSON5 rate card) never reached
+    # the model; on the first live .json5 candidate both models
+    # named the right file from the brief, invented its contents,
+    # and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".json5",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
