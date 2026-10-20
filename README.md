@@ -608,6 +608,48 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.206.0 — The patch prompt can
+now see Bicep files ('.bicep'):
+no Bicep suffix was whitelisted
+at all ('.tf' / '.hcl' cover
+Terraform / HCL and '.json'
+covers JSON, but the snapshot
+matches the full suffix), so a
+'rates.bicep' rate card (an Azure
+Bicep param-default rate card)
+never reached the model — on the
+first live candidate whose fix
+landed in a .bicep file both
+models named the right file from
+the brief, invented its contents,
+and had every diff correctly
+rejected (patch_not_applicable:
+Super 4 calls / 10,719 tokens,
+Nano 5 calls / 25,145 tokens on
+retry after a first attempt ended
+generation_failed on empty
+completions, 4 calls / 27,489
+tokens; the patch_not_applicable
+reports INTACT, original
+candidate byte-unchanged). With
+the file visible, Super repaired
+the same task FAIL -> PASS in 1
+round (2 calls / 4,322 tokens
+sealed in the uncommitted run-
+logs report): its applied diff
+changed exactly the two wrong
+rates and preserved the
+interleaved extra entries; Nano
+repaired it FAIL -> PASS in 3
+rounds as well (6 calls / 38,748
+tokens sealed in the uncommitted
+run-logs report): its applied
+diff changed the two wrong rates
+but dropped the interleaved extra
+entries, which the checks do not
+parse; both reports INTACT,
+replay MATCHED, patched
+candidates independently PASS.
 1.205.0 — The patch prompt can now
 see JSON5 files ('.json5'): no
 JSON5 suffix was whitelisted at all

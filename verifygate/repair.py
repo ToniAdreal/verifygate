@@ -1049,6 +1049,17 @@ _TEXT_SUFFIXES = {
     # and had every diff correctly rejected
     # (patch_not_applicable).
     ".json5",
+    # Bicep files (v1.206.0): a candidate whose fix lands
+    # in a '.bicep' file was invisible to the patch prompt -- no
+    # Bicep suffix was whitelisted at all ('.tf' / '.hcl' cover
+    # Terraform / HCL and '.json' covers JSON, but the snapshot
+    # matches the full suffix), so a 'rates.bicep' rate card (an
+    # Azure Bicep param-default rate card) never reached the
+    # model; on the first live .bicep candidate both models
+    # named the right file from the brief, invented its
+    # contents, and had every diff correctly rejected
+    # (patch_not_applicable).
+    ".bicep",
 }
 # Extensionless text files (v1.110.0): the build/ops files a fix most
 # often lands in carry no suffix at all, so the suffix whitelist alone
