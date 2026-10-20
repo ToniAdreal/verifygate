@@ -608,6 +608,45 @@ MIT — see `LICENSE`.
 
 ## Version
 
+1.208.0 — The patch prompt can
+now see KDL files ('.kdl'): no
+KDL suffix was whitelisted at
+all ('.cue' / '.dhall' / '.pkl'
+/ '.ron' cover other
+document/config notations, but
+the snapshot matches the full
+suffix), so a 'rates.kdl' rate
+card (a KDL node rate card)
+never reached the model — on the
+first live candidate whose fix
+landed in a .kdl file both
+models named the right file from
+the brief, invented its
+contents, and had every diff
+correctly rejected
+(patch_not_applicable: Super 4
+calls / 11,888 tokens, Nano 4
+calls / 20,044 tokens; both
+reports INTACT, original
+candidate byte-unchanged). With
+the file visible, Super repaired
+the same task FAIL -> PASS in 1
+round (2 calls / 4,242 tokens
+sealed in the uncommitted run-
+logs report): its applied diff
+changed exactly the two wrong
+rates and preserved the
+interleaved extra entries; Nano
+repaired it FAIL -> PASS in 1
+round on its first post-fix
+attempt as well (2 calls / 4,093
+tokens sealed in the uncommitted
+run-logs report): its applied
+diff also preserved the
+interleaved extra entries; both
+reports INTACT, replay MATCHED,
+patched candidates independently
+PASS.
 1.207.0 — The patch prompt can
 now see RON files ('.ron'):
 no RON suffix was whitelisted
